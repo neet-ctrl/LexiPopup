@@ -59,28 +59,33 @@ class PopupViewModel @Inject constructor(
 
     private var autoCloseJob: Job? = null
     private var searchJob: Job? = null
-    private var openTimestamp = System.currentTimeMillis()
 
     fun lookupWord(word: String, sourceApp: String = "LexiPopup") {
+        // Single-word extraction
+        val clean = word.trim().lowercase()
+            .replace(Regex("[^a-z'\\-]"), "")
+            .trimStart('\'', '-').trimEnd('\'', '-')
+        if (clean.isBlank()) {
+            _uiState.value = PopupUiState.Error("Word not recognized. Please enter a valid word.")
+            return
+        }
+
         viewModelScope.launch {
             _uiState.value = PopupUiState.Loading
-            openTimestamp = System.currentTimeMillis()
-            val result = lookupWordUseCase(word)
+            val result = lookupWordUseCase(clean)
             result.fold(
-                onSuccess = {
-                    _uiState.value = PopupUiState.Success(it)
+                onSuccess = { entry ->
+                    _uiState.value = PopupUiState.Success(entry)
                     if (settings.value.saveSearchHistory) {
-                        vocabularyRepository.recordSearch(word, sourceApp)
+                        vocabularyRepository.recordSearch(clean, sourceApp)
                     }
                     if (settings.value.autoGenerateFlashcards) {
-                        vocabularyRepository.createFlashcard(
-                            word, word, it.shortMeaning.ifEmpty { it.detailedMeaning.take(100) }
-                        )
+                        vocabularyRepository.createFlashcard(clean, clean, entry.shortMeaning.take(100))
                     }
                     scheduleAutoClose()
                 },
                 onFailure = {
-                    _uiState.value = PopupUiState.Error("\"$word\" not found. Try checking the spelling.")
+                    _uiState.value = PopupUiState.Error("\"$clean\" not found. No offline data and no internet. Try another word.")
                 }
             )
         }
@@ -89,8 +94,12 @@ class PopupViewModel @Inject constructor(
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
         searchJob?.cancel()
+        if (query.contains(" ")) {
+            _uiState.value = PopupUiState.Error("Only single words are supported. Type one word at a time.")
+            return
+        }
         searchJob = viewModelScope.launch {
-            delay(200)
+            delay(180)
             if (query.length >= 2) {
                 _suggestions.value = lookupWordUseCase.suggestions(query)
             } else {
@@ -107,7 +116,19 @@ class PopupViewModel @Inject constructor(
         val state = _uiState.value
         if (state is PopupUiState.Success) {
             viewModelScope.launch {
-                settingsDataStore.update { /* no-op — toggle handled via repo */ }
+                vocabularyRepository.toggleFavorite(state.entry.word)
+                // Reload to reflect new favorite state
+                val refreshed = lookupWordUseCase(state.entry.word)
+                refreshed.onSuccess { _uiState.value = PopupUiState.Success(it) }
+            }
+        }
+    }
+
+    fun saveNote(note: String) {
+        val state = _uiState.value
+        if (state is PopupUiState.Success && note.isNotBlank()) {
+            viewModelScope.launch {
+                vocabularyRepository.saveNote(state.entry.word, note)
             }
         }
     }
@@ -133,25 +154,26 @@ class PopupViewModel @Inject constructor(
     fun openTranslate(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            val uri = Uri.parse("https://translate.google.com/?text=${Uri.encode(state.entry.word)}")
-            context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
+            val uri = Uri.parse("https://translate.google.com/?text=${Uri.encode(state.entry.word)}&sl=en&tl=hi")
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
 
     fun shareWord(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            val text = "${state.entry.word}: ${state.entry.shortMeaning}"
+            val text = buildString {
+                append("${state.entry.word}: ${state.entry.shortMeaning}")
+                if (state.entry.hindiMeaning.isNotBlank()) append("\nहिंदी: ${state.entry.hindiMeaning}")
+                if (state.entry.exampleSentence.isNotBlank()) append("\nExample: \"${state.entry.exampleSentence}\"")
+                append("\n\n— via LexiPopup")
+            }
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, text)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(Intent.createChooser(intent, "Share via").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
+            context.startActivity(Intent.createChooser(intent, "Share via").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
 

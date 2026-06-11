@@ -38,6 +38,7 @@ class SettingsDataStore @Inject constructor(
         val ENABLE_RESIZING = booleanPreferencesKey("enable_resizing")
         val ENABLE_BUBBLE = booleanPreferencesKey("enable_bubble")
         val AUTO_CLOSE_SECONDS = intPreferencesKey("auto_close_seconds")
+        val AUTO_CLOSE = booleanPreferencesKey("auto_close_enabled")
         val SHOW_NOTIFICATION = booleanPreferencesKey("show_notification")
         val SAVE_HISTORY = booleanPreferencesKey("save_history")
         val TRACK_DAILY = booleanPreferencesKey("track_daily")

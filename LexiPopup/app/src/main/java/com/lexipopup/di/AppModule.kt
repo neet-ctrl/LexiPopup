@@ -53,6 +53,12 @@ object AppModule {
     fun provideFlashcardDao(db: LexiDatabase) = db.flashcardDao()
 
     @Provides
+    fun provideFavoriteWordDao(db: LexiDatabase) = db.favoriteWordDao()
+
+    @Provides
+    fun provideUserNoteDao(db: LexiDatabase) = db.userNoteDao()
+
+    @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)

@@ -1,10 +1,15 @@
 package com.lexipopup.data.local.database
 
+import com.lexipopup.data.local.dao.FavoriteWordDao
 import com.lexipopup.data.local.dao.FlashcardDao
+import com.lexipopup.data.local.dao.UserNoteDao
 import com.lexipopup.data.local.dao.VocabularyDao
+import com.lexipopup.data.local.entities.FavoriteWordEntity
 import com.lexipopup.data.local.entities.FlashcardEntity
+import com.lexipopup.data.local.entities.UserNoteEntity
 import com.lexipopup.data.local.entities.VocabularyHistoryEntity
 import com.lexipopup.domain.models.Flashcard
+import com.lexipopup.domain.models.UserNote
 import com.lexipopup.domain.models.VocabularyHistory
 import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.domain.usecases.SpacedRepetitionUseCase
@@ -12,7 +17,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,8 +25,12 @@ import javax.inject.Singleton
 class VocabularyRepositoryImpl @Inject constructor(
     private val vocabularyDao: VocabularyDao,
     private val flashcardDao: FlashcardDao,
+    private val favoriteWordDao: FavoriteWordDao,
+    private val userNoteDao: UserNoteDao,
     private val srs: SpacedRepetitionUseCase
 ) : VocabularyRepository {
+
+    // ─── History ──────────────────────────────────────────────────
 
     override suspend fun recordSearch(word: String, sourceApp: String, timeSpentMs: Long) {
         vocabularyDao.insertHistory(
@@ -32,7 +40,13 @@ class VocabularyRepositoryImpl @Inject constructor(
 
     override fun getHistory(limit: Int): Flow<List<VocabularyHistory>> =
         vocabularyDao.getHistory(limit).map { list ->
-            list.map { VocabularyHistory(it.id, it.word, it.searchTimestamp.toLocalDateTime(), it.sourceApp, it.timeSpentMs) }
+            list.map {
+                VocabularyHistory(
+                    it.id, it.word,
+                    Instant.ofEpochMilli(it.searchTimestamp).atZone(ZoneId.systemDefault()).toLocalDateTime(),
+                    it.sourceApp, it.timeSpentMs
+                )
+            }
         }
 
     override fun getTodayCount(): Flow<Int> {
@@ -46,6 +60,41 @@ class VocabularyRepositoryImpl @Inject constructor(
             list.map { Pair(it.day, it.count) }
         }
     }
+
+    override fun getMostSearchedWords(limit: Int): Flow<List<Pair<String, Int>>> =
+        vocabularyDao.getMostSearched(limit).map { list ->
+            list.map { Pair(it.word, it.count) }
+        }
+
+    override fun getActivityHeatmap(days: Int): Flow<Map<LocalDate, Int>> =
+        vocabularyDao.getActivityForDays(days).map { list ->
+            list.associate { row ->
+                try { LocalDate.parse(row.date) to row.count }
+                catch (_: Exception) { LocalDate.now() to 0 }
+            }
+        }
+
+    // ─── Favorites ────────────────────────────────────────────────
+
+    override suspend fun toggleFavorite(word: String) {
+        if (favoriteWordDao.isFavorite(word)) favoriteWordDao.removeFavorite(word)
+        else favoriteWordDao.addFavorite(FavoriteWordEntity(word = word))
+    }
+
+    override suspend fun isFavorite(word: String): Boolean = favoriteWordDao.isFavorite(word)
+
+    // ─── Notes ────────────────────────────────────────────────────
+
+    override suspend fun saveNote(word: String, note: String) {
+        userNoteDao.insertNote(UserNoteEntity(word = word, note = note))
+    }
+
+    override fun getNotesForWord(word: String): Flow<List<UserNote>> =
+        userNoteDao.getNotesForWord(word).map { list ->
+            list.map { UserNote(it.id, it.word, it.note, it.createdAt, it.updatedAt) }
+        }
+
+    // ─── Flashcards ───────────────────────────────────────────────
 
     override fun getDueFlashcards(): Flow<List<Flashcard>> =
         flashcardDao.getDueCards().map { list -> list.map { it.toDomain() } }
@@ -66,21 +115,15 @@ class VocabularyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteFlashcard(id: Long) = flashcardDao.deleteById(id)
-
-    override fun getMostSearchedWords(limit: Int): Flow<List<Pair<String, Int>>> =
-        vocabularyDao.getMostSearched(limit).map { list ->
-            list.map { Pair(it.word, it.count) }
-        }
 }
 
-fun Long.toLocalDateTime(): java.time.LocalDateTime =
-    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDateTime()
+// ─── Extension helpers ────────────────────────────────────────────
 
 fun FlashcardEntity.toDomain() = Flashcard(
     id = id, word = word, frontText = frontText, backText = backText,
     reviewLevel = reviewLevel,
-    nextReviewDate = nextReviewDate.toLocalDateTime(),
-    lastReviewed = lastReviewed?.toLocalDateTime(),
+    nextReviewDate = Instant.ofEpochMilli(nextReviewDate).atZone(ZoneId.systemDefault()).toLocalDateTime(),
+    lastReviewed = lastReviewed?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() },
     interval = interval, easeFactor = easeFactor
 )
 

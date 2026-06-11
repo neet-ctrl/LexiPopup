@@ -33,9 +33,20 @@ interface VocabularyDao {
     """)
     fun getWeeklyStats(sevenDaysAgo: Long): Flow<List<DayCount>>
 
+    @Query("""
+        SELECT strftime('%Y-%m-%d', datetime(search_timestamp/1000, 'unixepoch')) as date, 
+               COUNT(*) as count
+        FROM vocabulary_history
+        WHERE search_timestamp >= (strftime('%s','now') - :days * 86400) * 1000
+        GROUP BY date
+        ORDER BY date ASC
+    """)
+    fun getActivityForDays(days: Int = 84): Flow<List<DateCount>>
+
     @Query("DELETE FROM vocabulary_history")
     suspend fun clearHistory()
 }
 
 data class WordCount(val word: String, val count: Int)
 data class DayCount(val day: String, val count: Int)
+data class DateCount(val date: String, val count: Int)

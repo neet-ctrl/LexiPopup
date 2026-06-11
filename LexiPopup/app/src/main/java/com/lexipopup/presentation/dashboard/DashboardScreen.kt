@@ -28,6 +28,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,6 +73,7 @@ fun DashboardScreen(
     val mostSearched by viewModel.mostSearched.collectAsState()
     val weeklyStats by viewModel.weeklyStats.collectAsState()
     val activityData by viewModel.activityHeatmapData.collectAsState()
+    val difficultyDistribution by viewModel.difficultyDistribution.collectAsState()
 
     val browserVm: DictionaryBrowserViewModel = hiltViewModel()
     val wordOfDay by browserVm.wordOfDay.collectAsState()
@@ -189,7 +192,8 @@ fun DashboardScreen(
                     todayCount = todayCount,
                     mostSearched = mostSearched,
                     weeklyStats = weeklyStats,
-                    activityData = activityData
+                    activityData = activityData,
+                    difficultyDistribution = difficultyDistribution
                 )
                 AppDestination.Settings -> SettingsScreen(
                     settings = settings,
@@ -435,7 +439,8 @@ fun StatsScreen(
     todayCount: Int,
     mostSearched: List<Pair<String, Int>>,
     weeklyStats: List<Pair<String, Int>>,
-    activityData: Map<LocalDate, Int>
+    activityData: Map<LocalDate, Int>,
+    difficultyDistribution: Map<Int, Int> = emptyMap()
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -487,7 +492,7 @@ fun StatsScreen(
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🎯  Difficulty Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
-                DifficultyPieChart()
+                DifficultyPieChart(distribution = difficultyDistribution)
             }
         }
 
@@ -582,6 +587,36 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Manage Dictionary Packs (Wiktionary · WordNet · Hindi)")
             }
+        }
+
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+        item { SectionHeader("🤖 AI Features (Optional)") }
+        item {
+            var keyVisible by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = settings.openAiApiKey,
+                onValueChange = { viewModel.updateApiKey(it) },
+                label = { Text("OpenAI API Key") },
+                placeholder = { Text("sk-…  (unlocks AI fallback for unknown words)") },
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { keyVisible = !keyVisible }) {
+                        Icon(
+                            if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (keyVisible) "Hide key" else "Show key"
+                        )
+                    }
+                },
+                singleLine = true,
+                supportingText = {
+                    Text(
+                        "When set, words not found in the offline dictionary are explained by GPT-4o-mini.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
         }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
@@ -704,15 +739,19 @@ fun WeeklyBarChart(stats: List<Pair<String, Int>>) {
 }
 
 @Composable
-fun DifficultyPieChart() {
+fun DifficultyPieChart(distribution: Map<Int, Int> = emptyMap()) {
     val colors = listOf(Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFF9800), Color(0xFFf44336))
     val labels = listOf("Beginner", "Intermediate", "Advanced", "Expert")
-    val values = listOf(40f, 30f, 20f, 10f)
+
+    val rawValues = (1..4).map { level -> (distribution[level] ?: 0).toFloat() }
+    val total = rawValues.sum()
+    val values = if (total > 0f) rawValues else listOf(25f, 25f, 25f, 25f)
+    val displayTotal = if (total > 0f) total else 100f
 
     Canvas(modifier = Modifier.size(140.dp)) {
         var startAngle = -90f
         values.forEachIndexed { i, v ->
-            val sweep = v / 100f * 360f
+            val sweep = (v / displayTotal) * 360f
             drawArc(color = colors[i], startAngle = startAngle, sweepAngle = sweep, useCenter = true, size = Size(size.width, size.height))
             startAngle += sweep
         }
@@ -721,10 +760,14 @@ fun DifficultyPieChart() {
 
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        colors.zip(labels).forEach { (color, label) ->
+        colors.zip(labels).forEachIndexed { i, (color, label) ->
+            val count = rawValues[i].toInt()
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(color))
-                Text(label, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    if (count > 0) "$label ($count)" else label,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
     }

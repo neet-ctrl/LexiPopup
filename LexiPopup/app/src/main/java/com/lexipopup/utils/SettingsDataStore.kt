@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.lexipopup.domain.models.AppSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -46,6 +47,7 @@ class SettingsDataStore @Inject constructor(
         val USE_DARK_MODE = booleanPreferencesKey("dark_mode")
         val USE_SYSTEM_THEME = booleanPreferencesKey("system_theme")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
+        val OPEN_AI_KEY = stringPreferencesKey("open_ai_key")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -77,7 +79,8 @@ class SettingsDataStore @Inject constructor(
             trackDailyWords = prefs[TRACK_DAILY] ?: true,
             autoGenerateFlashcards = prefs[AUTO_FLASHCARDS] ?: true,
             useDarkMode = prefs[USE_DARK_MODE] ?: false,
-            useSystemTheme = prefs[USE_SYSTEM_THEME] ?: true
+            useSystemTheme = prefs[USE_SYSTEM_THEME] ?: true,
+            openAiApiKey = prefs[OPEN_AI_KEY] ?: ""
         )
     }
 

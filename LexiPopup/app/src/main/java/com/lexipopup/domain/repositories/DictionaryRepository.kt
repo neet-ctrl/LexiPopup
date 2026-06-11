@@ -21,4 +21,5 @@ interface DictionaryRepository {
     ): List<WordEntry>
     suspend fun countByLetter(letter: String): Int
     suspend fun getWordOfDay(): WordEntry?
+    suspend fun getDifficultyDistribution(): Map<Int, Int>
 }

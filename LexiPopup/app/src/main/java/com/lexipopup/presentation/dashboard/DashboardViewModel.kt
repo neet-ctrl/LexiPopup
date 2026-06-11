@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -53,6 +54,10 @@ class DashboardViewModel @Inject constructor(
     val activityHeatmapData: StateFlow<Map<LocalDate, Int>> = vocabularyRepository.getActivityHeatmap(84)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
+    val difficultyDistribution: StateFlow<Map<Int, Int>> = flow {
+        emit(dictionaryRepository.getDifficultyDistribution())
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
+
     fun updateSetting(key: androidx.datastore.preferences.core.Preferences.Key<Boolean>, value: Boolean) {
         viewModelScope.launch {
             settingsDataStore.update { prefs -> prefs[key] = value }
@@ -69,6 +74,12 @@ class DashboardViewModel @Inject constructor(
 
     fun removeFavorite(word: String) {
         viewModelScope.launch { vocabularyRepository.toggleFavorite(word) }
+    }
+
+    fun updateApiKey(key: String) {
+        viewModelScope.launch {
+            settingsDataStore.update { prefs -> prefs[SettingsDataStore.OPEN_AI_KEY] = key }
+        }
     }
 
     /** Export all vocabulary as CSV/JSON/Anki and open share sheet */

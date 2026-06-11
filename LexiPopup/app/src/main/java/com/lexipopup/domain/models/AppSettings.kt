@@ -40,5 +40,8 @@ data class AppSettings(
 
     // Theme
     val useDarkMode: Boolean = false,
-    val useSystemTheme: Boolean = true
+    val useSystemTheme: Boolean = true,
+
+    // AI Features
+    val openAiApiKey: String = ""
 )

@@ -79,4 +79,20 @@ interface WordDao {
 
     @Query("SELECT * FROM dictionary_cache WHERE part_of_speech = :pos ORDER BY RANDOM() LIMIT 1")
     suspend fun getRandomWordByPos(pos: String): WordEntity?
+
+    @Query("SELECT * FROM dictionary_cache ORDER BY word ASC LIMIT 1 OFFSET :offset")
+    suspend fun getWordAtOffset(offset: Int): WordEntity?
+
+    @Query("""
+        SELECT difficulty_level AS difficultyLevel, COUNT(*) AS count
+        FROM dictionary_cache
+        GROUP BY difficulty_level
+        ORDER BY difficulty_level ASC
+    """)
+    suspend fun getDifficultyDistribution(): List<DifficultyCountRow>
 }
+
+data class DifficultyCountRow(
+    val difficultyLevel: Int,
+    val count: Int
+)

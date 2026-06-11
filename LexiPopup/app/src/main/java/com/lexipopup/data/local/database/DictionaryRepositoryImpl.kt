@@ -69,17 +69,16 @@ class DictionaryRepositoryImpl @Inject constructor(
         wordDao.countByLetter(letter)
 
     override suspend fun getWordOfDay(): WordEntry? {
-        // Deterministic by calendar day — same word all day, rotates daily
         val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
         val total = wordDao.getTotalCount()
         if (total == 0) return null
         val offset = dayOfYear % total
-        // Pick a word at a deterministic offset; prefer difficulty >= 2 (interesting words)
-        val letter = ('A' + (dayOfYear % 26)).toString()
-        return wordDao.getWordsByLetter(letter, 1, 0, "alpha", "")
-            .firstOrNull()?.toDomain(gson)
+        return wordDao.getWordAtOffset(offset)?.toDomain(gson)
             ?: wordDao.getRandomWord()?.toDomain(gson)
     }
+
+    override suspend fun getDifficultyDistribution(): Map<Int, Int> =
+        wordDao.getDifficultyDistribution().associate { it.difficultyLevel to it.count }
 }
 
 fun WordEntity.toDomain(gson: Gson): WordEntry {

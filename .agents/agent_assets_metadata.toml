@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "lvgoA_MVDpxbtynkvQLEO"
+uri = "file://LexiPopup/USER_GUIDE.md"
+type = "text"
+title = "LexiPopup — Complete User Guide"

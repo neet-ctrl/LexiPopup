@@ -1,0 +1,187 @@
+name: Release APK → GitHub Release
+
+# Triggers ONLY when you push a version tag, e.g.:
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Signed Release APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LexiPopup
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('LexiPopup/**/*.gradle*', 'LexiPopup/**/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Grant Gradlew Permission
+        run: chmod +x ./gradlew
+
+      # ── Decode hardcoded keystore (no secrets setup required) ─────────────
+      - name: Decode Keystore
+        run: |
+          cat << 'KEYSTOREEOF' | base64 -d > keystore.jks
+          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
+          p20EFMmCytWk1ZrEZZoxM+N0EdEAVfZCAgInEA==
+          KEYSTOREEOF
+          echo "✅ Keystore decoded"
+          keytool -list -v -keystore keystore.jks -storepass 'Sh@090609' -noprompt 2>&1 | grep "Alias name"
+
+      - name: Run Unit Tests
+        run: ./gradlew test --no-daemon --continue
+
+      - name: Build Signed Release APK
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$PWD/keystore.jks \
+            -Pandroid.injected.signing.store.password='Sh@090609' \
+            -Pandroid.injected.signing.key.alias=my-key \
+            -Pandroid.injected.signing.key.password='Sh@090609' \
+            --no-daemon --stacktrace
+
+      - name: Rename & Verify Signed APK
+        run: |
+          VERSION=${{ github.ref_name }}
+          VER=${VERSION#v}
+          cp app/build/outputs/apk/release/app-release.apk \
+             app/build/outputs/apk/release/LexiPopup-${VER}-signed.apk
+
+          BUILD_TOOLS=$(ls ${ANDROID_SDK_ROOT}/build-tools | sort -V | tail -n1)
+          ${ANDROID_SDK_ROOT}/build-tools/${BUILD_TOOLS}/apksigner verify \
+            --print-certs app/build/outputs/apk/release/LexiPopup-${VER}-signed.apk \
+            && echo "✅ APK signature verified"
+
+          echo "APK_VER=${VER}" >> $GITHUB_ENV
+
+      - name: Shred Keystore from Runner
+        if: always()
+        run: shred -u keystore.jks 2>/dev/null || rm -f keystore.jks
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "🚀 LexiPopup ${{ github.ref_name }}"
+          body: |
+            ## LexiPopup ${{ github.ref_name }}
+
+            ### Installation
+            1. Download `LexiPopup-${{ env.APK_VER }}-signed.apk` below
+            2. On your Android device: **Settings → Install unknown apps → allow your browser**
+            3. Open the downloaded APK and install
+            4. Grant **Display over other apps** permission when prompted
+            5. Open Moon+ Reader → long-press any word → Dictionary → **LexiPopup** ✅
+
+            ### What's included
+            - Offline dictionary (1000+ seed words, full pack downloadable in-app)
+            - Moon+ Reader PROCESS_TEXT integration
+            - Persistent notification quick-launcher
+            - Vocabulary dashboard + flashcards (SM-2 SRS)
+            - 3D glassmorphism popup UI with parallax tilt
+            - Hindi meanings, synonyms, antonyms, etymology
+            - CSV / JSON / Anki export
+
+            ### Signed with
+            - Key alias: `my-key`
+            - Build: `${{ github.sha }}`
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          files: LexiPopup/app/build/outputs/apk/release/LexiPopup-*-signed.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

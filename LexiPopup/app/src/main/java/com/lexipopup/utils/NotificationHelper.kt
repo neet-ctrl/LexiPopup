@@ -15,26 +15,32 @@ class NotificationHelper @Inject constructor(
     private val context: Context
 ) {
     companion object {
-        const val CHANNEL_ID = "lexipopup_quick_search"
-        const val NOTIFICATION_ID = 1001
+        const val CHANNEL_ID          = "lexipopup_quick_search"
+        const val CHANNEL_FLASHCARD_ID = "lexipopup_flashcard_review"
+        const val NOTIFICATION_ID          = 1001
+        const val NOTIFICATION_FLASHCARD_ID = 1002
     }
 
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     init {
-        createChannel()
+        createChannels()
     }
 
-    private fun createChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Quick Dictionary Search",
-            NotificationManager.IMPORTANCE_LOW
+    private fun createChannels() {
+        val searchChannel = NotificationChannel(
+            CHANNEL_ID, "Quick Dictionary Search", NotificationManager.IMPORTANCE_LOW
+        ).apply { description = "Tap to open dictionary popup from anywhere"; setShowBadge(false) }
+
+        val flashcardChannel = NotificationChannel(
+            CHANNEL_FLASHCARD_ID, "Flashcard Review Reminder", NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Tap to open dictionary popup from anywhere"
-            setShowBadge(false)
+            description = "Daily reminder when flashcards are due for spaced-repetition review"
+            setShowBadge(true)
         }
-        manager.createNotificationChannel(channel)
+
+        manager.createNotificationChannel(searchChannel)
+        manager.createNotificationChannel(flashcardChannel)
     }
 
     fun showPersistentNotification() {
@@ -52,11 +58,7 @@ class NotificationHelper @Inject constructor(
             .setContentText("Tap to search any word")
             .setSmallIcon(android.R.drawable.ic_menu_search)
             .setContentIntent(pendingIntent)
-            .addAction(
-                android.R.drawable.ic_menu_search,
-                "Search Word",
-                pendingIntent
-            )
+            .addAction(android.R.drawable.ic_menu_search, "Search Word", pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -67,5 +69,41 @@ class NotificationHelper @Inject constructor(
 
     fun dismissPersistentNotification() {
         manager.cancel(NOTIFICATION_ID)
+    }
+
+    /**
+     * Fires the daily flashcard reminder. Called by [FlashcardReminderWorker] when
+     * there are due cards. The notification is auto-cancelled when tapped.
+     */
+    fun showFlashcardReminderNotification(dueCount: Int) {
+        if (!manager.areNotificationsEnabled()) return
+
+        val intent = Intent(context, com.lexipopup.presentation.MainActivity::class.java).apply {
+            putExtra("tab", "flashcards")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, NOTIFICATION_FLASHCARD_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_FLASHCARD_ID)
+            .setContentTitle("Flashcard Review Due \uD83E\uDDEA")
+            .setContentText(
+                if (dueCount == 1) "1 flashcard is due for review"
+                else "$dueCount flashcards are due for review"
+            )
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+
+        manager.notify(NOTIFICATION_FLASHCARD_ID, notification)
+    }
+
+    fun cancelFlashcardReminder() {
+        manager.cancel(NOTIFICATION_FLASHCARD_ID)
     }
 }

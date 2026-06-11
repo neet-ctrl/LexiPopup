@@ -135,12 +135,17 @@ class PopupViewModel @Inject constructor(
 
     fun speakWord(context: Context) {
         val state = _uiState.value
-        if (state is PopupUiState.Success) ttsHelper.speak(state.entry.word)
+        if (state is PopupUiState.Success) {
+            // If TTS engine is not ready, send the user to TTS settings to install one.
+            if (!ttsHelper.speak(state.entry.word)) ttsHelper.openTtsSettings()
+        }
     }
 
     fun speakMeaning(context: Context) {
         val state = _uiState.value
-        if (state is PopupUiState.Success) ttsHelper.speak(state.entry.shortMeaning, 0.85f)
+        if (state is PopupUiState.Success) {
+            if (!ttsHelper.speak(state.entry.shortMeaning, 0.85f)) ttsHelper.openTtsSettings()
+        }
     }
 
     fun copyToClipboard(context: Context) {

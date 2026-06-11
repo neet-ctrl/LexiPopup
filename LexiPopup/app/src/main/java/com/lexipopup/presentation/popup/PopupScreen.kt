@@ -38,7 +38,14 @@ import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.utils.ParallaxOffset
 import com.lexipopup.utils.SensorHelper
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -77,12 +84,38 @@ fun PopupScreen(
     // Resize state
     var popupHeightFraction by remember { mutableStateOf(0.65f) }
 
-    // Scale entrance animation
+    // Entrance: 0.85 → 1.0 spring (damping 0.8) | Exit: scale to 0.9 + fade (ease-out 180ms)
+    var isClosing by remember { mutableStateOf(false) }
+    var targetScale by remember { mutableStateOf(0.85f) }
+    var targetAlpha by remember { mutableStateOf(0f) }
     val scaleAnim by animateFloatAsState(
-        targetValue = 1f,
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow),
+        targetValue = targetScale,
+        animationSpec = if (isClosing) tween(180, easing = FastOutLinearInEasing)
+                        else spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
         label = "popup_scale"
     )
+    val alphaAnim by animateFloatAsState(
+        targetValue = targetAlpha,
+        animationSpec = tween(durationMillis = if (isClosing) 180 else 140),
+        label = "popup_alpha"
+    )
+    LaunchedEffect(Unit) { targetScale = 1f; targetAlpha = 1f }
+    LaunchedEffect(isClosing) {
+        if (isClosing) { targetScale = 0.9f; targetAlpha = 0f; delay(200); onClose() }
+    }
+    val safeClose: () -> Unit = { isClosing = true }
+
+    // Voice search launcher (RecognizerIntent result → lookup word)
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spoken.isNullOrBlank()) viewModel.lookupWord(spoken.trim().split(" ").first())
+        }
+    }
 
     // Shimmer for border glow
     val shimmerInfinite = rememberInfiniteTransition(label = "shimmer")
@@ -125,10 +158,23 @@ fun PopupScreen(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
-            ) { onClose() },
+            ) { safeClose() },
         contentAlignment = Alignment.Center
     ) {
-        if (isBubble) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = isBubble,
+            transitionSpec = {
+                if (targetState) {
+                    (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.7f), initialScale = 0.5f))
+                        .togetherWith(fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.5f))
+                } else {
+                    (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.8f), initialScale = 0.85f))
+                        .togetherWith(fadeOut(tween(150)))
+                }
+            },
+            label = "bubble_morph"
+        ) { bubbleMode ->
+        if (bubbleMode) {
             BubbleMode(
                 uiState = uiState,
                 onExpand = { viewModel.toggleBubble() },
@@ -155,6 +201,7 @@ fun PopupScreen(
                         rotationX = (parallax.y * 0.4f).coerceIn(-2f, 2f)
                         rotationY = (-parallax.x * 0.4f).coerceIn(-2f, 2f)
                         cameraDistance = 12f * density
+                        alpha = alphaAnim
                     }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -204,15 +251,16 @@ fun PopupScreen(
                             shimmerOffset = shimmerOffset,
                             onDrag = { dx, dy ->
                                 if (settings.enableDragging) {
-                                    offsetX += dx
-                                    offsetY += dy
+                                    val bound = 350f; val rf = 0.25f
+                                    offsetX += if (abs(offsetX) < bound) dx else dx * rf
+                                    offsetY += if (abs(offsetY) < bound) dy else dy * rf
                                 }
                             },
                             onDragEnd = {
                                 // Edge snap: snap to nearest horizontal edge
                                 // (for now just prevent going off-screen; full edge snap needs WindowInsets)
                             },
-                            onClose = onClose,
+                            onClose = safeClose,
                             onMinimize = { viewModel.toggleBubble() },
                             onSpeakWord = { viewModel.speakWord(context) },
                             onToggleFavorite = {
@@ -224,23 +272,39 @@ fun PopupScreen(
 
                         HorizontalDivider(thickness = 0.5.dp)
 
-                        // Content area
+                        // Content area — Crossfade gives smooth 200ms transition between states
                         Box(modifier = Modifier.weight(1f)) {
-                            when (val state = uiState) {
-                                is PopupUiState.Loading -> PopupSkeleton()
-                                is PopupUiState.Success -> PopupContent(
-                                    entry = state.entry,
-                                    settings = settings,
-                                    onWordChipClick = { word -> viewModel.lookupWord(word) }
-                                )
-                                is PopupUiState.Error -> PopupError(message = state.message)
-                                is PopupUiState.ManualSearch, is PopupUiState.Idle ->
-                                    ManualSearchContent(
-                                        query = searchQuery,
-                                        suggestions = suggestions,
-                                        onQueryChange = { viewModel.onSearchQueryChange(it) },
-                                        onSearch = { viewModel.lookupWord(it) }
+                            androidx.compose.animation.Crossfade(
+                                targetState = uiState,
+                                animationSpec = tween(200),
+                                label = "content_crossfade"
+                            ) { state ->
+                                when (state) {
+                                    is PopupUiState.Loading -> PopupSkeleton()
+                                    is PopupUiState.Success -> PopupContent(
+                                        entry = state.entry,
+                                        settings = settings,
+                                        onWordChipClick = { word -> viewModel.lookupWord(word) }
                                     )
+                                    is PopupUiState.Error -> PopupError(message = state.message)
+                                    is PopupUiState.ManualSearch, is PopupUiState.Idle ->
+                                        ManualSearchContent(
+                                            query = searchQuery,
+                                            suggestions = suggestions,
+                                            onQueryChange = { viewModel.onSearchQueryChange(it) },
+                                            onSearch = { viewModel.lookupWord(it) },
+                                            onVoiceSearch = {
+                                                try {
+                                                    voiceLauncher.launch(
+                                                        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a word to look up")
+                                                        }
+                                                    )
+                                                } catch (_: Exception) {}
+                                            }
+                                        )
+                                }
                             }
                         }
 
@@ -296,6 +360,7 @@ fun PopupScreen(
                 }
             }
         }
+        } // close AnimatedContent { bubbleMode -> }
     }
 }
 
@@ -678,7 +743,8 @@ fun ManualSearchContent(
     query: String,
     suggestions: List<String>,
     onQueryChange: (String) -> Unit,
-    onSearch: (String) -> Unit
+    onSearch: (String) -> Unit,
+    onVoiceSearch: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -688,6 +754,15 @@ fun ManualSearchContent(
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Search any word…") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    IconButton(onClick = onVoiceSearch) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = "Voice search",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(50)
             )

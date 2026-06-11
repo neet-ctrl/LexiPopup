@@ -37,4 +37,10 @@ class FlashcardsViewModel @Inject constructor(
             vocabularyRepository.reviewFlashcard(id, quality)
         }
     }
+
+    fun skipCard(id: Long) {
+        // Soft skip: quality 3 = "remembered with effort" — advances to next card
+        // with only a small interval increase, effectively deferring the card.
+        reviewCard(id, 3)
+    }
 }

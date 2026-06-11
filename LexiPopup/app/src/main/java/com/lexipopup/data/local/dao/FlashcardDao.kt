@@ -31,6 +31,10 @@ interface FlashcardDao {
     @Query("SELECT COUNT(*) FROM flashcards WHERE next_review_date <= :now")
     fun getDueCount(now: Long = System.currentTimeMillis()): Flow<Int>
 
+    /** Suspend (one-shot) variant for WorkManager workers that cannot collect a Flow. */
+    @Query("SELECT COUNT(*) FROM flashcards WHERE next_review_date <= :now")
+    suspend fun getDueCountOnce(now: Long = System.currentTimeMillis()): Int
+
     @Query("SELECT COUNT(*) FROM flashcards WHERE review_level >= 5")
     fun getMasteredCount(): Flow<Int>
 

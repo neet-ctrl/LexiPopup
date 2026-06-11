@@ -1,7 +1,7 @@
 package com.lexipopup.presentation.flashcards
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,16 +46,18 @@ fun FlashcardsScreen(viewModel: FlashcardsViewModel = hiltViewModel()) {
         } else {
             FlashcardReviewer(
                 card = dueCards.first(),
-                onReview = { quality -> viewModel.reviewCard(dueCards.first().id, quality) }
+                onReview = { quality -> viewModel.reviewCard(dueCards.first().id, quality) },
+                onSkip  = { viewModel.skipCard(dueCards.first().id) }
             )
         }
     }
 }
 
 @Composable
-fun FlashcardReviewer(card: Flashcard, onReview: (Int) -> Unit) {
+fun FlashcardReviewer(card: Flashcard, onReview: (Int) -> Unit, onSkip: () -> Unit = {}) {
     var isFlipped by remember { mutableStateOf(false) }
     var swipeOffsetX by remember { mutableStateOf(0f) }
+    var swipeOffsetY by remember { mutableStateOf(0f) }
 
     val rotationY by animateFloatAsState(
         targetValue = if (isFlipped) 180f else 0f,
@@ -77,16 +79,23 @@ fun FlashcardReviewer(card: Flashcard, onReview: (Int) -> Unit) {
                     this.rotationY = rotationY
                     cameraDistance = 16f * density
                     translationX = swipeOffsetX
-                    alpha = 1f - (abs(swipeOffsetX) / 1000f).coerceIn(0f, 0.8f)
+                    translationY = swipeOffsetY.coerceIn(-160f, 0f)
+                    alpha = 1f - (abs(swipeOffsetX) / 1000f + (-swipeOffsetY.coerceIn(-500f, 0f)) / 1500f).coerceIn(0f, 0.8f)
                 }
                 .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
+                    detectDragGestures(
                         onDragEnd = {
-                            if (swipeOffsetX > 200f) onReview(4) // right = easy
-                            else if (swipeOffsetX < -200f) onReview(1) // left = hard
-                            swipeOffsetX = 0f
+                            when {
+                                swipeOffsetX > 200f  -> onReview(4)  // right = easy
+                                swipeOffsetX < -200f -> onReview(1)  // left  = hard
+                                swipeOffsetY < -200f -> onSkip()     // up    = skip (no penalty)
+                            }
+                            swipeOffsetX = 0f; swipeOffsetY = 0f
                         }
-                    ) { _, dragAmount -> swipeOffsetX += dragAmount }
+                    ) { _, dragAmount ->
+                        swipeOffsetX += dragAmount.x
+                        swipeOffsetY += dragAmount.y
+                    }
                 },
             shape = RoundedCornerShape(24.dp),
             elevation = CardDefaults.cardElevation(8.dp),
@@ -131,7 +140,7 @@ fun FlashcardReviewer(card: Flashcard, onReview: (Int) -> Unit) {
         }
 
         Spacer(Modifier.height(8.dp))
-        Text("Swipe right = Easy  •  Swipe left = Hard", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Swipe right = Easy  •  Swipe left = Hard  •  Swipe up = Skip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Spacer(Modifier.height(24.dp))
 

@@ -40,6 +40,7 @@ import com.lexipopup.presentation.dictionary.DictionaryBrowserViewModel
 import com.lexipopup.presentation.dictionary.WordDetailScreen
 import com.lexipopup.presentation.flashcards.FlashcardsScreen
 import com.lexipopup.presentation.flashcards.FlashcardsViewModel
+import com.lexipopup.presentation.download.DownloadProgressScreen
 import com.lexipopup.utils.ExportFormat
 import com.lexipopup.utils.SettingsDataStore
 import java.time.LocalDate
@@ -53,6 +54,7 @@ sealed class AppDestination {
     object Settings : AppDestination()
     data class WordDetail(val word: String) : AppDestination()
     object About : AppDestination()
+    object DownloadPacks : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,8 +84,9 @@ fun DashboardScreen(
     // Back logic
     val onBack: () -> Unit = {
         destination = when (destination) {
-            is AppDestination.WordDetail -> AppDestination.Home
-            AppDestination.About -> AppDestination.Settings
+            is AppDestination.WordDetail  -> AppDestination.Home
+            AppDestination.About         -> AppDestination.Settings
+            AppDestination.DownloadPacks -> AppDestination.Settings
             else -> AppDestination.Home
         }
     }
@@ -100,6 +103,10 @@ fun DashboardScreen(
         }
         AppDestination.About -> {
             AboutScreen(onBack = { destination = AppDestination.Settings })
+            return
+        }
+        AppDestination.DownloadPacks -> {
+            DownloadProgressScreen(onBack = { destination = AppDestination.Settings })
             return
         }
         else -> Unit
@@ -188,7 +195,8 @@ fun DashboardScreen(
                     settings = settings,
                     recentWords = recentWords,
                     viewModel = viewModel,
-                    context = context
+                    context = context,
+                    onManagePacks = { destination = AppDestination.DownloadPacks }
                 )
                 else -> Unit
             }
@@ -493,7 +501,8 @@ fun SettingsScreen(
     settings: AppSettings,
     recentWords: List<WordEntry>,
     viewModel: DashboardViewModel,
-    context: android.content.Context
+    context: android.content.Context,
+    onManagePacks: () -> Unit = {}
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -561,6 +570,19 @@ fun SettingsScreen(
         item { SectionHeader("📚 Vocabulary Tracking") }
         item { ToggleRow("Save search history", settings.saveSearchHistory) { viewModel.updateSetting(SettingsDataStore.SAVE_HISTORY, it) } }
         item { ToggleRow("Auto-generate flashcards", settings.autoGenerateFlashcards) { viewModel.updateSetting(SettingsDataStore.AUTO_FLASHCARDS, it) } }
+
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+        item { SectionHeader("📖 Dictionary Data") }
+        item {
+            OutlinedButton(
+                onClick = onManagePacks,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.CloudDownload, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Manage Dictionary Packs (Wiktionary · WordNet · Hindi)")
+            }
+        }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
         item { SectionHeader("📤 Export") }

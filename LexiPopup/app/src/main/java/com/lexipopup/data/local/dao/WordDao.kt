@@ -16,6 +16,9 @@ interface WordDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWord(word: WordEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(words: List<WordEntity>)
+
     @Query("UPDATE dictionary_cache SET is_favorite = NOT is_favorite WHERE word = :word")
     suspend fun toggleFavorite(word: String)
 

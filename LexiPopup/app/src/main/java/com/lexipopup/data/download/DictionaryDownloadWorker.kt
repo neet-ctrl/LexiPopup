@@ -1,125 +1,317 @@
 package com.lexipopup.data.download
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
-import com.lexipopup.data.local.database.LexiDatabase
+import com.lexipopup.data.local.dao.WordDao
+import com.lexipopup.data.local.entities.WordEntity
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.zip.GZIPInputStream
 
 /**
- * WorkManager worker that downloads the selected dictionary pack,
- * verifies its SHA-256 checksum, and loads it into Room.
+ * Downloads a dictionary pack with resume support, GZip decompression,
+ * SHA-256 checksum verification, and batch import into Room.
  *
- * Selected via DatabasePackScreen before first word lookup.
+ * Phase progression → progress %:
+ *   DOWNLOADING  → 0–65%
+ *   DECOMPRESSING→ 65–75%
+ *   VERIFYING    → 75–80%
+ *   IMPORTING    → 80–99%
+ *   DONE         → 100%
  */
 @HiltWorker
 class DictionaryDownloadWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val db: LexiDatabase
+    private val wordDao: WordDao,
+    private val downloadStateStore: DownloadStateStore
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
-        const val KEY_PACK = "pack_type"
-        const val KEY_PROGRESS = "download_progress"
-        const val KEY_ERROR = "error_message"
+        const val KEY_PACK          = "pack_type"
+        const val KEY_RESUME_BYTES  = "resume_bytes"
+        const val KEY_PROGRESS      = "download_progress"
+        const val KEY_PHASE         = "phase"
+        const val KEY_BYTES_DL      = "bytes_downloaded"
+        const val KEY_TOTAL_BYTES   = "total_bytes"
+        const val KEY_SPEED_KBPS    = "speed_kbps"
+        const val KEY_ETA_SECONDS   = "eta_seconds"
+        const val KEY_WORDS_DONE    = "words_imported"
+        const val KEY_ERROR         = "error_message"
 
-        // CDN URLs for dictionary packs (replace with actual hosted URLs)
+        const val PHASE_DOWNLOADING  = "downloading"
+        const val PHASE_DECOMPRESS   = "decompressing"
+        const val PHASE_VERIFYING    = "verifying"
+        const val PHASE_IMPORTING    = "importing"
+        const val PHASE_DONE         = "done"
+
+        // ── Replace with real hosted CDN URLs before shipping ──────────────
+        // Packs are gzipped SQLite databases with the same schema as
+        // dictionary_cache. Host on GitHub Releases, S3, or similar.
         private val PACK_URLS = mapOf(
-            DatabasePack.MINIMAL.name to "https://cdn.lexipopup.app/dicts/minimal_v1.db.gz",
-            DatabasePack.STANDARD.name to "https://cdn.lexipopup.app/dicts/standard_v1.db.gz",
-            DatabasePack.FULL.name to "https://cdn.lexipopup.app/dicts/full_v1.db.gz"
+            DatabasePack.MINIMAL.name  to "https://github.com/YOUR_ORG/lexipopup-data/releases/latest/download/dict_minimal_v1.db.gz",
+            DatabasePack.STANDARD.name to "https://github.com/YOUR_ORG/lexipopup-data/releases/latest/download/dict_standard_v1.db.gz",
+            DatabasePack.FULL.name     to "https://github.com/YOUR_ORG/lexipopup-data/releases/latest/download/dict_full_v1.db.gz"
         )
 
-        // Expected SHA-256 checksums (populated when DB packs are built)
+        // SHA-256 of the .db.gz file (update when you publish a new pack)
         private val PACK_CHECKSUMS = mapOf(
-            DatabasePack.MINIMAL.name to "PLACEHOLDER_SHA256_MINIMAL",
+            DatabasePack.MINIMAL.name  to "PLACEHOLDER_SHA256_MINIMAL",
             DatabasePack.STANDARD.name to "PLACEHOLDER_SHA256_STANDARD",
-            DatabasePack.FULL.name to "PLACEHOLDER_SHA256_FULL"
+            DatabasePack.FULL.name     to "PLACEHOLDER_SHA256_FULL"
         )
 
-        fun buildRequest(pack: DatabasePack): OneTimeWorkRequest =
+        fun uniqueWorkName(pack: DatabasePack) = "dict_download_${pack.name}"
+
+        fun buildRequest(pack: DatabasePack, resumeBytes: Long = 0L): OneTimeWorkRequest =
             OneTimeWorkRequestBuilder<DictionaryDownloadWorker>()
-                .setInputData(workDataOf(KEY_PACK to pack.name))
-                .setConstraints(Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build())
+                .setInputData(workDataOf(
+                    KEY_PACK         to pack.name,
+                    KEY_RESUME_BYTES to resumeBytes
+                ))
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30_000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .addTag("lexipopup_download")
+                .addTag("lexipopup_download_${pack.name}")
                 .build()
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val packName = inputData.getString(KEY_PACK) ?: DatabasePack.STANDARD.name
-        val url = PACK_URLS[packName] ?: return@withContext Result.failure(
-            workDataOf(KEY_ERROR to "Unknown pack: $packName")
-        )
+        val pack = DatabasePack.entries.firstOrNull { it.name == packName }
+            ?: return@withContext Result.failure(workDataOf(KEY_ERROR to "Unknown pack: $packName"))
+
+        val url = PACK_URLS[packName]
+            ?: return@withContext Result.failure(workDataOf(KEY_ERROR to "No URL configured for pack $packName"))
         val expectedChecksum = PACK_CHECKSUMS[packName]
 
-        val destFile = File(applicationContext.filesDir, "dict_pack.db.gz")
+        val gzFile = File(applicationContext.filesDir, "dict_${packName}.db.gz")
+        val dbFile = File(applicationContext.filesDir, "dict_${packName}.db")
 
-        try {
-            // Download with progress reporting
-            val connection = URL(url).openConnection()
-            val totalBytes = connection.contentLengthLong.coerceAtLeast(1L)
-            var downloaded = 0L
-
-            connection.getInputStream().use { input ->
-                destFile.outputStream().use { output ->
-                    val buffer = ByteArray(8 * 1024)
-                    var bytes: Int
-                    while (input.read(buffer).also { bytes = it } != -1) {
-                        output.write(buffer, 0, bytes)
-                        downloaded += bytes
-                        val progress = ((downloaded * 100) / totalBytes).toInt()
-                        setProgress(workDataOf(KEY_PROGRESS to progress))
-                    }
-                }
+        return@withContext try {
+            // ─── Phase 1: Download (with resume) ───────────────────────────
+            val downloaded = downloadWithResume(pack, url, gzFile)
+            if (downloaded < 0) {
+                // retry-able network error
+                gzFile.delete()
+                return@withContext Result.retry()
             }
 
-            // Verify checksum
-            if (expectedChecksum != null && !expectedChecksum.startsWith("PLACEHOLDER")) {
-                val actual = sha256(destFile)
+            // ─── Phase 2: Decompress ────────────────────────────────────────
+            setProgress(workDataOf(KEY_PHASE to PHASE_DECOMPRESS, KEY_PROGRESS to 66))
+            decompressGzip(gzFile, dbFile)
+
+            // ─── Phase 3: Verify checksum on .gz ───────────────────────────
+            setProgress(workDataOf(KEY_PHASE to PHASE_VERIFYING, KEY_PROGRESS to 76))
+            if (!expectedChecksum.isNullOrBlank() && !expectedChecksum.startsWith("PLACEHOLDER")) {
+                val actual = sha256(gzFile)
                 if (actual != expectedChecksum) {
-                    destFile.delete()
+                    gzFile.delete(); dbFile.delete()
+                    downloadStateStore.clearDownloadProgress(pack)
                     return@withContext Result.failure(
-                        workDataOf(KEY_ERROR to "Checksum mismatch. Please retry.")
+                        workDataOf(KEY_ERROR to "Checksum mismatch. File may be corrupt. Please retry.")
                     )
                 }
             }
+            gzFile.delete() // free space after verify
 
-            setProgress(workDataOf(KEY_PROGRESS to 100))
-            Result.success(workDataOf(KEY_PROGRESS to 100))
+            // ─── Phase 4: Import into Room ─────────────────────────────────
+            val wordCount = importDatabase(pack, dbFile)
+            dbFile.delete()
+
+            // ─── Phase 5: Mark done ────────────────────────────────────────
+            downloadStateStore.markInstalled(pack, wordCount)
+            setProgress(workDataOf(KEY_PHASE to PHASE_DONE, KEY_PROGRESS to 100, KEY_WORDS_DONE to wordCount))
+            Result.success(workDataOf(KEY_PHASE to PHASE_DONE, KEY_WORDS_DONE to wordCount))
+
         } catch (e: Exception) {
-            destFile.delete()
+            dbFile.delete()
             Result.retry()
         }
+    }
+
+    /**
+     * Downloads [url] to [dest] with HTTP Range resume support.
+     * Returns the total bytes downloaded, or -1 on network error.
+     */
+    private suspend fun downloadWithResume(pack: DatabasePack, url: String, dest: File): Long {
+        val existingBytes = if (dest.exists()) dest.length() else 0L
+
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15_000
+        conn.readTimeout    = 30_000
+        conn.setRequestProperty("Accept-Encoding", "identity")
+        if (existingBytes > 0) {
+            conn.setRequestProperty("Range", "bytes=$existingBytes-")
+        }
+        conn.connect()
+
+        val responseCode = conn.responseCode
+        val resumeSupported = responseCode == HttpURLConnection.HTTP_PARTIAL
+        val fullRestart     = responseCode == HttpURLConnection.HTTP_OK
+
+        if (!resumeSupported && !fullRestart) {
+            conn.disconnect()
+            return -1L
+        }
+
+        val serverLength = conn.contentLengthLong
+        val totalBytes   = if (resumeSupported) existingBytes + serverLength else serverLength
+        downloadStateStore.setTotalBytes(pack, totalBytes)
+
+        val appendMode = resumeSupported && existingBytes > 0 && dest.exists()
+        var downloaded = if (appendMode) existingBytes else 0L
+
+        if (!appendMode && dest.exists()) dest.delete()
+
+        val speedWindow = ArrayDeque<Pair<Long, Long>>() // (time, bytes)
+        var lastProgressUpdate = System.currentTimeMillis()
+
+        setProgress(workDataOf(
+            KEY_PHASE to PHASE_DOWNLOADING,
+            KEY_PROGRESS to 0,
+            KEY_BYTES_DL to downloaded,
+            KEY_TOTAL_BYTES to totalBytes
+        ))
+
+        conn.inputStream.use { input: InputStream ->
+            FileOutputStream(dest, appendMode).use { output ->
+                val buffer = ByteArray(32 * 1024)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    output.write(buffer, 0, read)
+                    downloaded += read
+                    downloadStateStore.setDownloadedBytes(pack, downloaded)
+
+                    val now = System.currentTimeMillis()
+                    speedWindow.add(now to downloaded)
+                    while (speedWindow.size > 1 && now - speedWindow.first().first > 3_000) {
+                        speedWindow.removeFirst()
+                    }
+
+                    if (now - lastProgressUpdate >= 300) {
+                        lastProgressUpdate = now
+                        val rawProgress = if (totalBytes > 0) ((downloaded * 65) / totalBytes).toInt() else 0
+                        val speedKbps = if (speedWindow.size >= 2) {
+                            val dt = (speedWindow.last().first - speedWindow.first().first).coerceAtLeast(1)
+                            val db = speedWindow.last().second - speedWindow.first().second
+                            ((db * 1000) / (dt * 1024)).toInt()
+                        } else 0
+                        val etaSec = if (speedKbps > 0 && totalBytes > downloaded) {
+                            val remaining = (totalBytes - downloaded) / 1024
+                            (remaining / speedKbps).toInt()
+                        } else -1
+                        setProgress(workDataOf(
+                            KEY_PHASE    to PHASE_DOWNLOADING,
+                            KEY_PROGRESS to rawProgress,
+                            KEY_BYTES_DL to downloaded,
+                            KEY_TOTAL_BYTES to totalBytes,
+                            KEY_SPEED_KBPS  to speedKbps,
+                            KEY_ETA_SECONDS to etaSec
+                        ))
+                    }
+                }
+            }
+        }
+        conn.disconnect()
+        return downloaded
+    }
+
+    /** Decompresses a gzipped file to [dest]. */
+    private fun decompressGzip(src: File, dest: File) {
+        GZIPInputStream(src.inputStream().buffered(64 * 1024)).use { gz ->
+            FileOutputStream(dest).use { out ->
+                gz.copyTo(out, bufferSize = 64 * 1024)
+            }
+        }
+    }
+
+    /**
+     * Opens the downloaded SQLite [dbFile] and batch-inserts all rows into Room.
+     * Handles missing columns gracefully (uses defaults for absent fields).
+     */
+    private suspend fun importDatabase(pack: DatabasePack, dbFile: File): Int {
+        val srcDb = SQLiteDatabase.openDatabase(
+            dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY
+        )
+        val cursor = srcDb.rawQuery("SELECT * FROM dictionary_cache", null)
+        val total  = cursor.count
+        val batch  = mutableListOf<WordEntity>()
+        var done   = 0
+
+        fun col(name: String): Int = cursor.getColumnIndex(name)
+
+        fun getString(name: String, default: String = ""): String {
+            val idx = col(name); return if (idx >= 0 && !cursor.isNull(idx)) cursor.getString(idx) else default
+        }
+        fun getInt(name: String, default: Int = 0): Int {
+            val idx = col(name); return if (idx >= 0 && !cursor.isNull(idx)) cursor.getInt(idx) else default
+        }
+        fun getLong(name: String, default: Long = 0L): Long {
+            val idx = col(name); return if (idx >= 0 && !cursor.isNull(idx)) cursor.getLong(idx) else default
+        }
+
+        while (cursor.moveToNext()) {
+            batch += WordEntity(
+                id                = 0,
+                word              = getString("word"),
+                pronunciation     = getString("pronunciation"),
+                partOfSpeech      = getString("part_of_speech"),
+                shortMeaning      = getString("short_meaning"),
+                detailedMeaning   = getString("detailed_meaning"),
+                hindiMeaning      = getString("hindi_meaning"),
+                hindiPronunciation= getString("hindi_pronunciation"),
+                exampleSentence   = getString("example_sentence"),
+                synonyms          = getString("synonyms", "[]"),
+                antonyms          = getString("antonyms", "[]"),
+                etymology         = getString("etymology"),
+                difficultyLevel   = getInt("difficulty_level", 1),
+                frequencyRating   = getInt("frequency_rating", 50),
+                source            = pack.name.lowercase()
+            )
+
+            if (batch.size >= 500) {
+                wordDao.insertAll(batch)
+                done += batch.size
+                batch.clear()
+                val progress = 80 + ((done * 19) / total.coerceAtLeast(1))
+                setProgress(workDataOf(
+                    KEY_PHASE    to PHASE_IMPORTING,
+                    KEY_PROGRESS to progress,
+                    KEY_WORDS_DONE to done
+                ))
+            }
+        }
+        if (batch.isNotEmpty()) {
+            wordDao.insertAll(batch)
+            done += batch.size
+        }
+        cursor.close()
+        srcDb.close()
+        return done
     }
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { stream ->
-            val buffer = ByteArray(8192)
-            var bytes: Int
-            while (stream.read(buffer).also { bytes = it } != -1) {
-                digest.update(buffer, 0, bytes)
-            }
+            val buf = ByteArray(8192)
+            var n: Int
+            while (stream.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-}
-
-enum class DatabasePack(
-    val displayName: String,
-    val description: String,
-    val sizeMb: Int,
-    val wordCount: String
-) {
-    MINIMAL("Light", "WordNet + Core Hindi + Top 500k English words", 35, "500,000+"),
-    STANDARD("Standard", "WordNet + Full Hindi + Common Wiktionary words", 65, "2,000,000+"),
-    FULL("Full", "Complete Wiktionary + Full WordNet + Extended Hindi", 105, "4,700,000+")
 }

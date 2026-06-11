@@ -44,6 +44,15 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('LexiPopup/**/*.gradle*', 'LexiPopup/**/libs.versions.toml') }}
           restore-keys: ${{ runner.os }}-gradle-
 
+      - name: Ensure Gradle Wrapper JAR exists
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Wrapper JAR missing — regenerating with installed Gradle"
+            gradle wrapper --gradle-version 8.6
+          else
+            echo "Wrapper JAR present ($(du -sh gradle/wrapper/gradle-wrapper.jar | cut -f1))"
+          fi
+
       - name: Grant Gradlew Permission
         run: chmod +x ./gradlew
 

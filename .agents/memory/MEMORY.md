@@ -1,0 +1,2 @@
+- [LexiPopup download system](lexipopup-download.md) — two separate DataStores required; WorkManager injected via AppModule @Provides.
+- [LexiPopup state-based nav](lexipopup-nav.md) — sealed class AppDestination, no Jetpack Nav component; overlays via early return.

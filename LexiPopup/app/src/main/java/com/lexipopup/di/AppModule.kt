@@ -1,6 +1,7 @@
 package com.lexipopup.di
 
 import android.content.Context
+import androidx.work.WorkManager
 import com.google.gson.Gson
 import com.lexipopup.data.local.database.DictionaryRepositoryImpl
 import com.lexipopup.data.local.database.LexiDatabase
@@ -80,6 +81,11 @@ object AppModule {
     @Singleton
     fun provideDictionaryApi(retrofit: Retrofit): DictionaryApi =
         retrofit.create(DictionaryApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: Context): WorkManager =
+        WorkManager.getInstance(context)
 
     @Provides
     @Singleton

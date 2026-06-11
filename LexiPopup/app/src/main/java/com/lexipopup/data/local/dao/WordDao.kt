@@ -36,4 +36,44 @@ interface WordDao {
 
     @Query("DELETE FROM dictionary_cache WHERE source = 'local' AND word = :word")
     suspend fun deleteWord(word: String)
+
+    @Query("""
+        SELECT * FROM dictionary_cache
+        WHERE word LIKE '%' || :query || '%'
+        ORDER BY
+            CASE WHEN word LIKE :query || '%' THEN 0 ELSE 1 END,
+            frequency_rating DESC
+        LIMIT :limit
+    """)
+    suspend fun searchWords(query: String, limit: Int = 60): List<WordEntity>
+
+    @Query("""
+        SELECT * FROM dictionary_cache
+        WHERE UPPER(SUBSTR(word, 1, 1)) = UPPER(:letter)
+          AND (:pos = '' OR LOWER(part_of_speech) = LOWER(:pos))
+        ORDER BY
+            CASE :sortBy
+                WHEN 'frequency' THEN (100 - frequency_rating)
+                WHEN 'difficulty' THEN difficulty_level
+                ELSE 0
+            END,
+            word ASC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getWordsByLetter(
+        letter: String,
+        limit: Int = 60,
+        offset: Int = 0,
+        sortBy: String = "alpha",
+        pos: String = ""
+    ): List<WordEntity>
+
+    @Query("SELECT COUNT(*) FROM dictionary_cache WHERE UPPER(SUBSTR(word, 1, 1)) = UPPER(:letter)")
+    suspend fun countByLetter(letter: String): Int
+
+    @Query("SELECT * FROM dictionary_cache WHERE is_favorite = 0 ORDER BY RANDOM() LIMIT 1")
+    suspend fun getRandomWord(): WordEntity?
+
+    @Query("SELECT * FROM dictionary_cache WHERE part_of_speech = :pos ORDER BY RANDOM() LIMIT 1")
+    suspend fun getRandomWordByPos(pos: String): WordEntity?
 }

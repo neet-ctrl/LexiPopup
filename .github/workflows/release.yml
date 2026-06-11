@@ -4,6 +4,8 @@ name: Release APK → GitHub Release
 #   git tag v1.0.0 && git push origin v1.0.0
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:

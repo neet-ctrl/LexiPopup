@@ -36,6 +36,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        lifecycleScope.launch {
+            val settings = settingsDataStore.settings.first()
+            if (settings.showPersistentNotification) {
+                notificationHelper.showPersistentNotification()
+            }
+        }
+
         setContent {
             val settings by viewModel.settings.collectAsState()
             LexiPopupTheme(
@@ -51,14 +58,6 @@ class MainActivity : ComponentActivity() {
                         hasOverlayPermission = Settings.canDrawOverlays(this)
                     )
                 }
-            }
-        }
-
-        // Show persistent notification on launch if enabled
-        lifecycleScope.launch {
-            val settings = settingsDataStore.settings.first()
-            if (settings.showPersistentNotification) {
-                notificationHelper.showPersistentNotification()
             }
         }
     }

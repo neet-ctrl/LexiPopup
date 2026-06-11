@@ -39,6 +39,9 @@ class DictionaryRepositoryImpl @Inject constructor(
     override suspend fun searchSuggestions(query: String, limit: Int): List<String> =
         wordDao.getSuggestions(query, limit)
 
+    override suspend fun searchWords(query: String, limit: Int): List<WordEntry> =
+        wordDao.searchWords(query, limit).map { it.toDomain(gson) }
+
     override suspend fun saveToCache(entry: WordEntry) {
         wordDao.insertWord(entry.toEntity(gson))
     }
@@ -52,6 +55,31 @@ class DictionaryRepositoryImpl @Inject constructor(
 
     override fun getRecentWords(limit: Int): Flow<List<WordEntry>> =
         wordDao.getRecentWords(limit).map { list -> list.map { it.toDomain(gson) } }
+
+    override suspend fun getWordsByLetter(
+        letter: String,
+        limit: Int,
+        offset: Int,
+        sortBy: String,
+        pos: String
+    ): List<WordEntry> = wordDao.getWordsByLetter(letter, limit, offset, sortBy, pos)
+        .map { it.toDomain(gson) }
+
+    override suspend fun countByLetter(letter: String): Int =
+        wordDao.countByLetter(letter)
+
+    override suspend fun getWordOfDay(): WordEntry? {
+        // Deterministic by calendar day — same word all day, rotates daily
+        val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+        val total = wordDao.getTotalCount()
+        if (total == 0) return null
+        val offset = dayOfYear % total
+        // Pick a word at a deterministic offset; prefer difficulty >= 2 (interesting words)
+        val letter = ('A' + (dayOfYear % 26)).toString()
+        return wordDao.getWordsByLetter(letter, 1, 0, "alpha", "")
+            .firstOrNull()?.toDomain(gson)
+            ?: wordDao.getRandomWord()?.toDomain(gson)
+    }
 }
 
 fun WordEntity.toDomain(gson: Gson): WordEntry {

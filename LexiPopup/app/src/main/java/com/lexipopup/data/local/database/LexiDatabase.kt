@@ -17,6 +17,7 @@ import com.lexipopup.data.local.entities.UserNoteEntity
 import com.lexipopup.data.local.entities.UserSettingsEntity
 import com.lexipopup.data.local.entities.VocabularyHistoryEntity
 import com.lexipopup.data.local.entities.WordEntity
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,8 +59,15 @@ abstract class LexiDatabase : RoomDatabase() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         // Only seed here — NO PRAGMAs inside onCreate (runs in a transaction).
+                        // Launch on IO so we don't block Room's onCreate transaction.
+                        // Try/catch required: a silent coroutine failure leaves an empty DB.
                         scope.launch(Dispatchers.IO) {
-                            DatabaseSeeder.seed(db)
+                            try {
+                                DatabaseSeeder.seed(db)
+                                Log.i("LexiDatabase", "Seed completed successfully")
+                            } catch (e: Exception) {
+                                Log.e("LexiDatabase", "Seed failed — app will have no built-in words", e)
+                            }
                         }
                     }
 

@@ -26,7 +26,8 @@ data class PackDownloadUiState(
     val etaSeconds: Int = -1,
     val wordsImported: Int = 0,
     val installedWordCount: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    val downloadLog: String = ""
 )
 
 @HiltViewModel
@@ -97,7 +98,8 @@ class DownloadViewModel @Inject constructor(
                         totalBytes = wi.progress.getLong(DictionaryDownloadWorker.KEY_TOTAL_BYTES, 0L),
                         speedKbps = wi.progress.getInt(DictionaryDownloadWorker.KEY_SPEED_KBPS, 0),
                         etaSeconds = wi.progress.getInt(DictionaryDownloadWorker.KEY_ETA_SECONDS, -1),
-                        wordsImported = wi.progress.getInt(DictionaryDownloadWorker.KEY_WORDS_DONE, 0)
+                        wordsImported = wi.progress.getInt(DictionaryDownloadWorker.KEY_WORDS_DONE, 0),
+                        downloadLog = wi.progress.getString(DictionaryDownloadWorker.KEY_LOG) ?: ""
                     )
                 }
 

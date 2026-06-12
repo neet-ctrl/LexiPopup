@@ -2,10 +2,14 @@ package com.lexipopup.presentation.download
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,9 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.lexipopup.data.download.DatabasePack
 
@@ -158,6 +166,16 @@ private fun PackDownloadCard(
         DatabasePack.FULL     -> Color(0xFF9C27B0)
     }
 
+    // Log tray expanded state — auto-expand when downloading starts
+    var logExpanded by remember { mutableStateOf(false) }
+    val hasLog = state.downloadLog.isNotBlank()
+    val isActive = state.status in listOf(
+        DownloadStatus.DOWNLOADING, DownloadStatus.VERIFYING, DownloadStatus.IMPORTING
+    )
+    LaunchedEffect(isActive) {
+        if (isActive) logExpanded = true
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -174,7 +192,6 @@ private fun PackDownloadCard(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(state.pack.displayName, fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.titleMedium)
-                        // Word count badge
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = packAccent.copy(alpha = 0.15f)
@@ -192,7 +209,6 @@ private fun PackDownloadCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
-                // Size + status chip
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("${state.pack.sizeMb}MB",
                         style = MaterialTheme.typography.labelLarge,
@@ -257,7 +273,6 @@ private fun PackDownloadCard(
                         )
                     }
 
-                    // Speed + ETA (download phase only)
                     if (state.status == DownloadStatus.DOWNLOADING && state.speedKbps > 0) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -342,6 +357,113 @@ private fun PackDownloadCard(
                     Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Remove Pack")
+                }
+            }
+
+            // ── Advanced Download Log tray ───────────────────────────────────
+            if (hasLog || isActive) {
+                DownloadLogTray(
+                    log = state.downloadLog,
+                    expanded = logExpanded,
+                    onToggle = { logExpanded = !logExpanded }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadLogTray(
+    log: String,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val clipboard = LocalClipboardManager.current
+
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+    // Tray header / toggle row
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = onToggle,
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)
+        ) {
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "Download Log",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (expanded && log.isNotBlank()) {
+            IconButton(
+                onClick = { clipboard.setText(AnnotatedString(log)) },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = "Copy log",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    // Collapsible log content
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically() + fadeIn(),
+        exit  = shrinkVertically() + fadeOut()
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val scrollState = rememberScrollState()
+
+            // Auto-scroll to bottom when log updates
+            LaunchedEffect(log) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 80.dp, max = 240.dp)
+                    .verticalScroll(scrollState)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(10.dp)
+            ) {
+                if (log.isBlank()) {
+                    Text(
+                        "Waiting for download to start…",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                } else {
+                    Text(
+                        log,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            lineHeight = 16.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

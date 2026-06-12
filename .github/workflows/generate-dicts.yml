@@ -98,6 +98,9 @@ jobs:
 
           FILE="LexiPopup/app/src/main/java/com/lexipopup/data/download/DictionaryDownloadWorker.kt"
 
+          # NOTE: PACK_URLS uses plain string keys ("MINIMAL" to "...") so these sed
+          # patterns (which target DatabasePack.X.name) only update PACK_CHECKSUMS,
+          # never the URL map. This is intentional — URLs are static GitHub Release URLs.
           sed -i "s|DatabasePack.MINIMAL.name  to \"[^\"]*\"|DatabasePack.MINIMAL.name  to \"${MINIMAL_SHA}\"|"  "$FILE"
           sed -i "s|DatabasePack.STANDARD.name to \"[^\"]*\"|DatabasePack.STANDARD.name to \"${STANDARD_SHA}\"|" "$FILE"
           sed -i "s|DatabasePack.FULL.name     to \"[^\"]*\"|DatabasePack.FULL.name     to \"${FULL_SHA}\"|"     "$FILE"
@@ -105,6 +108,16 @@ jobs:
           echo "✅ All 3 checksums patched."
           echo "--- Patched PACK_CHECKSUMS section ---"
           grep -A5 "PACK_CHECKSUMS" "$FILE"
+          echo ""
+          echo "--- PACK_URLS (should still contain https:// URLs, not hashes) ---"
+          grep -A5 "PACK_URLS" "$FILE"
+          echo ""
+          # Sanity-check: PACK_URLS must NOT contain SHA-256 hashes (64 hex chars)
+          if grep -A5 "PACK_URLS" "$FILE" | grep -qE '"[0-9a-f]{64}"'; then
+            echo "❌ ERROR: PACK_URLS was accidentally overwritten with a SHA hash!"
+            exit 1
+          fi
+          echo "✅ PACK_URLS sanity check passed — still contains https:// URLs"
 
       - name: Commit and push updated checksums
         run: |

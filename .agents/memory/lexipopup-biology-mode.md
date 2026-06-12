@@ -4,7 +4,7 @@ description: Architecture decisions and gotchas for the Biology mode feature —
 ---
 
 ## DB version
-- Now at **version 6** (v5 added biology to dictionary_cache/favorites/vocabulary_history; v6 adds `mode` column to `user_notes` and `flashcards`).
+- Now at **version 7** (v5: dictionary_cache/favorites/vocabulary_history mode columns; v6: user_notes/flashcards mode columns + flashcards unique index change; v7: chat_sessions mode column + index).
 - `flashcards` unique index changed from `(word)` to `(word, mode)` via full table recreate in MIGRATION_5_6 — needed so the same word can be both an English and Biology card.
 - `user_notes` unique index changed from `(word)` to `(word, mode)` via ALTER TABLE + DROP/CREATE INDEX.
 

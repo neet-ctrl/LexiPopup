@@ -72,4 +72,39 @@ object ModeStrings {
     // ── Flashcards ────────────────────────────────────────────────────────────
     fun flashcardsEmpty(mode: AppMode) =
         if (mode == AppMode.BIOLOGY) "No biology cards yet.\nAdd terms from the popup." else "No flashcards yet.\nAdd words from the popup."
+
+    // ── AI Chat ───────────────────────────────────────────────────────────────
+
+    /** Title shown in the empty state of the chat screen. */
+    fun chatEmptyTitle(mode: AppMode) =
+        if (mode == AppMode.BIOLOGY) "Biology Expert" else "LexiPopup AI"
+
+    /** Sub-headline describing what the chat can help with. */
+    fun chatEmptySubtitle(mode: AppMode) =
+        if (mode == AppMode.BIOLOGY)
+            "Ask anything about biology — NEET UG/PG topics, mechanisms, mnemonics, MCQs, clinical correlations, or just explain a term."
+        else
+            "Ask anything — vocabulary, grammar, translation, etymology, or just have a conversation."
+
+    /** Input field placeholder text. */
+    fun chatPlaceholder(mode: AppMode) =
+        if (mode == AppMode.BIOLOGY)
+            "Ask about a biology concept, NEET MCQ, or term…"
+        else
+            "Ask anything… vocabulary, translation, grammar…"
+
+    /** New-session button label. */
+    fun chatNewSession(mode: AppMode) =
+        if (mode == AppMode.BIOLOGY) "New Session" else "New Chat"
+
+    /** History drawer title. */
+    fun chatHistoryTitle(mode: AppMode) =
+        if (mode == AppMode.BIOLOGY) "Bio Expert Sessions" else "Chat Sessions"
+
+    /** Empty sessions state message. */
+    fun chatSessionsEmpty(mode: AppMode) =
+        if (mode == AppMode.BIOLOGY)
+            "No biology sessions yet.\nStart a new one to chat with the Bio Expert."
+        else
+            "No chat sessions yet.\nStart a new one to begin."
 }

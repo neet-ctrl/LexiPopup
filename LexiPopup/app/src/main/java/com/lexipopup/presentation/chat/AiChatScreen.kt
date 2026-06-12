@@ -38,7 +38,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.gson.Gson
 import com.lexipopup.data.local.entities.ChatMessageEntity
 import com.lexipopup.data.local.entities.ChatSessionEntity
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.WordEntry
+import com.lexipopup.utils.ModeStrings
 import com.lexipopup.utils.ai.AiProviderType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,6 +75,7 @@ fun AiChatScreen(
     val rateLimitInfo    by viewModel.rateLimitInfo.collectAsState()
     val extractionResult by viewModel.extractionResult.collectAsState()
     val wordLookup       by viewModel.wordLookup.collectAsState()
+    val activeMode       by viewModel.activeMode.collectAsState()
 
     val listState  = rememberLazyListState()
     val scope      = rememberCoroutineScope()
@@ -189,7 +192,8 @@ fun AiChatScreen(
                 EmptyState(
                     provider = selectedProvider,
                     groqAvail = groqAvail,
-                    openAiAvail = openAiAvail
+                    openAiAvail = openAiAvail,
+                    activeMode = activeMode
                 )
             } else {
                 LazyColumn(
@@ -247,6 +251,7 @@ fun AiChatScreen(
         InputBar(
             value = inputText,
             isTyping = isTyping,
+            placeholder = ModeStrings.chatPlaceholder(activeMode),
             onValueChange = { inputText = it },
             onSend = {
                 val txt = inputText.trim()
@@ -263,6 +268,7 @@ fun AiChatScreen(
         SessionsBottomSheet(
             sessions = sessions,
             currentId = currentSession?.id,
+            activeMode = activeMode,
             onSelect = { id ->
                 viewModel.selectSession(id)
                 showSessions = false
@@ -635,6 +641,7 @@ private fun ThinkingIndicator() {
 private fun InputBar(
     value: String,
     isTyping: Boolean,
+    placeholder: String = "Ask anything…",
     onValueChange: (String) -> Unit,
     onSend: () -> Unit
 ) {
@@ -652,7 +659,7 @@ private fun InputBar(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Ask anything… vocabulary, translation, grammar…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f)) },
+                placeholder = { Text(placeholder, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f)) },
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 5,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Default),
@@ -688,7 +695,7 @@ private fun InputBar(
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 @Composable
-private fun EmptyState(provider: AiProviderType, groqAvail: Boolean, openAiAvail: Boolean) {
+private fun EmptyState(provider: AiProviderType, groqAvail: Boolean, openAiAvail: Boolean, activeMode: AppMode = AppMode.ENGLISH) {
     val hasKey = when (provider) {
         AiProviderType.GROQ    -> groqAvail
         AiProviderType.OPENAI  -> openAiAvail
@@ -700,18 +707,25 @@ private fun EmptyState(provider: AiProviderType, groqAvail: Boolean, openAiAvail
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        val isBiology = activeMode == AppMode.BIOLOGY
+        val bgGradient = if (isBiology)
+            Brush.radialGradient(listOf(Color(0xFF1B5E20), Color(0xFF2E7D32)))
+        else
+            Brush.radialGradient(listOf(GradientStart, GradientEnd))
         Box(
-            modifier = Modifier.size(80.dp).clip(CircleShape)
-                .background(Brush.radialGradient(listOf(GradientStart, GradientEnd))),
+            modifier = Modifier.size(80.dp).clip(CircleShape).background(bgGradient),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(40.dp), tint = Color.White)
+            Text(
+                if (isBiology) "🧬" else "✨",
+                style = MaterialTheme.typography.headlineMedium
+            )
         }
         Spacer(Modifier.height(20.dp))
-        Text("LexiPopup AI", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+        Text(ModeStrings.chatEmptyTitle(activeMode), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Ask anything — vocabulary, grammar, translation, etymology, or just have a conversation.",
+            ModeStrings.chatEmptySubtitle(activeMode),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -730,7 +744,17 @@ private fun EmptyState(provider: AiProviderType, groqAvail: Boolean, openAiAvail
             }
             Spacer(Modifier.height(16.dp))
         }
-        val suggestions = listOf("What does 'petrichor' mean?", "Translate 'serendipity' to Hindi", "Explain the etymology of 'philosophy'", "What are synonyms for 'melancholy'?")
+        val suggestions = if (isBiology) listOf(
+            "Explain the Calvin cycle for NEET",
+            "What is the difference between mitosis and meiosis?",
+            "Mnemonic for the lac operon",
+            "How does insulin lower blood glucose?"
+        ) else listOf(
+            "What does 'petrichor' mean?",
+            "Translate 'serendipity' to Hindi",
+            "Explain the etymology of 'philosophy'",
+            "What are synonyms for 'melancholy'?"
+        )
         suggestions.forEach { suggestion ->
             Spacer(Modifier.height(6.dp))
             SuggestionChip(
@@ -775,6 +799,7 @@ private fun RateLimitBanner(info: RateLimitInfo, onDismiss: () -> Unit) {
 private fun SessionsBottomSheet(
     sessions: List<ChatSessionEntity>,
     currentId: Long?,
+    activeMode: AppMode = AppMode.ENGLISH,
     onSelect: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onNewSession: () -> Unit,
@@ -789,17 +814,17 @@ private fun SessionsBottomSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Chat History", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(ModeStrings.chatHistoryTitle(activeMode), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 TextButton(onClick = onNewSession) {
                     Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("New Chat")
+                    Text(ModeStrings.chatNewSession(activeMode))
                 }
             }
             HorizontalDivider()
             if (sessions.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                    Text("No saved chats yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(ModeStrings.chatSessionsEmpty(activeMode), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {

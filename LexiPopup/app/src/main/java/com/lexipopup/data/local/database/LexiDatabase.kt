@@ -34,7 +34,7 @@ import kotlinx.coroutines.CoroutineScope
         ChatSessionEntity::class,
         ChatMessageEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -214,6 +214,19 @@ abstract class LexiDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 6 → 7: Mode-isolated chat sessions.
+         *
+         * - `chat_sessions`: add `mode` TEXT NOT NULL DEFAULT 'english'
+         *   Existing sessions (before Biology mode) are English by default.
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `chat_sessions` ADD COLUMN `mode` TEXT NOT NULL DEFAULT 'english'")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_chat_sessions_mode` ON `chat_sessions` (`mode`)")
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
@@ -221,15 +234,21 @@ abstract class LexiDatabase : RoomDatabase() {
                 DATABASE_NAME
             )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         try {
                             DatabaseSeeder.seed(db)
-                            Log.i("LexiDatabase", "Seed completed successfully")
+                            Log.i("LexiDatabase", "English seed completed successfully")
                         } catch (e: Exception) {
-                            Log.e("LexiDatabase", "Seed failed — app will have no built-in words", e)
+                            Log.e("LexiDatabase", "English seed failed — app will have no built-in English words", e)
+                        }
+                        try {
+                            BiologySeeder.seed(db)
+                            Log.i("LexiDatabase", "Biology seed completed successfully")
+                        } catch (e: Exception) {
+                            Log.e("LexiDatabase", "Biology seed failed — biology mode will have no built-in terms", e)
                         }
                     }
 
@@ -240,20 +259,36 @@ abstract class LexiDatabase : RoomDatabase() {
                             db.execSQL("PRAGMA mmap_size = 268435456")
                         } catch (_: Exception) {}
 
+                        // Re-seed English words if missing (e.g., first run after DB wipe)
                         try {
                             val cursor = db.query(
-                                "SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed'",
+                                "SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed' AND mode = 'english'",
                                 emptyArray<Any?>()
                             )
                             val seedCount = if (cursor.moveToFirst()) cursor.getInt(0) else 0
                             cursor.close()
                             if (seedCount == 0) {
-                                Log.i("LexiDatabase", "No seed words found on open — running seeder now")
+                                Log.i("LexiDatabase", "No English seed words found — running seeder now")
                                 DatabaseSeeder.seed(db)
-                                Log.i("LexiDatabase", "Re-seed on open completed successfully")
                             }
                         } catch (e: Exception) {
-                            Log.e("LexiDatabase", "Re-seed on open failed", e)
+                            Log.e("LexiDatabase", "English re-seed on open failed", e)
+                        }
+
+                        // Re-seed biology terms if missing
+                        try {
+                            val bioCursor = db.query(
+                                "SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed' AND mode = 'biology'",
+                                emptyArray<Any?>()
+                            )
+                            val bioCount = if (bioCursor.moveToFirst()) bioCursor.getInt(0) else 0
+                            bioCursor.close()
+                            if (bioCount == 0) {
+                                Log.i("LexiDatabase", "No biology seed terms found — running biology seeder now")
+                                BiologySeeder.seed(db)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("LexiDatabase", "Biology re-seed on open failed", e)
                         }
                     }
                 })

@@ -9,8 +9,10 @@ import com.lexipopup.data.local.database.toDomain
 import com.lexipopup.data.local.database.toEntity
 import com.lexipopup.data.local.entities.ChatMessageEntity
 import com.lexipopup.data.local.entities.ChatSessionEntity
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
+import com.lexipopup.utils.ModeManager
 import com.lexipopup.utils.SettingsDataStore
 import com.lexipopup.utils.ai.AiChatClient
 import com.lexipopup.utils.ai.AiProviderManager
@@ -18,6 +20,7 @@ import com.lexipopup.utils.ai.AiProviderType
 import com.lexipopup.utils.ai.ChatApiResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -58,11 +62,12 @@ class AiChatViewModel @Inject constructor(
     private val aiChatClient: AiChatClient,
     private val aiProviderManager: AiProviderManager,
     private val settingsDataStore: SettingsDataStore,
+    private val modeManager: ModeManager,
     private val gson: Gson
 ) : ViewModel() {
 
     companion object {
-        private const val SYSTEM_PROMPT = """You are LexiPopup AI — an advanced English language and vocabulary assistant. Help users:
+        private const val ENGLISH_SYSTEM_PROMPT = """You are LexiPopup AI — an advanced English language and vocabulary assistant. Help users:
 • Learn new words, meanings, etymology, synonyms, antonyms
 • Translate text to/from Hindi and other languages  
 • Understand grammar rules and usage
@@ -70,13 +75,35 @@ class AiChatViewModel @Inject constructor(
 • Answer questions about English literature and language
 
 Be conversational, educational, accurate, and concise. When you mention an interesting word, you may briefly note its meaning inline."""
+
+        private const val BIOLOGY_SYSTEM_PROMPT = """You are LexiPopup Biology Expert — an advanced biology tutor specialising in NEET UG and NEET PG preparation (India). Your role is to:
+• Explain biological concepts clearly: Cell Biology, Genetics & Evolution, Ecology, Human Physiology, Plant Physiology, Reproduction, Biotechnology, Biodiversity
+• Cover advanced NEET PG topics: Pathology, Pharmacology, Biochemistry, Microbiology, Anatomy, Physiology
+• Define scientific terminology with etymology (Greek/Latin roots)
+• Provide mnemonics and memory aids for complex topics
+• Answer MCQ-style NEET questions with step-by-step explanations and the correct option clearly stated
+• Explain diagrams, biological mechanisms, and biochemical pathways in clear text
+• Provide clinical correlations for NEET PG topics (disease mechanisms, drug targets)
+
+Use precise scientific language. When mentioning a biological term, briefly note its significance or etymology. Always be accurate — errors in biology and medicine can be harmful. Cite classic experiments and their authors where relevant (e.g., Mendel, Watson & Crick, Hershey-Chase)."""
     }
 
-    // ── Sessions ──────────────────────────────────────────────────────────────
+    /** Returns the system prompt appropriate for the current mode. */
+    private fun systemPrompt(): String =
+        if (modeManager.currentMode.value == AppMode.BIOLOGY) BIOLOGY_SYSTEM_PROMPT
+        else ENGLISH_SYSTEM_PROMPT
 
-    val sessions: StateFlow<List<ChatSessionEntity>> =
-        chatDao.getAllSessions()
-            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    // ── Active mode (exposed to UI) ────────────────────────────────────────────
+
+    val activeMode: StateFlow<AppMode> = modeManager.currentMode
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppMode.ENGLISH)
+
+    // ── Sessions — filtered by current mode ───────────────────────────────────
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val sessions: StateFlow<List<ChatSessionEntity>> = modeManager.currentMode
+        .flatMapLatest { mode -> chatDao.getSessionsByMode(mode.id) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _currentSessionId = MutableStateFlow<Long?>(null)
 
@@ -124,6 +151,16 @@ Be conversational, educational, accurate, and concise. When you mention an inter
             val s = settingsDataStore.settings.first()
             _selectedProvider.value = AiProviderType.fromId(s.aiProviderName)
         }
+        // When mode switches, clear current session so sessions list refreshes cleanly
+        viewModelScope.launch {
+            var previousMode = modeManager.currentMode.value
+            modeManager.currentMode.collect { newMode ->
+                if (newMode != previousMode) {
+                    previousMode = newMode
+                    startNewSession()
+                }
+            }
+        }
     }
 
     // ── Session management ────────────────────────────────────────────────────
@@ -170,13 +207,15 @@ Be conversational, educational, accurate, and concise. When you mention an inter
 
         viewModelScope.launch {
             val cfg = settingsDataStore.settings.first()
+            val currentMode = modeManager.currentMode.value
 
-            // Ensure session exists
+            // Ensure session exists — tag it with the active mode
             val sessionId = _currentSessionId.value ?: run {
                 val newId = chatDao.insertSession(
                     ChatSessionEntity(
                         title    = text.take(50).trimEnd().let { if (it.length == 50) "$it…" else it },
-                        provider = _selectedProvider.value.id
+                        provider = _selectedProvider.value.id,
+                        mode     = currentMode.id
                     )
                 )
                 _currentSessionId.value = newId
@@ -200,7 +239,7 @@ Be conversational, educational, accurate, and concise. When you mention an inter
 
             // Build full history: prior messages (snapshot) + the new user message, totalling up to 25
             val history = buildList {
-                add(AiChatClient.Message("system", SYSTEM_PROMPT))
+                add(AiChatClient.Message("system", systemPrompt()))
                 historySnapshot.takeLast(23).forEach { m ->
                     add(AiChatClient.Message(m.role, m.content))
                 }

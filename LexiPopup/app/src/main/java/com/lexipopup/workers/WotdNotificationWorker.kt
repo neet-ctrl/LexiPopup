@@ -39,7 +39,8 @@ class WotdNotificationWorker @AssistedInject constructor(
         notificationHelper.showWotdNotification(
             word = word.word,
             shortMeaning = word.shortMeaning,
-            hindiMeaning = word.hindiMeaning
+            hindiMeaning = word.hindiMeaning,
+            source = word.source
         )
         return Result.success()
     }

@@ -683,7 +683,43 @@ fun PopupContent(
                 }
             }
         }
+
+        // Source layer badge — shows which dictionary layer answered this lookup
+        SourceLayerBadge(source = entry.source)
+
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun SourceLayerBadge(source: String) {
+    if (source.isBlank()) return
+    data class LayerInfo(val emoji: String, val label: String, val color: Color)
+    val info = when (source.lowercase()) {
+        "seed"      -> LayerInfo("🌱", "Seed DB",       Color(0xFF4CAF50))
+        "minimal"   -> LayerInfo("📦", "Minimal Pack",  Color(0xFF2196F3))
+        "standard"  -> LayerInfo("📚", "Standard Pack", Color(0xFF3F51B5))
+        "full"      -> LayerInfo("🗄", "Full Pack",     Color(0xFF9C27B0))
+        "online"    -> LayerInfo("🌐", "Online API",    Color(0xFF009688))
+        "groq"      -> LayerInfo("🤖", "Groq AI",       Color(0xFFFF9800))
+        "openai"    -> LayerInfo("🤖", "OpenAI",        Color(0xFF43A047))
+        "on_device" -> LayerInfo("📱", "On-Device AI",  Color(0xFFE91E63))
+        else        -> LayerInfo("📄", source.replaceFirstChar { it.uppercase() }, Color(0xFF78909C))
+    }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = info.color.copy(alpha = 0.12f),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, info.color.copy(alpha = 0.4f))
+        ) {
+            Text(
+                text = "${info.emoji} ${info.label}",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = info.color,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 

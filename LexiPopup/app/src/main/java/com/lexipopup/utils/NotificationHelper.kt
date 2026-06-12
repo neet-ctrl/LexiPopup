@@ -153,7 +153,7 @@ class NotificationHelper @Inject constructor(
      * Fires the daily Word of the Day notification. Tapping it opens MainActivity
      * with the word detail pre-loaded.
      */
-    fun showWotdNotification(word: String, shortMeaning: String, hindiMeaning: String) {
+    fun showWotdNotification(word: String, shortMeaning: String, hindiMeaning: String, source: String = "") {
         if (!manager.areNotificationsEnabled()) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -165,9 +165,22 @@ class NotificationHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val sourceLabel = when (source.lowercase()) {
+            "seed"      -> "Seed DB"
+            "minimal"   -> "Minimal Pack"
+            "standard"  -> "Standard Pack"
+            "full"      -> "Full Pack"
+            "online"    -> "Online API"
+            "groq"      -> "Groq AI"
+            "openai"    -> "OpenAI"
+            "on_device" -> "On-Device AI"
+            else        -> source.replaceFirstChar { it.uppercase() }
+        }
+
         val bodyText = buildString {
             append(shortMeaning.take(80))
             if (hindiMeaning.isNotBlank()) append(" • ${hindiMeaning.take(30)}")
+            if (sourceLabel.isNotBlank()) append(" [${sourceLabel}]")
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_WOTD_ID)

@@ -146,46 +146,49 @@ fun PopupScreen(
     var widthFraction  by remember { mutableStateOf(settings.popupWidthFraction.coerceIn(0.50f, 0.95f)) }
     var heightFraction by remember { mutableStateOf(settings.popupHeightFraction.coerceIn(0.35f, 0.92f)) }
 
-    // ── Pass touches through to underlying app in bubble/edge modes ─────────────
+    // ── Window flags: shrink to tab size in EDGE mode, full-screen in FULL ──────
+    // LaunchedEffect (not SideEffect) so it re-runs whenever state or drag offset
+    // changes, and does NOT fight Compose layout during the same frame.
     val activity = LocalContext.current as? androidx.activity.ComponentActivity
-    SideEffect {
-        val win = activity?.window ?: return@SideEffect
+    LaunchedEffect(effectiveWindowState, edgeTabOffsetY) {
+        val win = activity?.window ?: return@LaunchedEffect
         val flagNotTouchModal = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         val flagNotFocusable  = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         val wrapContent       = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         val matchParent       = android.view.ViewGroup.LayoutParams.MATCH_PARENT
         when (effectiveWindowState) {
             PopupWindowState.EDGE_LEFT,
-            PopupWindowState.EDGE_RIGHT -> {
-                win.addFlags(flagNotTouchModal)
-                win.addFlags(flagNotFocusable)
-                // Shrink window to just the tab so every touch outside the circle
-                // passes through to the app underneath.
+            PopupWindowState.EDGE_RIGHT,
+            PopupWindowState.BUBBLE -> {
+                // Shrink the Activity window to exactly the tab rectangle.
+                // Because Compose renders only CollapsedEdgeHandle when isEdgeMode
+                // is true (no fillMaxSize Box), the window measures to the tab's
+                // 44×84 dp and every touch outside that rectangle falls through to
+                // the underlying app automatically.
+                win.addFlags(flagNotTouchModal or flagNotFocusable)
                 win.setLayout(wrapContent, wrapContent)
-                val attrs = win.attributes
+                val metrics  = activity?.resources?.displayMetrics
+                val screenH  = metrics?.heightPixels ?: 1920
+                val handlePx = (84f * (metrics?.density ?: 3f)).toInt()
+                // Gravity.TOP + attrs.y: y=0 is top of screen; we start centred
+                // and let edgeTabOffsetY (updated while the user drags) shift it.
+                val centreY  = (screenH - handlePx) / 2
+                val attrs    = win.attributes
                 attrs.gravity = (if (effectiveWindowState == PopupWindowState.EDGE_LEFT)
                     android.view.Gravity.START else android.view.Gravity.END) or
-                    android.view.Gravity.CENTER_VERTICAL
-                attrs.y = edgeTabOffsetY.toInt()
-                win.attributes = attrs
-            }
-            PopupWindowState.BUBBLE -> {
-                // Treat BUBBLE same as EDGE_RIGHT: WRAP_CONTENT so window only
-                // covers the handle — touches outside pass through freely.
-                win.addFlags(flagNotTouchModal)
-                win.addFlags(flagNotFocusable)
-                win.setLayout(wrapContent, wrapContent)
-                val attrs = win.attributes
-                attrs.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
-                attrs.y = 0
+                    android.view.Gravity.TOP
+                attrs.x = 0
+                attrs.y = (centreY + edgeTabOffsetY.toInt())
+                    .coerceIn(0, maxOf(0, screenH - handlePx))
                 win.attributes = attrs
             }
             else -> {
-                win.clearFlags(flagNotTouchModal)
-                win.clearFlags(flagNotFocusable)
+                win.clearFlags(flagNotTouchModal or flagNotFocusable)
                 win.setLayout(matchParent, matchParent)
                 val attrs = win.attributes
                 attrs.gravity = android.view.Gravity.NO_GRAVITY
+                attrs.x = 0
+                attrs.y = 0
                 win.attributes = attrs
             }
         }
@@ -346,75 +349,48 @@ fun PopupScreen(
         )
     }
 
-    // ── Root container ────────────────────────────────────────────────────────
+    // ── EDGE mode: render ONLY the collapsed tab — no fillMaxSize, no scrim ─────
+    // This is the critical fix: when collapsed, the Activity window is set to
+    // WRAP_CONTENT by the LaunchedEffect above.  For that to work, the Compose
+    // root must NOT use fillMaxSize() — otherwise Compose tells Android "give me
+    // the full screen" and the window stays full-size, eating all touches.
+    // By branching here and rendering only CollapsedEdgeHandle as the root
+    // composable, the window truly measures to 44×84 dp and every touch outside
+    // it passes through to the app below.
+    val isEdgeMode = effectiveWindowState == PopupWindowState.EDGE_LEFT ||
+                     effectiveWindowState == PopupWindowState.EDGE_RIGHT
+
+    if (isEdgeMode) {
+        CollapsedEdgeHandle(
+            side     = if (effectiveWindowState == PopupWindowState.EDGE_LEFT) "left" else "right",
+            onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
+            modifier = Modifier.pointerInput(Unit) {
+                detectDragGestures { _, dragAmount ->
+                    // Update edgeTabOffsetY → LaunchedEffect moves window.attrs.y
+                    edgeTabOffsetY = (edgeTabOffsetY + dragAmount.y).coerceIn(-1200f, 1200f)
+                }
+            }
+        )
+    } else {
+
+    // ── Full popup (FULL or residual BUBBLE state before redirect) ────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Scrim — FULL mode only
-        if (effectiveWindowState == PopupWindowState.FULL) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.32f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { safeClose() }
-            )
-        }
+        // Scrim — tap outside the card to dismiss
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.32f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { safeClose() }
+        )
 
-        AnimatedContent(
-            targetState = effectiveWindowState,
-            transitionSpec = {
-                val toEdge   = targetState  == PopupWindowState.EDGE_LEFT || targetState  == PopupWindowState.EDGE_RIGHT
-                val fromEdge = initialState == PopupWindowState.EDGE_LEFT || initialState == PopupWindowState.EDGE_RIGHT
-                when {
-                    toEdge   -> fadeIn(tween(180)) togetherWith fadeOut(tween(150))
-                    fromEdge -> (fadeIn(tween(220)) + scaleIn(spring(dampingRatio = 0.7f), 0.82f)) togetherWith fadeOut(tween(150))
-                    targetState == PopupWindowState.BUBBLE ->
-                        (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.7f), 0.5f)) togetherWith
-                        (fadeOut(tween(180)) + scaleOut(tween(180), 0.5f))
-                    else -> (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.8f), 0.88f)) togetherWith fadeOut(tween(150))
-                }
-            },
-            label = "window_state"
-        ) { state ->
-            when (state) {
-
-                PopupWindowState.BUBBLE -> {
-                    // BUBBLE state is immediately redirected to EDGE in LaunchedEffect(isBubble).
-                    // This fallback just shows the edge handle so there's no blank frame.
-                    CollapsedEdgeHandle(
-                        side = "right",
-                        onExpand = { windowMode = PopupWindowState.FULL }
-                    )
-                }
-
-                PopupWindowState.EDGE_LEFT -> {
-                    CollapsedEdgeHandle(
-                        side = "left",
-                        onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
-                        modifier = Modifier.pointerInput(Unit) {
-                            detectDragGestures { _, dragAmount ->
-                                edgeTabOffsetY += dragAmount.y
-                            }
-                        }
-                    )
-                }
-
-                PopupWindowState.EDGE_RIGHT -> {
-                    CollapsedEdgeHandle(
-                        side = "right",
-                        onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
-                        modifier = Modifier.pointerInput(Unit) {
-                            detectDragGestures { _, dragAmount ->
-                                edgeTabOffsetY += dragAmount.y
-                            }
-                        }
-                    )
-                }
-
-                // ── Full floating window ──────────────────────────────────────
-                PopupWindowState.FULL -> {
+        // ── Full floating window ──────────────────────────────────────────────
+        // (was the AnimatedContent FULL branch; entrance/exit animations are
+        //  handled by scaleAnim / alphaAnim applied to the Card below)
+        run {
                     val parallaxXPx = with(density) { parallax.x.dp.toPx() }
                     val parallaxYPx = with(density) { parallax.y.dp.toPx() }
                     val cardW = if (isLandscape) 0.68f else widthFraction.coerceIn(0.52f, 0.96f)
@@ -730,10 +706,9 @@ fun PopupScreen(
                             } // end Box inside Card
                         } // end Card
                     } // end Box Center
-                }
-            } // when
-        } // AnimatedContent
-    } // root Box
+        } // end run block (full popup content)
+    } // end root Box
+    } // end else (isEdgeMode)
 }
 
 // ── Header ─────────────────────────────────────────────────────────────────────

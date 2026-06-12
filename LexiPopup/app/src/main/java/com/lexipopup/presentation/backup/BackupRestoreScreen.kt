@@ -85,7 +85,7 @@ fun BackupRestoreScreen(
                         StatusCard(
                             icon = Icons.Default.CheckCircle,
                             tint = Color(0xFF4CAF50),
-                            message = "Backup exported successfully. Choose an app to save it.",
+                            message = "Backup ready — ${s.wordCount} words with full details. Choose an app to save it.",
                             onDismiss = { viewModel.resetState() }
                         )
                     }
@@ -93,7 +93,7 @@ fun BackupRestoreScreen(
                         StatusCard(
                             icon = Icons.Default.CheckCircle,
                             tint = Color(0xFF4CAF50),
-                            message = "Restored ${s.wordsRestored} items from backup.",
+                            message = "Restored ${s.wordsRestored} words · ${s.favoritesRestored} favorites · ${s.flashcardsRestored} flashcards.",
                             onDismiss = { viewModel.resetState() }
                         )
                     }
@@ -135,7 +135,7 @@ fun BackupRestoreScreen(
                     }
 
                     Text(
-                        "Your backup includes:\n• Favorite words\n• Flashcard list\n• Recent search history",
+                        "Your backup includes:\n• Full word details — definitions, pronunciation, etymology, Hindi meaning, examples, synonyms, antonyms\n• All online API & AI-fetched words\n• Favorite flags\n• Flashcard list",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

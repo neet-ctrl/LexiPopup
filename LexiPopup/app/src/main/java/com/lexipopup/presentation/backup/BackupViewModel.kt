@@ -7,6 +7,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
 import com.lexipopup.domain.repositories.VocabularyRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,19 +21,25 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class BackupData(
-    val version: Int = 1,
+    val version: Int = 2,
     val exportedAt: String = "",
-    val favorites: List<String> = emptyList(),
+    // v2: full word entries for all history (online/AI/accessed) — includes all fields
+    val historyEntries: List<WordEntry> = emptyList(),
+    // favorites: which words from historyEntries are starred
+    val favoriteWords: List<String> = emptyList(),
+    // flashcard word list
     val flashcardWords: List<String> = emptyList(),
+    // v1 compat fields (kept so old backups still import partial data)
+    val favorites: List<String> = emptyList(),
     val recentSearches: List<String> = emptyList()
 )
 
 sealed class BackupUiState {
     object Idle : BackupUiState()
     object Exporting : BackupUiState()
-    data class ExportDone(val uri: Uri) : BackupUiState()
+    data class ExportDone(val uri: Uri, val wordCount: Int) : BackupUiState()
     object Importing : BackupUiState()
-    data class ImportDone(val wordsRestored: Int) : BackupUiState()
+    data class ImportDone(val wordsRestored: Int, val favoritesRestored: Int, val flashcardsRestored: Int) : BackupUiState()
     data class Error(val message: String) : BackupUiState()
 }
 
@@ -50,15 +57,27 @@ class BackupViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = BackupUiState.Exporting
             try {
-                val favorites = dictionaryRepository.getFavorites().first().map { it.word }
+                // Full word details for every word in history
+                val historyEntries = dictionaryRepository.getWordHistory().first()
+
+                // Also grab favorites that might not be in history (e.g. pack words starred but never accessed)
+                val favoritesFromRepo = dictionaryRepository.getFavorites().first()
+                val favoriteWords = favoritesFromRepo.map { it.word }
+
+                // Merge: favorites that aren't already in history entries
+                val historyWords = historyEntries.map { it.word }.toSet()
+                val extraFavoriteEntries = favoritesFromRepo.filter { it.word !in historyWords }
+                val allEntries = historyEntries + extraFavoriteEntries
+
+                // Flashcard words
                 val flashcards = vocabularyRepository.getAllFlashcards().first().map { it.word }
-                val recent = dictionaryRepository.getRecentWords(limit = 500).first().map { it.word }
 
                 val backup = BackupData(
+                    version = 2,
                     exportedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                    favorites = favorites,
-                    flashcardWords = flashcards,
-                    recentSearches = recent
+                    historyEntries = allEntries,
+                    favoriteWords = favoriteWords,
+                    flashcardWords = flashcards
                 )
 
                 val json = gson.toJson(backup)
@@ -75,14 +94,14 @@ class BackupViewModel @Inject constructor(
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "application/json"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "LexiPopup Backup")
+                    putExtra(Intent.EXTRA_SUBJECT, "LexiPopup Backup — ${allEntries.size} words")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(Intent.createChooser(shareIntent, "Save backup via…").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
 
-                _state.value = BackupUiState.ExportDone(uri)
+                _state.value = BackupUiState.ExportDone(uri, allEntries.size)
             } catch (e: Exception) {
                 _state.value = BackupUiState.Error("Export failed: ${e.message}")
             }
@@ -98,24 +117,49 @@ class BackupViewModel @Inject constructor(
                     ?: throw Exception("Could not read file")
 
                 val backup = gson.fromJson(json, BackupData::class.java)
-                var restored = 0
 
-                backup.favorites.forEach { word ->
+                var wordsRestored = 0
+                var favoritesRestored = 0
+                var flashcardsRestored = 0
+
+                // ── Step 1: Restore full word entries into DB ─────────────────
+                // This is the key step — inserts definitions, meanings, pronunciations,
+                // etymology, Hindi, examples, synonyms/antonyms — everything.
+                val entriesToRestore = backup.historyEntries.ifEmpty {
+                    // v1 fallback: no entries stored, nothing to restore for word details
+                    emptyList()
+                }
+                entriesToRestore.forEach { entry ->
                     runCatching {
-                        val isFav = vocabularyRepository.isFavorite(word)
-                        if (!isFav) vocabularyRepository.toggleFavorite(word)
-                        restored++
+                        dictionaryRepository.saveToCache(entry)
+                        dictionaryRepository.markAccessed(entry.word)
+                        wordsRestored++
                     }
                 }
 
+                // ── Step 2: Restore favorites ──────────────────────────────────
+                // Use v2 favoriteWords first, fall back to v1 favorites field
+                val favWords = backup.favoriteWords.ifEmpty { backup.favorites }
+                favWords.forEach { word ->
+                    runCatching {
+                        // Only mark as favorite if the word now exists in DB
+                        val entry = dictionaryRepository.lookupWord(word)
+                        if (entry != null && !entry.isFavorite) {
+                            dictionaryRepository.toggleFavorite(word)
+                            favoritesRestored++
+                        }
+                    }
+                }
+
+                // ── Step 3: Restore flashcards ─────────────────────────────────
                 backup.flashcardWords.forEach { word ->
                     runCatching {
                         vocabularyRepository.createFlashcard(word, word, "")
-                        restored++
+                        flashcardsRestored++
                     }
                 }
 
-                _state.value = BackupUiState.ImportDone(restored)
+                _state.value = BackupUiState.ImportDone(wordsRestored, favoritesRestored, flashcardsRestored)
             } catch (e: Exception) {
                 _state.value = BackupUiState.Error("Import failed: ${e.message}")
             }

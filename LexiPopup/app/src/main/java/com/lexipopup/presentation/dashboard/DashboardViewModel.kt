@@ -127,4 +127,12 @@ class DashboardViewModel @Inject constructor(
     fun updateWotdSettings(mode: String, level: Int, notifEnabled: Boolean, hour: Int) {
         viewModelScope.launch { settingsDataStore.updateWotdSettings(mode, level, notifEnabled, hour) }
     }
+
+    fun updateButtonOrder(ids: List<String>) {
+        viewModelScope.launch {
+            settingsDataStore.update { prefs ->
+                prefs[SettingsDataStore.BUTTON_ORDER] = ids.joinToString(",")
+            }
+        }
+    }
 }

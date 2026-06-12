@@ -1,0 +1,113 @@
+✅ CONFIRMATION FOR THE AGENT
+
+Based on your uploaded image (67211.png), here is the exact confirmation the agent needs to build the popup with EXACTLY the same appearance as the image:
+
+---
+
+📋 AGENT CONFIRMATION INSTRUCTION
+
+Copy and paste this to your AI agent:
+
+```markdown
+## 🎨 POPUP APPEARANCE CONFIRMATION
+
+Build the LexiPopup floating window with **EXACTLY the same visual appearance** as the reference image I provided (file: 67211.png).
+
+### EXACT MATCH REQUIREMENTS:
+
+| Visual Element | Must Match Image |
+|----------------|------------------|
+| **Background** | Blurred/out-of-focus book text ("Alice's Adventures in Wonderland" style) |
+| **Window shape** | Horizontal rectangle with rounded corners (20-24dp radius) |
+| **Word display** | "BELITTLE" in large bold text, pronunciation below in smaller text |
+| **Part of Speech** | "Verb" with colored chip background |
+| **Frequency badge** | "Frequency: 62%" displayed near top |
+| **Difficulty badge** | "Difficulty: Intermediate" displayed |
+| **Why Important section** | Exactly as shown in image (explanation text) |
+| **Meaning section** | "To make someone or something feel unimportant" |
+| **Hindi section** | "कम आकना (Kam Aankna)" with label "Hindi:" |
+| **Example section** | "Don't belittle his efforts; he worked very hard." with label "Example:" |
+| **Detailed Meaning** | Longer definition text with label "Detailed Meaning:" |
+| **Etymology section** | Word origin with label "Etymology / Origin:" |
+| **Synonyms section** | Chips/tags: disparage, denigrate, deprecate with "+3 more" indicator |
+| **Antonyms section** | Chips/tags: praise, exalt, admire with "+2 more" indicator |
+| **Difficulty meter** | "Frequency: 45%" with progress bar |
+| **Color scheme** | Dark/light adaptive — match the image's color palette (dark text on light/glass background) |
+| **Typography** | Clean sans-serif font (Roboto or similar) |
+| **Card layout** | Clean, organized sections with proper spacing and dividers |
+| **Floating effect** | Shadow and elevation to show it's floating above content |
+
+### BUTTONS (As shown in image):
+
+Bottom toolbar must have these buttons (matching image style):
+
+| Button | Style |
+|--------|-------|
+| Copy | Text button |
+| Speak Word | Text button |
+| Speak Meaning | Text button |
+| Translate | Text button |
+| Share | Text button |
+| Save Note | Text button |
+| Full Details | Text button |
+| Search Web | Text button |
+| Add Flashcard | Text button |
+
+### WHAT TO ADD (Missing from image but required per earlier spec):
+
+Add these elements to the **exact same design style**:
+
+1. **Close button (✕)** at top-right corner
+2. **Favorite star (⭐)** at top-right (next to close)
+3. **Collapse button (☰)** at top-left
+4. **Resize handle (◢)** at bottom-right corner
+
+These 4 additions must blend seamlessly with the existing design.
+
+### EXACT COLORS (Detect from image):
+
+- Primary text: Dark gray/black
+- Secondary text: Medium gray
+- Background: Frosted glass/light with blur
+- Chips: Light gray background with dark text
+- Borders: Subtle rounded corners with soft shadow
+
+### CONFIRMATION REQUIRED:
+
+Acknowledge that you will build the popup with **EXACTLY the same appearance as 67211.png** plus the 4 missing buttons (close, favorite, collapse, resize handle).
+
+Do not change the layout, spacing, font sizes, section order, or visual style from the image.
+```
+
+---
+
+📊 CHECKLIST FOR AGENT
+
+Element Must Match Image Added by Agent
+Blurred book background ✅ Yes ✅
+"BELITTLE" with pronunciation ✅ Yes ✅
+"Verb" chip ✅ Yes ✅
+Frequency 62% badge ✅ Yes ✅
+Difficulty Intermediate badge ✅ Yes ✅
+"Why Important" section ✅ Yes ✅
+"Meaning" section ✅ Yes ✅
+"Hindi" section with Devanagari ✅ Yes ✅
+"Example" section ✅ Yes ✅
+"Detailed Meaning" section ✅ Yes ✅
+"Etymology / Origin" section ✅ Yes ✅
+Synonyms chips (+3 more) ✅ Yes ✅
+Antonyms chips (+2 more) ✅ Yes ✅
+Frequency 45% progress bar ✅ Yes ✅
+Bottom text buttons (Copy, Speak, etc.) ✅ Yes ✅
+Close button (✕) ❌ Missing ✅ ADD THIS
+Favorite star (⭐) ❌ Missing ✅ ADD THIS
+Collapse button (☰) ❌ Missing ✅ ADD THIS
+Resize handle (◢) ❌ Missing ✅ ADD THIS
+
+---
+
+✅ FINAL CONFIRMATION
+
+Once the agent confirms, it will build the popup that looks EXACTLY like your image, with the 4 missing buttons added in the same visual style.
+
+The agent must respond with: "Confirmed. I will build the LexiPopup floating window matching the exact appearance of 67211.png, including all sections, colors, typography, spacing, and adding the close, favorite, collapse buttons and resize handle in the same design language."

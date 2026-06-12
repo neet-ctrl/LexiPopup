@@ -9,11 +9,13 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,15 +25,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.hapticfeedback.LocalHapticFeedback
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlin.math.roundToInt
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.presentation.about.AboutScreen
@@ -943,16 +955,18 @@ fun SettingsScreen(
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
         item { SectionHeader("🔘 Action Buttons") }
-        item { ToggleRow("Copy button",          settings.showCopyButton)         { viewModel.updateSetting(SettingsDataStore.SHOW_COPY,        it) } }
-        item { ToggleRow("Speak word button",    settings.showSpeakWordButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_SPEAK_WORD,  it) } }
-        item { ToggleRow("Speak meaning button", settings.showSpeakMeaningButton) { viewModel.updateSetting(SettingsDataStore.SHOW_SPEAK_MEANING, it) } }
-        item { ToggleRow("Translate button",     settings.showTranslateButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_TRANSLATE,   it) } }
-        item { ToggleRow("Share button",         settings.showShareButton)        { viewModel.updateSetting(SettingsDataStore.SHOW_SHARE,       it) } }
-        item { ToggleRow("Save note button",     settings.showSaveNoteButton)     { viewModel.updateSetting(SettingsDataStore.SHOW_SAVE_NOTE,   it) } }
-        item { ToggleRow("Favorite button",      settings.showFavoriteButton)     { viewModel.updateSetting(SettingsDataStore.SHOW_FAVORITE,    it) } }
-        item { ToggleRow("Full details button",  settings.showFullDetailsButton)  { viewModel.updateSetting(SettingsDataStore.SHOW_FULL_DETAILS, it) } }
-        item { ToggleRow("Search web button",    settings.showSearchWebButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_SEARCH_WEB,  it) } }
-        item { ToggleRow("Flashcard button",     settings.showFlashcardButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_FLASHCARD_BTN, it) } }
+        item { ToggleRow("Favorite ★ (header button)", settings.showFavoriteButton) { viewModel.updateSetting(SettingsDataStore.SHOW_FAVORITE, it) } }
+        item {
+            Column(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                Text(
+                    "Grid buttons — drag ⠿ to reorder, toggle to show/hide",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                ButtonReorderPanel(settings = settings, viewModel = viewModel)
+            }
+        }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
         item { SectionHeader("🪟 Floating Window") }
@@ -1251,6 +1265,228 @@ fun DifficultyPieChart(distribution: Map<Int, Int> = emptyMap()) {
                     if (count > 0) "$label ($count)" else label,
                     style = MaterialTheme.typography.labelSmall
                 )
+            }
+        }
+    }
+}
+
+// ── Button Reorder Panel ───────────────────────────────────────────────────────
+// Drag-and-drop panel shown in Settings > Action Buttons.
+// Long-press the ⠿ handle and drag up/down to reorder.
+// Slot 1–5 = Row 1, slot 6–9 = Row 2, slot 10 = "More ⋯" overflow.
+// The toggle switch shows/hides each button in the popup grid.
+
+@Composable
+private fun ButtonReorderPanel(
+    settings: AppSettings,
+    viewModel: DashboardViewModel
+) {
+    // ── Static metadata for each button ─────────────────────────────────────
+    data class BtnMeta(
+        val id: String,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector,
+        val label: String,
+        val settingsKey: androidx.datastore.preferences.core.Preferences.Key<Boolean>
+    )
+
+    fun isEnabled(id: String): Boolean = when (id) {
+        "copy"      -> settings.showCopyButton
+        "speak"     -> settings.showSpeakWordButton
+        "meaning"   -> settings.showSpeakMeaningButton
+        "translate" -> settings.showTranslateButton
+        "share"     -> settings.showShareButton
+        "note"      -> settings.showSaveNoteButton
+        "details"   -> settings.showFullDetailsButton
+        "web"       -> settings.showSearchWebButton
+        "flashcard" -> settings.showFlashcardButton
+        "browser"   -> settings.showBrowserButton
+        else        -> false
+    }
+
+    val metaList = listOf(
+        BtnMeta("copy",      Icons.Default.ContentCopy,     "Copy",            SettingsDataStore.SHOW_COPY),
+        BtnMeta("speak",     Icons.Default.VolumeUp,        "Speak Word",      SettingsDataStore.SHOW_SPEAK_WORD),
+        BtnMeta("meaning",   Icons.Default.RecordVoiceOver, "Speak Meaning",   SettingsDataStore.SHOW_SPEAK_MEANING),
+        BtnMeta("translate", Icons.Default.Translate,       "Translate",       SettingsDataStore.SHOW_TRANSLATE),
+        BtnMeta("share",     Icons.Default.Share,           "Share",           SettingsDataStore.SHOW_SHARE),
+        BtnMeta("note",      Icons.Default.Edit,            "Save Note",       SettingsDataStore.SHOW_SAVE_NOTE),
+        BtnMeta("details",   Icons.Default.MenuBook,        "Full Details",    SettingsDataStore.SHOW_FULL_DETAILS),
+        BtnMeta("web",       Icons.Default.Language,        "Search Web",      SettingsDataStore.SHOW_SEARCH_WEB),
+        BtnMeta("flashcard", Icons.Default.Style,           "Add Flashcard",   SettingsDataStore.SHOW_FLASHCARD_BTN),
+        BtnMeta("browser",   Icons.Default.OpenInBrowser,   "Open in Browser", SettingsDataStore.SHOW_BROWSER_BTN)
+    )
+    val metaById = metaList.associateBy { it.id }
+
+    // ── Order state — only tracks IDs; enabled state always read fresh ───────
+    val defaultIds = listOf("copy","speak","meaning","translate","share","note","details","web","flashcard","browser")
+
+    fun parseOrder(raw: String): List<String> {
+        val saved = raw.split(",").map { it.trim() }.filter { it in metaById }
+        return saved + (defaultIds - saved.toSet())
+    }
+
+    // Initialised once from settings; updated by drag; synced via LaunchedEffect on resets
+    var orderedIds by remember { mutableStateOf(parseOrder(settings.buttonOrder)) }
+
+    // Keep local state in sync when settings change externally (e.g. factory reset)
+    LaunchedEffect(settings.buttonOrder) {
+        val fresh = parseOrder(settings.buttonOrder)
+        if (fresh != orderedIds) orderedIds = fresh
+    }
+
+    // ── Drag state ───────────────────────────────────────────────────────────
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffsetY  by remember { mutableStateOf(0f) }
+    val haptic     = LocalHapticFeedback.current
+    val density    = LocalDensity.current
+    val itemHeightPx = with(density) { 60.dp.toPx() }
+
+    // ── Rendering ────────────────────────────────────────────────────────────
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape    = RoundedCornerShape(14.dp),
+        color    = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Single pointerInput on the Column drives all drag logic
+                .pointerInput(Unit) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            val idx = (offset.y / itemHeightPx).toInt()
+                                .coerceIn(0, orderedIds.size - 1)
+                            draggedIndex = idx
+                            dragOffsetY  = 0f
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        onDrag = { _, dragAmount ->
+                            val di = draggedIndex ?: return@detectDragGesturesAfterLongPress
+                            dragOffsetY += dragAmount.y
+                            val target = (di + (dragOffsetY / itemHeightPx).roundToInt())
+                                .coerceIn(0, orderedIds.size - 1)
+                            if (target != di) {
+                                orderedIds = orderedIds.toMutableList().also { list ->
+                                    val removed = list.removeAt(di)
+                                    list.add(target, removed)
+                                }
+                                dragOffsetY -= (target - di) * itemHeightPx
+                                draggedIndex = target
+                            }
+                        },
+                        onDragEnd = {
+                            draggedIndex = null
+                            dragOffsetY  = 0f
+                            viewModel.updateButtonOrder(orderedIds)
+                        },
+                        onDragCancel = {
+                            draggedIndex = null
+                            dragOffsetY  = 0f
+                        }
+                    )
+                }
+        ) {
+            orderedIds.forEachIndexed { index, id ->
+                val meta      = metaById[id] ?: return@forEachIndexed
+                val enabled   = isEnabled(id)
+                val isDragging = draggedIndex == index
+
+                // Row label: "Row 1" (slots 1-5), "Row 2" (slots 6-9), "More" (slot 10)
+                val slotLabel = when {
+                    index < 5 -> "Row 1"
+                    index < 9 -> "Row 2"
+                    else      -> "More"
+                }
+                val slotColor = when {
+                    index < 5 -> MaterialTheme.colorScheme.primary
+                    index < 9 -> MaterialTheme.colorScheme.secondary
+                    else      -> MaterialTheme.colorScheme.tertiary
+                }
+
+                val rowModifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .zIndex(if (isDragging) 2f else 0f)
+                    .offset { IntOffset(0, if (isDragging) dragOffsetY.roundToInt() else 0) }
+                    .then(
+                        if (isDragging)
+                            Modifier.shadow(8.dp, RoundedCornerShape(10.dp))
+                        else Modifier
+                    )
+                    .background(
+                        if (isDragging)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                        else Color.Transparent,
+                        RoundedCornerShape(10.dp)
+                    )
+
+                Row(
+                    modifier  = rowModifier.padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Drag handle
+                    Icon(
+                        Icons.Default.DragHandle,
+                        contentDescription = "Drag to reorder",
+                        tint  = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                            alpha = if (isDragging) 0.9f else 0.45f
+                        ),
+                        modifier = Modifier.size(22.dp)
+                    )
+
+                    // Slot badge
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color = slotColor.copy(alpha = 0.13f)
+                    ) {
+                        Text(
+                            slotLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = slotColor,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    // Button icon preview
+                    Icon(
+                        meta.icon,
+                        contentDescription = null,
+                        tint  = if (enabled) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.size(20.dp)
+                    )
+
+                    // Button label
+                    Text(
+                        meta.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (enabled) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Enable/disable switch
+                    Switch(
+                        checked  = enabled,
+                        onCheckedChange = { viewModel.updateSetting(meta.settingsKey, it) },
+                        modifier = Modifier.scale(0.80f)
+                    )
+                }
+
+                // Thin divider between rows (not after last)
+                if (index < orderedIds.lastIndex) {
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier  = Modifier.padding(start = 48.dp)
+                    )
+                }
             }
         }
     }

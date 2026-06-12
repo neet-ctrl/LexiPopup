@@ -1325,21 +1325,39 @@ fun PopupActionGrid(
         val enabled: Boolean
     )
 
-    // All possible buttons — exactly 10; each has a distinct icon
-    val allButtons = listOf(
-        BtnDef(Icons.Default.ContentCopy,     "Copy",            onCopy,          settings.showCopyButton),
-        BtnDef(Icons.Default.VolumeUp,        "Speak\nWord",     onSpeakWord,     settings.showSpeakWordButton),
-        BtnDef(Icons.Default.RecordVoiceOver, "Speak\nMeaning",  onSpeakMeaning,  settings.showSpeakMeaningButton),
-        BtnDef(Icons.Default.Translate,       "Translate",       onTranslate,     settings.showTranslateButton),
-        BtnDef(Icons.Default.Share,           "Share",           onShare,         settings.showShareButton),
-        BtnDef(Icons.Default.Edit,            "Save\nNote",      onSaveNote,      settings.showSaveNoteButton),
-        BtnDef(Icons.Default.MenuBook,        "Full\nDetails",   onFullDetails,   settings.showFullDetailsButton),
-        BtnDef(Icons.Default.Language,        "Search\nWeb",     onSearchWeb,     settings.showSearchWebButton),
-        BtnDef(Icons.Default.Style,           "Flashcard",       onAddFlashcard,  settings.showFlashcardButton),
-        BtnDef(Icons.Default.OpenInBrowser,   "Open in\nBrowser",onOpenBrowser,   settings.showBrowserButton)
+    // All possible buttons — exactly 10; id matches the buttonOrder string in AppSettings
+    data class BtnDefWithId(
+        val id: String,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector,
+        val label: String,
+        val action: () -> Unit,
+        val enabled: Boolean
     )
 
-    val enabled   = allButtons.filter { it.enabled }
+    val allButtons = listOf(
+        BtnDefWithId("copy",      Icons.Default.ContentCopy,     "Copy",            onCopy,          settings.showCopyButton),
+        BtnDefWithId("speak",     Icons.Default.VolumeUp,        "Speak\nWord",     onSpeakWord,     settings.showSpeakWordButton),
+        BtnDefWithId("meaning",   Icons.Default.RecordVoiceOver, "Speak\nMeaning",  onSpeakMeaning,  settings.showSpeakMeaningButton),
+        BtnDefWithId("translate", Icons.Default.Translate,       "Translate",       onTranslate,     settings.showTranslateButton),
+        BtnDefWithId("share",     Icons.Default.Share,           "Share",           onShare,         settings.showShareButton),
+        BtnDefWithId("note",      Icons.Default.Edit,            "Save\nNote",      onSaveNote,      settings.showSaveNoteButton),
+        BtnDefWithId("details",   Icons.Default.MenuBook,        "Full\nDetails",   onFullDetails,   settings.showFullDetailsButton),
+        BtnDefWithId("web",       Icons.Default.Language,        "Search\nWeb",     onSearchWeb,     settings.showSearchWebButton),
+        BtnDefWithId("flashcard", Icons.Default.Style,           "Flashcard",       onAddFlashcard,  settings.showFlashcardButton),
+        BtnDefWithId("browser",   Icons.Default.OpenInBrowser,   "Open in\nBrowser",onOpenBrowser,   settings.showBrowserButton)
+    )
+
+    // Sort by the saved order from settings — user's drag-and-drop order is respected
+    val orderIds = settings.buttonOrder.split(",").map { it.trim() }
+    val sortedButtons = allButtons.sortedBy { btn ->
+        val idx = orderIds.indexOf(btn.id)
+        if (idx == -1) Int.MAX_VALUE else idx
+    }
+
+    // Map back to BtnDef for the rest of the rendering logic
+    val enabled = sortedButtons.filter { it.enabled }.map { b ->
+        BtnDef(b.icon, b.label, b.action, b.enabled)
+    }
     if (enabled.isEmpty()) return
 
     // First 9 shown in 2 rows; slot 10 (row2-pos5) is always "More ⋯"

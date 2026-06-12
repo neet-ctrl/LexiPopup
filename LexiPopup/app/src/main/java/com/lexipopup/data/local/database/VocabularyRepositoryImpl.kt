@@ -92,7 +92,7 @@ class VocabularyRepositoryImpl @Inject constructor(
     // ─── Notes ────────────────────────────────────────────────────
 
     override suspend fun saveNote(word: String, note: String, mode: AppMode) {
-        userNoteDao.insertNote(UserNoteEntity(word = word, note = note))
+        userNoteDao.insertNote(UserNoteEntity(word = word, note = note, mode = mode.id))
     }
 
     override fun getNotesForWord(word: String): Flow<List<UserNote>> =
@@ -100,12 +100,20 @@ class VocabularyRepositoryImpl @Inject constructor(
             list.map { UserNote(it.id, it.word, it.note, it.createdAt, it.updatedAt) }
         }
 
+    override fun getNotesForWordByMode(word: String, mode: AppMode): Flow<List<UserNote>> =
+        userNoteDao.getNotesForWordByMode(word, mode.id).map { list ->
+            list.map { UserNote(it.id, it.word, it.note, it.createdAt, it.updatedAt) }
+        }
+
     // ─── Flashcards ───────────────────────────────────────────────
 
-    override fun getDueFlashcards(): Flow<List<Flashcard>> =
-        flashcardDao.getDueCards().map { list -> list.map { it.toDomain() } }
+    override fun getDueFlashcards(mode: String): Flow<List<Flashcard>> =
+        flashcardDao.getDueCardsByMode(mode).map { list -> list.map { it.toDomain() } }
 
-    override fun getAllFlashcards(): Flow<List<Flashcard>> =
+    override fun getAllFlashcards(mode: String): Flow<List<Flashcard>> =
+        flashcardDao.getAllCardsByMode(mode).map { list -> list.map { it.toDomain() } }
+
+    override fun getAllFlashcardsAllModes(): Flow<List<Flashcard>> =
         flashcardDao.getAllCards().map { list -> list.map { it.toDomain() } }
 
     override suspend fun reviewFlashcard(id: Long, quality: Int) {
@@ -114,15 +122,15 @@ class VocabularyRepositoryImpl @Inject constructor(
         flashcardDao.updateCard(reviewed.toEntity())
     }
 
-    override suspend fun createFlashcard(word: String, front: String, back: String) {
-        flashcardDao.insertCard(FlashcardEntity(word = word, frontText = front, backText = back))
+    override suspend fun createFlashcard(word: String, front: String, back: String, mode: String) {
+        flashcardDao.insertCard(FlashcardEntity(word = word, frontText = front, backText = back, mode = mode))
     }
 
     override suspend fun deleteFlashcard(id: Long) = flashcardDao.deleteById(id)
 }
 
 fun FlashcardEntity.toDomain() = Flashcard(
-    id = id, word = word, frontText = frontText, backText = backText,
+    id = id, word = word, mode = mode, frontText = frontText, backText = backText,
     reviewLevel = reviewLevel,
     nextReviewDate = Instant.ofEpochMilli(nextReviewDate).atZone(ZoneId.systemDefault()).toLocalDateTime(),
     lastReviewed = lastReviewed?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() },
@@ -130,7 +138,7 @@ fun FlashcardEntity.toDomain() = Flashcard(
 )
 
 fun Flashcard.toEntity() = FlashcardEntity(
-    id = id, word = word, frontText = frontText, backText = backText,
+    id = id, word = word, mode = mode, frontText = frontText, backText = backText,
     reviewLevel = reviewLevel,
     nextReviewDate = nextReviewDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
     lastReviewed = lastReviewed?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),

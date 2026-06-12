@@ -8,13 +8,14 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "flashcards",
     indices = [
-        Index(value = ["word"], unique = true),
+        Index(value = ["word", "mode"], unique = true),
         Index(value = ["next_review_date"])
     ]
 )
 data class FlashcardEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "word") val word: String,
+    @ColumnInfo(name = "mode", defaultValue = "english") val mode: String = "english",
     @ColumnInfo(name = "front_text") val frontText: String,
     @ColumnInfo(name = "back_text") val backText: String,
     @ColumnInfo(name = "review_level") val reviewLevel: Int = 0,

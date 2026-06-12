@@ -66,6 +66,7 @@ import com.lexipopup.presentation.chat.AiChatScreen
 import com.lexipopup.presentation.chat.AiChatViewModel
 import com.lexipopup.presentation.download.DownloadProgressScreen
 import com.lexipopup.utils.ExportFormat
+import com.lexipopup.utils.ModeStrings
 import com.lexipopup.utils.SettingsDataStore
 import com.lexipopup.workers.WotdNotificationWorker
 import java.time.LocalDate
@@ -238,12 +239,12 @@ fun DashboardScreen(
     }
 
     val bottomNavItems = listOf(
-        Triple(AppDestination.Home, Icons.Default.Home, "Home"),
-        Triple(AppDestination.Dictionary, Icons.Default.MenuBook, "Dictionary"),
-        Triple(AppDestination.AiChat, Icons.Default.SmartToy, "AI Chat"),
-        Triple(AppDestination.Flashcards, Icons.Default.School, "Flashcards"),
-        Triple(AppDestination.Stats, Icons.Default.BarChart, "Stats"),
-        Triple(AppDestination.Settings, Icons.Default.Settings, "Settings")
+        Triple(AppDestination.Home,       Icons.Default.Home,        "Home"),
+        Triple(AppDestination.Dictionary, Icons.Default.MenuBook,    ModeStrings.navDictionary(activeMode)),
+        Triple(AppDestination.AiChat,     Icons.Default.SmartToy,   ModeStrings.navAiChat(activeMode)),
+        Triple(AppDestination.Flashcards, Icons.Default.School,     ModeStrings.navFlashcards(activeMode)),
+        Triple(AppDestination.Stats,      Icons.Default.BarChart,   "Stats"),
+        Triple(AppDestination.Settings,   Icons.Default.Settings,   "Settings")
     )
 
     Scaffold(
@@ -261,13 +262,13 @@ fun DashboardScreen(
                     } else {
                         Text(
                             when (destination) {
-                                AppDestination.Home -> "LexiPopup"
-                                AppDestination.Dictionary -> "Dictionary"
-                                AppDestination.AiChat -> "AI Chat"
-                                AppDestination.Flashcards -> "Flashcards"
-                                AppDestination.Stats -> "Statistics"
-                                AppDestination.Settings -> "Settings"
-                                else -> "LexiPopup"
+                                AppDestination.Home       -> "LexiPopup"
+                                AppDestination.Dictionary -> ModeStrings.titleDictionary(activeMode)
+                                AppDestination.AiChat     -> ModeStrings.titleAiChat(activeMode)
+                                AppDestination.Flashcards -> ModeStrings.titleFlashcards(activeMode)
+                                AppDestination.Stats      -> "Statistics"
+                                AppDestination.Settings   -> "Settings"
+                                else                      -> "LexiPopup"
                             },
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -428,13 +429,13 @@ fun HomeScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                         Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
-                        Text("Search any word or phrase…", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f), style = MaterialTheme.typography.bodyMedium)
+                        Text(ModeStrings.searchPlaceholder(activeMode), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f), style = MaterialTheme.typography.bodyMedium)
                     }
                     IconButton(
                         onClick = {
                             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a word to look up…")
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, ModeStrings.voicePrompt(activeMode))
                             }
                             speechLauncher.launch(intent)
                         }
@@ -452,10 +453,10 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 StatMiniCard(modifier = Modifier.weight(1f), label = "Today", value = "$todayCount", icon = Icons.Default.Today, color = MaterialTheme.colorScheme.primary)
-                StatMiniCard(modifier = Modifier.weight(1f), label = "Favorites", value = "${favorites.size}", icon = Icons.Default.Star, color = Color(0xFFFFC107))
+                StatMiniCard(modifier = Modifier.weight(1f), label = ModeStrings.statFavorites(activeMode), value = "${favorites.size}", icon = Icons.Default.Star, color = Color(0xFFFFC107))
                 StatMiniCard(
                     modifier = Modifier.weight(1f),
-                    label = "In DB",
+                    label = ModeStrings.statDatabase(activeMode),
                     value = when {
                         totalWordCount >= 1_000_000 -> "%.1fM".format(totalWordCount / 1_000_000.0)
                         totalWordCount >= 1_000     -> "%.1fK".format(totalWordCount / 1_000.0)
@@ -486,7 +487,7 @@ fun HomeScreen(
         if (recentWords.isNotEmpty()) {
             item {
                 Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("🔥  Recent Searches", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(ModeStrings.recentSection(activeMode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(recentWords.take(10)) { word ->
                             SuggestionChip(
@@ -516,7 +517,7 @@ fun HomeScreen(
             item {
                 Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("📚  YOUR VOCABULARY  (Last 7 days)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(ModeStrings.vocabSection(activeMode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         WeeklyBarChart(weeklyStats)
                     }
                 }
@@ -529,7 +530,7 @@ fun HomeScreen(
                 Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("⭐  FAVORITE WORDS", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(ModeStrings.favSection(activeMode), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             TextButton(onClick = onNavigateToDictionary) { Text("Browse all") }
                         }
                         favorites.take(5).forEach { fav ->

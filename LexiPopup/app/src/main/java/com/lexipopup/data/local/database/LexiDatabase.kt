@@ -34,7 +34,7 @@ import kotlinx.coroutines.CoroutineScope
         ChatSessionEntity::class,
         ChatMessageEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -171,6 +171,49 @@ abstract class LexiDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 5 → 6: Mode-isolated notes and flashcards.
+         *
+         * - `user_notes`:  add `mode` TEXT DEFAULT 'english'
+         * - `flashcards`:  add `mode` TEXT DEFAULT 'english'; recreate table so unique index
+         *                  changes from (word) to (word, mode) — allows same term in both modes.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+
+                // ── user_notes: simple column addition ────────────────────────
+                db.execSQL("ALTER TABLE `user_notes` ADD COLUMN `mode` TEXT NOT NULL DEFAULT 'english'")
+                db.execSQL("DROP INDEX IF EXISTS `index_user_notes_word`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_user_notes_word_mode` ON `user_notes` (`word`, `mode`)")
+
+                // ── flashcards: recreate to change unique constraint ──────────
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `flashcards_new` (
+                        `id`               INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `word`             TEXT    NOT NULL,
+                        `mode`             TEXT    NOT NULL DEFAULT 'english',
+                        `front_text`       TEXT    NOT NULL,
+                        `back_text`        TEXT    NOT NULL,
+                        `review_level`     INTEGER NOT NULL DEFAULT 0,
+                        `next_review_date` INTEGER NOT NULL,
+                        `last_reviewed`    INTEGER,
+                        `interval`         INTEGER NOT NULL DEFAULT 1,
+                        `ease_factor`      REAL    NOT NULL DEFAULT 2.5
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO flashcards_new
+                        (id, word, mode, front_text, back_text, review_level, next_review_date, last_reviewed, interval, ease_factor)
+                    SELECT id, word, 'english', front_text, back_text, review_level, next_review_date, last_reviewed, interval, ease_factor
+                    FROM flashcards
+                """.trimIndent())
+                db.execSQL("DROP TABLE IF EXISTS `flashcards`")
+                db.execSQL("ALTER TABLE `flashcards_new` RENAME TO `flashcards`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_flashcards_word_mode` ON `flashcards` (`word`, `mode`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_flashcards_next_review_date` ON `flashcards` (`next_review_date`)")
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
@@ -178,7 +221,7 @@ abstract class LexiDatabase : RoomDatabase() {
                 DATABASE_NAME
             )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

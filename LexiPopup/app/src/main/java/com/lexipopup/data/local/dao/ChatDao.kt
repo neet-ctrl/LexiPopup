@@ -16,6 +16,11 @@ interface ChatDao {
     @Update
     suspend fun updateSession(session: ChatSessionEntity)
 
+    /** Returns all sessions for a specific mode (english / biology), newest first. */
+    @Query("SELECT * FROM chat_sessions WHERE mode = :mode ORDER BY updated_at DESC")
+    fun getSessionsByMode(mode: String): Flow<List<ChatSessionEntity>>
+
+    /** Legacy — returns ALL sessions regardless of mode; kept for backward compat. */
     @Query("SELECT * FROM chat_sessions ORDER BY updated_at DESC")
     fun getAllSessions(): Flow<List<ChatSessionEntity>>
 
@@ -24,6 +29,9 @@ interface ChatDao {
 
     @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: Long)
+
+    @Query("DELETE FROM chat_sessions WHERE mode = :mode")
+    suspend fun deleteAllSessionsByMode(mode: String)
 
     @Query("DELETE FROM chat_sessions")
     suspend fun deleteAllSessions()

@@ -18,7 +18,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.Flashcard
+import com.lexipopup.utils.ModeStrings
 import kotlin.math.abs
 
 @Composable
@@ -27,8 +29,9 @@ fun FlashcardsScreen(
     historyCount: Int = 0,
     onNavigateToHistory: () -> Unit = {}
 ) {
-    val dueCards by viewModel.dueCards.collectAsState()
-    val stats by viewModel.stats.collectAsState()
+    val activeMode by viewModel.activeMode.collectAsState()
+    val dueCards   by viewModel.dueCards.collectAsState()
+    val stats      by viewModel.stats.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
@@ -55,9 +58,11 @@ fun FlashcardsScreen(
                     modifier = Modifier.size(28.dp)
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Word History", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                    Text(ModeStrings.historyTitle(activeMode), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        if (historyCount > 0) "$historyCount words — all offline" else "All words you've ever looked up",
+                        if (historyCount > 0) ModeStrings.historySubtitle(activeMode, historyCount)
+                        else if (activeMode == AppMode.BIOLOGY) "All biology terms you've ever looked up"
+                        else "All words you've ever looked up",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

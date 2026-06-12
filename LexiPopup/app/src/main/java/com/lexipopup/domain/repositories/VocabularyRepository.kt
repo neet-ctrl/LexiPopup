@@ -24,9 +24,14 @@ interface VocabularyRepository {
     fun getNotesForWord(word: String): Flow<List<com.lexipopup.domain.models.UserNote>>
 
     // Flashcards
-    fun getDueFlashcards(): Flow<List<Flashcard>>
-    fun getAllFlashcards(): Flow<List<Flashcard>>
+    fun getDueFlashcards(mode: String = "english"): Flow<List<Flashcard>>
+    fun getAllFlashcards(mode: String = "english"): Flow<List<Flashcard>>
+    /** Returns every flashcard across ALL modes — used by backup. */
+    fun getAllFlashcardsAllModes(): Flow<List<Flashcard>>
     suspend fun reviewFlashcard(id: Long, quality: Int)
-    suspend fun createFlashcard(word: String, front: String, back: String)
+    suspend fun createFlashcard(word: String, front: String, back: String, mode: String = "english")
     suspend fun deleteFlashcard(id: Long)
+
+    // Notes (mode-aware)
+    fun getNotesForWordByMode(word: String, mode: AppMode = AppMode.ENGLISH): Flow<List<com.lexipopup.domain.models.UserNote>>
 }

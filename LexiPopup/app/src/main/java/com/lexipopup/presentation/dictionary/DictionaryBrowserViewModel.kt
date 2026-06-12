@@ -2,24 +2,26 @@ package com.lexipopup.presentation.dictionary
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
+import com.lexipopup.utils.ModeManager
 import com.lexipopup.utils.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class DictionaryBrowserViewModel @Inject constructor(
     private val repo: DictionaryRepository,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val modeManager: ModeManager
 ) : ViewModel() {
+
+    val activeMode: StateFlow<AppMode> = modeManager.currentMode
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -54,11 +56,15 @@ class DictionaryBrowserViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
+        // Reload everything whenever mode changes (collect skips first emission to avoid
+        // double-load, but we want the initial load too, so we just collect all).
         viewModelScope.launch {
-            val s = settingsDataStore.settings.first()
-            _wordOfDay.value = repo.getWordOfDay(s.wotdMode, s.wotdUserLevel)
+            modeManager.currentMode.collect {
+                clearSearch()
+                refreshWordOfDay()
+                loadLetter(_selectedLetter.value)
+            }
         }
-        loadLetter("A")
     }
 
     fun onSearchQuery(query: String) {
@@ -70,10 +76,11 @@ class DictionaryBrowserViewModel @Inject constructor(
             return
         }
         searchJob = viewModelScope.launch {
+            val mode = modeManager.currentMode.value
             delay(280)
             _isLoading.value = true
-            _suggestions.value = repo.searchSuggestions(query, 6)
-            _searchResults.value = repo.searchWords(query, 60)
+            _suggestions.value = repo.searchSuggestions(query, 6, mode)
+            _searchResults.value = repo.searchWords(query, 60, mode)
             _isLoading.value = false
         }
     }
@@ -91,10 +98,11 @@ class DictionaryBrowserViewModel @Inject constructor(
 
     private fun loadLetter(letter: String) {
         viewModelScope.launch {
+            val mode = modeManager.currentMode.value
             _isLoading.value = true
-            _letterCount.value = repo.countByLetter(letter)
+            _letterCount.value = repo.countByLetter(letter, mode)
             _browseWords.value = repo.getWordsByLetter(
-                letter, 60, 0, _sortBy.value, _filterPos.value
+                letter, 60, 0, _sortBy.value, _filterPos.value, mode
             )
             _isLoading.value = false
         }
@@ -113,8 +121,12 @@ class DictionaryBrowserViewModel @Inject constructor(
 
     fun refreshWordOfDay() {
         viewModelScope.launch {
-            val s = settingsDataStore.settings.first()
-            _wordOfDay.value = repo.getWordOfDay(s.wotdMode, s.wotdUserLevel)
+            _wordOfDay.value = if (modeManager.currentMode.value == AppMode.BIOLOGY) {
+                repo.getBiologyTermOfDay()
+            } else {
+                val s = settingsDataStore.settings.first()
+                repo.getWordOfDay(s.wotdMode, s.wotdUserLevel)
+            }
         }
     }
 }

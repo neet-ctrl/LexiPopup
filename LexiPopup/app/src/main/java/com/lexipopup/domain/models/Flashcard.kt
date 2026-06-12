@@ -5,6 +5,7 @@ import java.time.LocalDateTime
 data class Flashcard(
     val id: Long = 0,
     val word: String,
+    val mode: String = "english",
     val frontText: String,
     val backText: String,
     val reviewLevel: Int = 0,

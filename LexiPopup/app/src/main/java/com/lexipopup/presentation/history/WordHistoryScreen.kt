@@ -17,19 +17,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.WordEntry
+import com.lexipopup.utils.ModeStrings
 
-private val SOURCE_LABELS = mapOf(
-    "online"    to ("🌐" to "Online API"),
-    "groq"      to ("🤖" to "Groq AI"),
-    "openai"    to ("🤖" to "OpenAI"),
-    "on_device" to ("📱" to "On-Device AI"),
-    "seed"      to ("🌱" to "Built-in"),
-    "minimal"   to ("📦" to "Minimal Pack"),
-    "standard"  to ("📦" to "Standard Pack"),
-    "full"      to ("📦" to "Full Pack"),
-    "local"     to ("✏️" to "Manual"),
-)
+// Source label lookup now delegates to ModeStrings which covers biology variants too.
+private fun sourceInfo(source: String) = ModeStrings.sourceLabel(source)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,13 +31,21 @@ fun WordHistoryScreen(
     onWordSelected: (String) -> Unit,
     viewModel: WordHistoryViewModel = hiltViewModel()
 ) {
-    val allWords by viewModel.historyWords.collectAsState()
+    val activeMode by viewModel.activeMode.collectAsState()
+    val allWords   by viewModel.historyWords.collectAsState()
     val totalCount by viewModel.historyCount.collectAsState()
 
     var query by remember { mutableStateOf("") }
     var filterSource by remember { mutableStateOf("all") }
 
-    val sourceFilters = listOf("all", "online", "groq", "openai", "on_device", "seed")
+    // Reset the source filter chip whenever the user switches modes — the old mode's
+    // source keys are invalid in the new mode's sourceFilters list.
+    LaunchedEffect(activeMode) { filterSource = "all" }
+
+    val sourceFilters = if (activeMode == AppMode.BIOLOGY)
+        listOf("all", "groq_bio", "openai_bio", "on_device_bio")
+    else
+        listOf("all", "online", "groq", "openai", "on_device", "seed")
 
     val filtered = remember(allWords, query, filterSource) {
         allWords.filter { w ->
@@ -62,9 +63,9 @@ fun WordHistoryScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text("Word History", fontWeight = FontWeight.ExtraBold)
+                            Text(ModeStrings.historyTitle(activeMode), fontWeight = FontWeight.ExtraBold)
                             Text(
-                                "$totalCount words saved offline",
+                                ModeStrings.historySubtitle(activeMode, totalCount),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -84,7 +85,7 @@ fun WordHistoryScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 4.dp),
-                    placeholder = { Text("Search history…") },
+                    placeholder = { Text(ModeStrings.historySearchHint(activeMode)) },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
@@ -101,15 +102,8 @@ fun WordHistoryScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(sourceFilters) { src ->
-                        val label = when (src) {
-                            "all"       -> "All  (${totalCount})"
-                            "online"    -> "🌐 Online"
-                            "groq"      -> "🤖 Groq"
-                            "openai"    -> "🤖 OpenAI"
-                            "on_device" -> "📱 On-Device"
-                            "seed"      -> "🌱 Built-in"
-                            else        -> src
-                        }
+                        val label = if (src == "all") "All  (${totalCount})"
+                        else { val (e, l) = sourceInfo(src); "$e $l" }
                         FilterChip(
                             selected = filterSource == src,
                             onClick = { filterSource = src },
@@ -129,7 +123,7 @@ fun WordHistoryScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.SearchOff, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.3f))
                     Text(
-                        if (query.isBlank() && filterSource == "all") "No history yet.\nLook up a word to start building your vocabulary log."
+                        if (query.isBlank() && filterSource == "all") ModeStrings.historyEmpty(activeMode)
                         else "No matches for \"$query\"",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -161,7 +155,7 @@ fun WordHistoryScreen(
 
 @Composable
 private fun HistoryWordCard(entry: WordEntry, onClick: () -> Unit) {
-    val (emoji, label) = SOURCE_LABELS[entry.source] ?: ("📖" to entry.source)
+    val (emoji, label) = sourceInfo(entry.source)
     val sourceColor = when (entry.source) {
         "online"    -> Color(0xFF1565C0)
         "groq", "openai", "on_device" -> Color(0xFF6A1B9A)

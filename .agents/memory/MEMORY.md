@@ -4,3 +4,4 @@
 - [Glance widget color API](glance-widget-colors.md) — stable Glance has no DayNightColorProvider; use @Composable helper reading LocalContext uiMode instead.
 - [Room dynamic-default INSERT trap](room-dynamic-default-insert.md) — columns with System.currentTimeMillis() defaults have NO SQLite DEFAULT; raw execSQL omitting them → INSERT OR IGNORE silently drops the row.
 - [Glance widget PendingIntent MIME strip](glance-pendingintent-mime.md) — Glance PendingIntents can strip the MIME type from ACTION_SEND intents; use a custom String extra ("lookup_word") instead of relying on intent.type.
+- [LexiPopup Biology mode completion](lexipopup-biology-mode.md) — DB is v6; ModeStrings.kt is the single source of truth for all mode-aware UI labels; flashcards unique index is now (word, mode); use getAllFlashcardsAllModes() for backup.

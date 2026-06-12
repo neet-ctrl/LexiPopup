@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lexipopup.domain.models.AppMode
+import com.lexipopup.utils.ModeStrings
 
 private val ALPHABET = ('A'..'Z').map { it.toString() } + listOf("#")
 private val POS_FILTERS = listOf("" to "All", "noun" to "Noun", "verb" to "Verb", "adjective" to "Adj", "adverb" to "Adv")
@@ -46,16 +48,18 @@ fun DictionaryBrowserScreen(
     onWordSelected: (String) -> Unit,
     onOpenSeedList: () -> Unit = {}
 ) {
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val suggestions by viewModel.suggestions.collectAsState()
+    val activeMode   by viewModel.activeMode.collectAsState()
+    val searchQuery  by viewModel.searchQuery.collectAsState()
+    val suggestions  by viewModel.suggestions.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val selectedLetter by viewModel.selectedLetter.collectAsState()
-    val browseWords by viewModel.browseWords.collectAsState()
-    val letterCount by viewModel.letterCount.collectAsState()
-    val wordOfDay by viewModel.wordOfDay.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val sortBy by viewModel.sortBy.collectAsState()
-    val filterPos by viewModel.filterPos.collectAsState()
+    val browseWords  by viewModel.browseWords.collectAsState()
+    val letterCount  by viewModel.letterCount.collectAsState()
+    val wordOfDay    by viewModel.wordOfDay.collectAsState()
+    val isLoading    by viewModel.isLoading.collectAsState()
+    val sortBy       by viewModel.sortBy.collectAsState()
+    val filterPos    by viewModel.filterPos.collectAsState()
+    val isBiology    = activeMode == AppMode.BIOLOGY
 
     val isSearching = searchQuery.isNotBlank()
     val focusRequester = remember { FocusRequester() }
@@ -79,7 +83,7 @@ fun DictionaryBrowserScreen(
                     value = searchQuery,
                     onValueChange = viewModel::onSearchQuery,
                     modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                    placeholder = { Text("Search any word or phrase…", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)) },
+                    placeholder = { Text(ModeStrings.browserSearchPlaceholder(activeMode), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)) },
                     leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary) },
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -91,7 +95,7 @@ fun DictionaryBrowserScreen(
                             IconButton(onClick = {
                                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a word…")
+                                    putExtra(RecognizerIntent.EXTRA_PROMPT, ModeStrings.browserSayWord(activeMode))
                                 }
                                 speechLauncher.launch(intent)
                             }) {
@@ -132,9 +136,13 @@ fun DictionaryBrowserScreen(
             // ── BROWSE MODE ──────────────────────────────────────────────────
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
 
-                // Word of the Day
+                // Word / Term of the Day
                 item {
-                    WordOfDayCard(wordOfDay = wordOfDay, onClick = { wordOfDay?.let { onWordSelected(it.word) } })
+                    WordOfDayCard(
+                        wordOfDay = wordOfDay,
+                        isBiology = isBiology,
+                        onClick = { wordOfDay?.let { onWordSelected(it.word) } }
+                    )
                 }
 
                 // Built-in seed word list button
@@ -146,7 +154,7 @@ fun DictionaryBrowserScreen(
                 item {
                     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Text(
-                            "🔤  ALPHABETICAL BROWSE",
+                            ModeStrings.alphabetLabel(activeMode),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -182,14 +190,14 @@ fun DictionaryBrowserScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "📋  WORDS STARTING WITH '$selectedLetter'",
+                            ModeStrings.startingWithLabel(activeMode, selectedLetter),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         if (letterCount > 0) {
                             Text(
-                                "$letterCount words",
+                                ModeStrings.letterCountLabel(activeMode, letterCount),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -207,7 +215,7 @@ fun DictionaryBrowserScreen(
                 } else if (browseWords.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                            Text("No words for '$selectedLetter' yet\nLook up words with Moon+ Reader to populate", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Text(ModeStrings.noEntriesForLetter(activeMode, selectedLetter), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
                     }
                 } else {
@@ -229,7 +237,11 @@ fun DictionaryBrowserScreen(
 }
 
 @Composable
-private fun WordOfDayCard(wordOfDay: com.lexipopup.domain.models.WordEntry?, onClick: () -> Unit) {
+private fun WordOfDayCard(
+    wordOfDay: com.lexipopup.domain.models.WordEntry?,
+    isBiology: Boolean = false,
+    onClick: () -> Unit
+) {
     val primary = MaterialTheme.colorScheme.primary
     Card(
         modifier = Modifier.fillMaxWidth().padding(12.dp).clickable(onClick = onClick),
@@ -239,7 +251,7 @@ private fun WordOfDayCard(wordOfDay: com.lexipopup.domain.models.WordEntry?, onC
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
-                Text("WORD OF THE DAY", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.ExtraBold, color = primary)
+                Text(if (isBiology) "TERM OF THE DAY" else "WORD OF THE DAY", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.ExtraBold, color = primary)
             }
             if (wordOfDay != null) {
                 Text(wordOfDay.word.uppercase(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)

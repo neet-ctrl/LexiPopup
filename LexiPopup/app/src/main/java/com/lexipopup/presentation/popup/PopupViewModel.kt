@@ -264,9 +264,15 @@ class PopupViewModel @Inject constructor(
 
     fun addFlashcard() {
         val state = _uiState.value
-        if (state is PopupUiState.Success && !state.entry.isBiology()) {
+        if (state is PopupUiState.Success) {
             viewModelScope.launch {
-                vocabularyRepository.createFlashcard(state.entry.word, state.entry.word, state.entry.shortMeaning.take(100))
+                val mode = if (state.entry.isBiology()) AppMode.BIOLOGY.id else AppMode.ENGLISH.id
+                vocabularyRepository.createFlashcard(
+                    state.entry.word,
+                    state.entry.word,
+                    state.entry.shortMeaning.take(100),
+                    mode
+                )
             }
         }
     }

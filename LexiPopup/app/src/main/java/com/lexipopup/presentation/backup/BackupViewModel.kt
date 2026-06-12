@@ -61,7 +61,7 @@ class BackupViewModel @Inject constructor(
                 val extraFavoriteEntries = favoritesFromRepo.filter { it.word !in historyWords }
                 val allEntries = historyEntries + extraFavoriteEntries
 
-                val flashcards = vocabularyRepository.getAllFlashcards().first().map { it.word }
+                val flashcards = vocabularyRepository.getAllFlashcardsAllModes().first().map { it.word }
 
                 val backup = BackupData(
                     version = 2,

@@ -73,6 +73,13 @@ fun AiChatScreen(
     val rateLimitInfo    by viewModel.rateLimitInfo.collectAsState()
     val extractionResult by viewModel.extractionResult.collectAsState()
     val wordLookup       by viewModel.wordLookup.collectAsState()
+    // TTS state
+    val isSpeaking       by viewModel.isSpeaking.collectAsState()
+    val ttsActive        by viewModel.ttsActive.collectAsState()
+    val speakingMsgId    by viewModel.speakingMessageId.collectAsState()
+    val speakingIndex    by viewModel.speakingIndex.collectAsState()
+    val speakTotal       by viewModel.speakTotal.collectAsState()
+    val speakSpeed       by viewModel.speakSpeed.collectAsState()
 
     val listState  = rememberLazyListState()
     val scope      = rememberCoroutineScope()
@@ -167,6 +174,22 @@ fun AiChatScreen(
                                 tint = Color(0xFFFF6F00)
                             )
                         }
+                        // ── Global read-aloud button ──────────────────────────
+                        IconButton(
+                            onClick = {
+                                if (ttsActive) viewModel.stopSpeaking()
+                                else viewModel.speakAllMessages(messages)
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                if (ttsActive) Icons.Default.StopCircle else Icons.Default.RecordVoiceOver,
+                                if (ttsActive) "Stop reading" else "Read all aloud",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (ttsActive) MaterialTheme.colorScheme.error
+                                       else MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                     IconButton(
                         onClick = if (isFullscreenMode) onExitFullscreen else ({ isFullscreen = true }),
@@ -200,8 +223,10 @@ fun AiChatScreen(
                 ) {
                     items(messages, key = { it.id }) { msg ->
                         ChatBubble(
-                            message = msg,
-                            onWordLongPress = { word ->
+                            message           = msg,
+                            isCurrentlySpeaking = msg.id == speakingMsgId,
+                            onSpeak           = { viewModel.speakMessage(msg) },
+                            onWordLongPress   = { word ->
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 longPressedWord = word to msg.id
                             },
@@ -241,6 +266,31 @@ fun AiChatScreen(
                     Icon(Icons.Default.AutoAwesome, "Extract vocab", modifier = Modifier.size(18.dp))
                 }
             }
+        }
+
+        // ── TTS playback controller ──────────────────────────────────────────
+        AnimatedVisibility(
+            visible = ttsActive,
+            enter = slideInVertically { it } + fadeIn(),
+            exit  = slideOutVertically { it } + fadeOut()
+        ) {
+            val aiMessages = remember(messages) {
+                messages.filter { it.role == "assistant" && !it.isError }
+            }
+            TtsController(
+                currentIndex   = speakingIndex,
+                total          = speakTotal,
+                isSpeaking     = isSpeaking,
+                speed          = speakSpeed,
+                currentText    = aiMessages.getOrNull(speakingIndex)?.content ?: "",
+                onSeek         = { viewModel.seekToIndex(it) },
+                onPlayPause    = {
+                    if (isSpeaking) viewModel.pauseSpeaking()
+                    else viewModel.resumeSpeaking()
+                },
+                onStop         = { viewModel.stopSpeaking() },
+                onSpeedChange  = { viewModel.setSpeakSpeed(it) }
+            )
         }
 
         // ── Input bar ────────────────────────────────────────────────────────
@@ -410,6 +460,8 @@ private fun ProviderChip(
 @Composable
 private fun ChatBubble(
     message: ChatMessageEntity,
+    isCurrentlySpeaking: Boolean = false,
+    onSpeak: () -> Unit = {},
     onWordLongPress: (String) -> Unit,
     onWordTap: (String) -> Unit
 ) {
@@ -425,6 +477,15 @@ private fun ChatBubble(
         SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(message.timestamp))
     }
 
+    // Pulsing glow animation when currently speaking
+    val inf = rememberInfiniteTransition(label = "tts_glow_${message.id}")
+    val glowAlpha by inf.animateFloat(
+        initialValue = 0.25f, targetValue = 0.70f,
+        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+        label = "tts_glow_alpha"
+    )
+    val speakBorderColor = MaterialTheme.colorScheme.primary
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
@@ -434,14 +495,21 @@ private fun ChatBubble(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(Brush.verticalGradient(listOf(GradientStart, GradientEnd))),
+                    .background(
+                        if (isCurrentlySpeaking)
+                            Brush.verticalGradient(listOf(GradientStart, GradientEnd))
+                        else
+                            Brush.verticalGradient(listOf(GradientStart, GradientEnd))
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.AutoAwesome, null,
-                    modifier = Modifier.size(16.dp),
-                    tint = Color.White
-                )
+                if (isCurrentlySpeaking) {
+                    Icon(Icons.Default.VolumeUp, null,
+                        modifier = Modifier.size(16.dp), tint = Color.White)
+                } else {
+                    Icon(Icons.Default.AutoAwesome, null,
+                        modifier = Modifier.size(16.dp), tint = Color.White)
+                }
             }
             Spacer(Modifier.width(8.dp))
         }
@@ -464,13 +532,19 @@ private fun ChatBubble(
                     )
                 }
             } else {
+                val cardBorder = if (isCurrentlySpeaking)
+                    androidx.compose.foundation.BorderStroke(1.5.dp, speakBorderColor.copy(alpha = glowAlpha))
+                else null
+
                 Card(
                     shape = RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (message.isError) ErrorBubble
-                                         else MaterialTheme.colorScheme.surface
+                        else if (isCurrentlySpeaking) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)
+                        else MaterialTheme.colorScheme.surface
                     ),
-                    elevation = CardDefaults.cardElevation(2.dp)
+                    border = cardBorder,
+                    elevation = CardDefaults.cardElevation(if (isCurrentlySpeaking) 4.dp else 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         LongPressableText(
@@ -492,13 +566,49 @@ private fun ChatBubble(
                     }
                 }
             }
-            Text(
-                time,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f),
-                fontSize = 10.sp,
-                modifier = Modifier.padding(top = 3.dp, start = if (isUser) 0.dp else 4.dp, end = if (isUser) 4.dp else 0.dp)
-            )
+            // Bottom row: timestamp + speak icon (AI only)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+            ) {
+                Text(
+                    time,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f),
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(
+                        top = 2.dp,
+                        start = if (isUser) 0.dp else 4.dp,
+                        end = if (isUser) 4.dp else 0.dp
+                    )
+                )
+                if (!isUser) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isCurrentlySpeaking)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else Color.Transparent
+                            )
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            ) { onSpeak() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (isCurrentlySpeaking) Icons.Default.VolumeUp else Icons.Default.VolumeUp,
+                            contentDescription = "Speak message",
+                            tint = if (isCurrentlySpeaking) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.45f),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1003,5 +1113,221 @@ private fun StatPill(value: String, label: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// ── TTS playback controller bar ───────────────────────────────────────────────
+
+@Composable
+private fun TtsController(
+    currentIndex: Int,
+    total: Int,
+    isSpeaking: Boolean,
+    speed: Float,
+    currentText: String,
+    onSeek: (Int) -> Unit,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit,
+    onSpeedChange: (Float) -> Unit
+) {
+    var showMore by remember { mutableStateOf(false) }
+    val primary   = MaterialTheme.colorScheme.primary
+    val surface   = MaterialTheme.colorScheme.surfaceVariant
+    val onSurf    = MaterialTheme.colorScheme.onSurfaceVariant
+
+    // Pulsing dot when speaking
+    val inf = rememberInfiniteTransition(label = "tts_dot")
+    val dotAlpha by inf.animateFloat(
+        initialValue = 0.4f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+        label = "tts_dot_alpha"
+    )
+
+    Surface(
+        color = surface,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // ── Current message preview ────────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (isSpeaking) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(primary.copy(alpha = dotAlpha))
+                    )
+                }
+                Text(
+                    text = currentText.take(72).let { if (currentText.length > 72) "$it…" else it },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onSurf,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "${currentIndex + 1} / $total",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // ── Progress slider ────────────────────────────────────────────────
+            val sliderVal = if (total > 0) currentIndex.toFloat() / total.toFloat() else 0f
+            Slider(
+                value = sliderVal,
+                onValueChange = { v ->
+                    val target = (v * total).toInt().coerceIn(0, (total - 1).coerceAtLeast(0))
+                    onSeek(target)
+                },
+                colors = SliderDefaults.colors(
+                    thumbColor = primary,
+                    activeTrackColor = primary,
+                    inactiveTrackColor = primary.copy(alpha = 0.25f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+            )
+
+            // ── Controls row ───────────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Prev
+                IconButton(
+                    onClick = { onSeek((currentIndex - 1).coerceAtLeast(0)) },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.SkipPrevious, "Previous message",
+                        modifier = Modifier.size(20.dp), tint = onSurf)
+                }
+
+                // Play / Pause
+                FilledIconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier.size(40.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = primary)
+                ) {
+                    Icon(
+                        if (isSpeaking) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (isSpeaking) "Pause" else "Resume",
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.White
+                    )
+                }
+
+                // Stop
+                IconButton(
+                    onClick = onStop,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.StopCircle, "Stop",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.80f))
+                }
+
+                // Next
+                IconButton(
+                    onClick = { onSeek((currentIndex + 1).coerceAtMost((total - 1).coerceAtLeast(0))) },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.SkipNext, "Next message",
+                        modifier = Modifier.size(20.dp), tint = onSurf)
+                }
+
+                // More
+                IconButton(
+                    onClick = { showMore = !showMore },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.MoreVert, "More options",
+                        modifier = Modifier.size(20.dp),
+                        tint = if (showMore) primary else onSurf)
+                }
+            }
+
+            // ── More options: speed control ────────────────────────────────────
+            AnimatedVisibility(visible = showMore) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Speed",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = onSurf
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = primary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                "${String.format("%.1f", speed)}×",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Slider(
+                        value = speed,
+                        onValueChange = onSpeedChange,
+                        valueRange = 0.5f..2.0f,
+                        steps = 5,
+                        colors = SliderDefaults.colors(
+                            thumbColor = primary,
+                            activeTrackColor = primary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { sp ->
+                            val isSelected = kotlin.math.abs(speed - sp) < 0.05f
+                            Surface(
+                                onClick = { onSpeedChange(sp) },
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) primary else primary.copy(alpha = 0.08f)
+                            ) {
+                                Text(
+                                    "${sp}×",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSelected) Color.White else primary,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

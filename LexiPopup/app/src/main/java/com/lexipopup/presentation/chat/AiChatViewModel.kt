@@ -1,5 +1,8 @@
 package com.lexipopup.presentation.chat
 
+import android.content.Context
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
@@ -17,6 +20,7 @@ import com.lexipopup.utils.ai.AiProviderManager
 import com.lexipopup.utils.ai.AiProviderType
 import com.lexipopup.utils.ai.ChatApiResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -28,6 +32,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 // ── Supporting types ─────────────────────────────────────────────────────────
@@ -53,6 +58,7 @@ sealed class WordLookupState {
 
 @HiltViewModel
 class AiChatViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val chatDao: ChatDao,
     private val wordDao: WordDao,
     private val aiChatClient: AiChatClient,
@@ -365,4 +371,147 @@ Be conversational, educational, accurate, and concise. When you mention an inter
     fun clearRateLimitInfo() { _rateLimitInfo.value = null }
     fun clearExtractionResult() { _extractionResult.value = null }
     fun clearWordLookup() { _wordLookup.value = null }
+
+    // ── Text-to-Speech ────────────────────────────────────────────────────────
+
+    private val _isSpeaking       = MutableStateFlow(false)
+    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    private val _ttsActive        = MutableStateFlow(false)
+    val ttsActive: StateFlow<Boolean> = _ttsActive.asStateFlow()
+
+    private val _speakingMessageId = MutableStateFlow<Long?>(-1L)
+    val speakingMessageId: StateFlow<Long?> = _speakingMessageId.asStateFlow()
+
+    private val _speakingIndex    = MutableStateFlow(0)
+    val speakingIndex: StateFlow<Int> = _speakingIndex.asStateFlow()
+
+    private val _speakTotal       = MutableStateFlow(0)
+    val speakTotal: StateFlow<Int> = _speakTotal.asStateFlow()
+
+    private val _speakSpeed       = MutableStateFlow(1.0f)
+    val speakSpeed: StateFlow<Float> = _speakSpeed.asStateFlow()
+
+    private var tts: TextToSpeech? = null
+    private var ttsReady           = false
+    private var speakQueue         = emptyList<ChatMessageEntity>()
+    private var pausedAtIndex      = 0
+
+    private fun initTts() {
+        if (tts != null) return
+        tts = TextToSpeech(context) { status ->
+            ttsReady = (status == TextToSpeech.SUCCESS)
+            if (ttsReady) {
+                tts?.setSpeechRate(_speakSpeed.value)
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        val idx = utteranceId?.toIntOrNull() ?: return
+                        _speakingIndex.value    = idx
+                        _speakingMessageId.value = speakQueue.getOrNull(idx)?.id
+                        _isSpeaking.value       = true
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        val idx = (utteranceId?.toIntOrNull() ?: return)
+                        if (idx >= speakQueue.size - 1) {
+                            _isSpeaking.value        = false
+                            _ttsActive.value         = false
+                            _speakingMessageId.value = null
+                        }
+                    }
+                    @Suppress("DEPRECATION")
+                    override fun onError(utteranceId: String?) {
+                        _isSpeaking.value        = false
+                        _speakingMessageId.value = null
+                    }
+                    override fun onError(utteranceId: String, errorCode: Int) {
+                        _isSpeaking.value        = false
+                        _speakingMessageId.value = null
+                    }
+                })
+            }
+        }
+    }
+
+    fun speakMessage(message: ChatMessageEntity) {
+        initTts()
+        rawStop()
+        speakQueue    = listOf(message)
+        pausedAtIndex = 0
+        _speakTotal.value = 1
+        _ttsActive.value  = true
+        enqueueFrom(0)
+    }
+
+    fun speakAllMessages(messages: List<ChatMessageEntity>) {
+        val aiMsgs = messages.filter { it.role == "assistant" && !it.isError }
+        if (aiMsgs.isEmpty()) return
+        initTts()
+        rawStop()
+        speakQueue    = aiMsgs
+        pausedAtIndex = 0
+        _speakTotal.value = aiMsgs.size
+        _ttsActive.value  = true
+        enqueueFrom(0)
+    }
+
+    fun pauseSpeaking() {
+        pausedAtIndex = _speakingIndex.value
+        rawStop()
+        _isSpeaking.value = false
+        // keep _ttsActive = true so controller stays visible
+    }
+
+    fun resumeSpeaking() {
+        if (speakQueue.isEmpty()) return
+        enqueueFrom(pausedAtIndex)
+        _isSpeaking.value = true
+    }
+
+    fun stopSpeaking() {
+        rawStop()
+        speakQueue               = emptyList()
+        _isSpeaking.value        = false
+        _ttsActive.value         = false
+        _speakingMessageId.value = null
+        _speakingIndex.value     = 0
+        _speakTotal.value        = 0
+    }
+
+    fun seekToIndex(index: Int) {
+        if (speakQueue.isEmpty()) return
+        val clamped = index.coerceIn(0, speakQueue.size - 1)
+        rawStop()
+        pausedAtIndex = clamped
+        _speakingIndex.value = clamped
+        enqueueFrom(clamped)
+        _isSpeaking.value = true
+    }
+
+    fun setSpeakSpeed(speed: Float) {
+        _speakSpeed.value = speed
+        tts?.setSpeechRate(speed)
+    }
+
+    private fun enqueueFrom(startIndex: Int) {
+        speakQueue.drop(startIndex).forEachIndexed { i, msg ->
+            val globalIdx = startIndex + i
+            val locale = if (containsHindi(msg.content)) Locale("hi", "IN") else Locale.ENGLISH
+            val result = tts?.setLanguage(locale)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts?.language = Locale.ENGLISH
+            }
+            val mode = if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            tts?.speak(msg.content, mode, null, globalIdx.toString())
+        }
+    }
+
+    private fun rawStop() { tts?.stop() }
+
+    private fun containsHindi(text: String) = text.any { it.code in 0x0900..0x097F }
+
+    override fun onCleared() {
+        super.onCleared()
+        tts?.shutdown()
+        tts = null
+    }
 }

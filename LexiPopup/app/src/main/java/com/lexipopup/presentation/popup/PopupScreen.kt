@@ -225,6 +225,11 @@ fun PopupScreen(
     var noteText       by remember { mutableStateOf("") }
     var showParticles  by remember { mutableStateOf(false) }
 
+    // ── Layer picker state ────────────────────────────────────────────────────
+    val showLayerPicker by viewModel.showLayerPicker.collectAsState()
+    val forcingLayerId  by viewModel.forcingLayerId.collectAsState()
+    val activeLayers    by viewModel.activeLayers.collectAsState()
+
     // ── Voice search ──────────────────────────────────────────────────────────
     val voiceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -610,9 +615,10 @@ fun PopupScreen(
                                             when (st) {
                                                 is PopupUiState.Loading -> PopupSkeleton()
                                                 is PopupUiState.Success -> PopupContent(
-                                                    entry           = st.entry,
-                                                    settings        = settings,
-                                                    onWordChipClick = { w -> viewModel.lookupWord(w) }
+                                                    entry              = st.entry,
+                                                    settings           = settings,
+                                                    onWordChipClick    = { w -> viewModel.lookupWord(w) },
+                                                    onSourceBadgeClick = { viewModel.showLayerPicker() }
                                                 )
                                                 is PopupUiState.Error -> PopupError(st.message)
                                                 is PopupUiState.ManualSearch,
@@ -634,6 +640,20 @@ fun PopupScreen(
                                                 )
                                             }
                                         }
+                                    }
+
+                                    // ── Layer picker panel ────────────────────
+                                    AnimatedVisibility(
+                                        visible = showLayerPicker && uiState is PopupUiState.Success,
+                                        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                                        exit  = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                                    ) {
+                                        LayerPickerPanel(
+                                            activeLayers   = activeLayers,
+                                            forcingLayerId = forcingLayerId,
+                                            onLayerClick   = { viewModel.lookupWithLayer(it) },
+                                            onDismiss      = { viewModel.hideLayerPicker() }
+                                        )
                                     }
 
                                     // ── Hybrid AI comparison ──────────────────
@@ -960,7 +980,8 @@ fun WordInfoRow(entry: WordEntry, settings: AppSettings) {
 fun PopupContent(
     entry: WordEntry,
     settings: AppSettings,
-    onWordChipClick: (String) -> Unit
+    onWordChipClick: (String) -> Unit,
+    onSourceBadgeClick: () -> Unit = {}
 ) {
     val scroll    = rememberScrollState()
     val context   = LocalContext.current
@@ -1178,8 +1199,8 @@ fun PopupContent(
             }
         }
 
-        // ── Source badge ──────────────────────────────────────────────────────
-        SourceLayerBadge(source = entry.source)
+        // ── Source badge (tap to open layer picker) ───────────────────────────
+        SourceLayerBadge(source = entry.source, onClick = onSourceBadgeClick)
         Spacer(Modifier.height(4.dp))
     }
 }
@@ -1311,7 +1332,7 @@ private fun TwoColCard(
 // ── Source layer badge ────────────────────────────────────────────────────────
 
 @Composable
-private fun SourceLayerBadge(source: String) {
+private fun SourceLayerBadge(source: String, onClick: () -> Unit = {}) {
     if (source.isBlank()) return
     data class LI(val emoji: String, val label: String, val color: Color)
     val info = when (source.lowercase()) {
@@ -1328,17 +1349,113 @@ private fun SourceLayerBadge(source: String) {
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
+            onClick = onClick,
             shape = RoundedCornerShape(50),
             color = info.color.copy(alpha = 0.12f),
             border = BorderStroke(0.5.dp, info.color.copy(alpha = 0.4f))
         ) {
-            Text(
-                "${info.emoji} ${info.label}",
+            Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = info.color,
-                fontWeight = FontWeight.Medium
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    "${info.emoji} ${info.label}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = info.color,
+                    fontWeight = FontWeight.Medium
+                )
+                Icon(
+                    Icons.Default.SwapHoriz,
+                    contentDescription = "Change source",
+                    tint = info.color.copy(alpha = 0.7f),
+                    modifier = Modifier.size(11.dp)
+                )
+            }
+        }
+    }
+}
+
+// ── Layer picker panel (slides in between body and action grid) ───────────────
+
+private val LAYER_PICKER_META: Map<String, Pair<String, String>> = mapOf(
+    "word_history" to ("🕘" to "Word History"),
+    "offline_db"   to ("📚" to "Offline DB"),
+    "online_api"   to ("🌐" to "Online API"),
+    "groq_ai"      to ("🤖" to "Groq AI"),
+    "openai"       to ("💼" to "OpenAI"),
+    "on_device_ai" to ("📱" to "On-Device AI"),
+    "rule_based"   to ("🔧" to "Rule-Based")
+)
+
+@Composable
+private fun LayerPickerPanel(
+    activeLayers: List<String>,
+    forcingLayerId: String?,
+    onLayerClick: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.97f),
+        tonalElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Re-fetch with a different source:",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close",
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(bottom = 4.dp)
+            ) {
+                androidx.compose.foundation.lazy.items(activeLayers) { layerId ->
+                    val (emoji, name) = LAYER_PICKER_META[layerId] ?: ("⚙️" to layerId)
+                    val isLoading = layerId == forcingLayerId
+                    FilterChip(
+                        selected = isLoading,
+                        onClick = { if (forcingLayerId == null) onLayerClick(layerId) },
+                        label = {
+                            if (isLoading) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(10.dp),
+                                        strokeWidth = 1.5.dp
+                                    )
+                                    Text("$emoji $name", style = MaterialTheme.typography.labelSmall)
+                                }
+                            } else {
+                                Text("$emoji $name", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }

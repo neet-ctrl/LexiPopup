@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lexipopup.domain.models.AppSettings
+import com.lexipopup.domain.models.LAYER_CACHE
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.domain.usecases.LookupWordUseCase
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -50,6 +52,18 @@ class PopupViewModel @Inject constructor(
 
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions.asStateFlow()
+
+    // ── Layer picker ──────────────────────────────────────────────────────────
+    private val _showLayerPicker = MutableStateFlow(false)
+    val showLayerPicker: StateFlow<Boolean> = _showLayerPicker.asStateFlow()
+
+    private val _forcingLayerId = MutableStateFlow<String?>(null)
+    val forcingLayerId: StateFlow<String?> = _forcingLayerId.asStateFlow()
+
+    /** Active layers excluding the in-process LRU cache (can't force-select it meaningfully). */
+    val activeLayers: StateFlow<List<String>> = settingsDataStore.layerSystemConfig
+        .map { cfg -> cfg.activeLayers().filter { it != LAYER_CACHE } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Non-null only when provider is Hybrid and both AI calls returned results. */
     val hybridAiResult: StateFlow<HybridAiResult?> = aiProviderManager.lastHybridResult
@@ -241,6 +255,29 @@ class PopupViewModel @Inject constructor(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(Intent.createChooser(intent, "Share via").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+        }
+    }
+
+    fun showLayerPicker() { _showLayerPicker.value = true }
+    fun hideLayerPicker() { _showLayerPicker.value = false }
+
+    fun lookupWithLayer(layerId: String) {
+        val word = (_uiState.value as? PopupUiState.Success)?.entry?.word ?: return
+        viewModelScope.launch {
+            _forcingLayerId.value = layerId
+            val result = lookupWordUseCase.invokeWithLayer(word, layerId)
+            result.fold(
+                onSuccess = { entry ->
+                    _uiState.value = PopupUiState.Success(entry)
+                    _showLayerPicker.value = false
+                    scheduleAutoClose()
+                },
+                onFailure = {
+                    _uiState.value = PopupUiState.Error("\"$word\" not found via $layerId. Try another layer.")
+                    _showLayerPicker.value = false
+                }
+            )
+            _forcingLayerId.value = null
         }
     }
 

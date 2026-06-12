@@ -1,6 +1,7 @@
 package com.lexipopup.domain.usecases
 
 import android.util.LruCache
+import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.LAYER_CACHE
 import com.lexipopup.domain.models.LAYER_GROQ_AI
 import com.lexipopup.domain.models.LAYER_HISTORY
@@ -9,6 +10,7 @@ import com.lexipopup.domain.models.LAYER_ON_DEVICE
 import com.lexipopup.domain.models.LAYER_ONLINE_API
 import com.lexipopup.domain.models.LAYER_OPENAI
 import com.lexipopup.domain.models.LAYER_RULE_BASED
+import com.lexipopup.domain.models.LayerSystemConfig
 import com.lexipopup.domain.models.RuleBasedLayerConfig
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
@@ -47,49 +49,9 @@ class LookupWordUseCase @Inject constructor(
         }
 
         for (layerId in activeLayers) {
-            val entry: WordEntry? = when (layerId) {
-
-                LAYER_CACHE -> memoryCache.get(word)
-
-                LAYER_HISTORY -> try {
-                    val cfg = layerConfig.historyConfig
-                    repository.lookupFromHistory(word, cfg.minAccessCount, cfg.includeAiSourced)
-                } catch (_: Exception) { null }
-
-                LAYER_OFFLINE_DB -> try {
-                    repository.lookupLocal(word)
-                } catch (_: Exception) { null }
-
-                LAYER_ONLINE_API -> try {
-                    repository.lookupOnline(word)
-                } catch (_: Exception) { null }
-
-                LAYER_GROQ_AI -> {
-                    val key = appSettings.groqApiKey
-                    if (key.isNotBlank()) {
-                        try { aiProviderManager.groqProvider.explainWord(word, key) } catch (_: Exception) { null }
-                    } else null
-                }
-
-                LAYER_OPENAI -> {
-                    val key = appSettings.openAiApiKey
-                    if (key.isNotBlank()) {
-                        try { aiProviderManager.explainWithOpenAI(word, key) } catch (_: Exception) { null }
-                    } else null
-                }
-
-                LAYER_ON_DEVICE -> try {
-                    aiProviderManager.onDeviceProvider.explainWord(word)
-                } catch (_: Exception) { null }
-
-                LAYER_RULE_BASED -> generateRuleBasedEntry(word, layerConfig.ruleBasedConfig)
-
-                else -> null
-            }
-
+            val entry = tryLayer(layerId, word, layerConfig, appSettings)
             if (entry != null) {
                 memoryCache.put(word, entry)
-                // Persist network / AI results so future offline lookups succeed
                 if (layerId in setOf(LAYER_ONLINE_API, LAYER_GROQ_AI, LAYER_OPENAI, LAYER_ON_DEVICE)) {
                     try { repository.saveToCache(entry) } catch (_: Exception) {}
                     try { repository.markAccessed(word) } catch (_: Exception) {}
@@ -99,6 +61,69 @@ class LookupWordUseCase @Inject constructor(
         }
 
         Result.failure(NoSuchElementException("\"$word\" was not found in any active lookup layer."))
+    }
+
+    /** Re-fetch the word using exactly ONE specific layer, bypassing the normal pipeline. */
+    suspend fun invokeWithLayer(rawWord: String, layerId: String): Result<WordEntry> = withContext(Dispatchers.IO) {
+        val word = normalizeWord(rawWord)
+        if (word.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Empty word"))
+        val layerConfig = settingsDataStore.layerSystemConfig.first()
+        val appSettings  = settingsDataStore.settings.first()
+        val entry = tryLayer(layerId, word, layerConfig, appSettings)
+        if (entry != null) {
+            memoryCache.put(word, entry)
+            if (layerId in setOf(LAYER_ONLINE_API, LAYER_GROQ_AI, LAYER_OPENAI, LAYER_ON_DEVICE)) {
+                try { repository.saveToCache(entry) } catch (_: Exception) {}
+                try { repository.markAccessed(word) } catch (_: Exception) {}
+            }
+            return@withContext Result.success(entry)
+        }
+        Result.failure(NoSuchElementException("\"$word\" not found via $layerId."))
+    }
+
+    private suspend fun tryLayer(
+        layerId: String,
+        word: String,
+        layerConfig: LayerSystemConfig,
+        appSettings: AppSettings
+    ): WordEntry? = when (layerId) {
+
+        LAYER_CACHE -> memoryCache.get(word)
+
+        LAYER_HISTORY -> try {
+            val cfg = layerConfig.historyConfig
+            repository.lookupFromHistory(word, cfg.minAccessCount, cfg.includeAiSourced)
+        } catch (_: Exception) { null }
+
+        LAYER_OFFLINE_DB -> try {
+            repository.lookupLocal(word)
+        } catch (_: Exception) { null }
+
+        LAYER_ONLINE_API -> try {
+            repository.lookupOnline(word)
+        } catch (_: Exception) { null }
+
+        LAYER_GROQ_AI -> {
+            val key = appSettings.groqApiKey
+            if (key.isNotBlank()) {
+                try { aiProviderManager.groqProvider.explainWord(word, key) } catch (_: Exception) { null }
+            } else null
+        }
+
+        LAYER_OPENAI -> {
+            val key = appSettings.openAiApiKey
+            if (key.isNotBlank()) {
+                try { aiProviderManager.explainWithOpenAI(word, key) } catch (_: Exception) { null }
+            } else null
+        }
+
+        LAYER_ON_DEVICE -> try {
+            aiProviderManager.onDeviceProvider.explainWord(word)
+        } catch (_: Exception) { null }
+
+        LAYER_RULE_BASED -> generateRuleBasedEntry(word, layerConfig.ruleBasedConfig)
+
+        else -> null
     }
 
     suspend fun suggestions(query: String): List<String> = withContext(Dispatchers.IO) {

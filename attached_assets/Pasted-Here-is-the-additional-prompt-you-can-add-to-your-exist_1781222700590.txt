@@ -1,0 +1,415 @@
+Here is the additional prompt you can add to your existing prompt. This gives you complete manual control over every layer, the ability to reorder them, turn any layer on/off, and many other customizations.
+
+---
+
+```markdown
+## 🎛️ ADVANCED LAYER CUSTOMIZATION SYSTEM (ADD TO PROMPT)
+
+### OVERVIEW
+The user must be able to **manually customize every lookup layer** — reorder them, enable/disable any layer, adjust timeouts, and configure fallback behavior. All settings are saved instantly and applied without restart.
+
+---
+
+## 📋 LAYER CONTROL DASHBOARD (New Settings Tab)
+
+Add a new section in Settings called **"🔍 Lookup Layers"** with the following controls:
+
+```
+
+┌─────────────────────────────────────────────────────────────┐
+│  🔍 LOOKUP LAYERS                              [Reset]     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Drag ☰ to reorder layers. Toggle ○ to enable/disable.     │
+│                                                              │
+│  ☰  ○  LAYER 1: Memory Cache                 [Configure]   │
+│  │      Status: ✅ Active                                 │
+│  │      Cache size: 200 words       [Edit]               │
+│  │      TTL: Session only / 1 hour / 1 day               │
+│  │      Clear cache now                         [CLEAR]   │
+│  ├────────────────────────────────────────────────────────┤
+│  ☰  ○  LAYER 2: Offline Database (Room)      [Configure]   │
+│  │      Status: ✅ Active                                 │
+│  │      Source: Wiktionary + WordNet + Hindi             │
+│  │      Words available: 155,000+                        │
+│  │      [Manage Dictionary Packs]                         │
+│  ├────────────────────────────────────────────────────────┤
+│  ☰  ○  LAYER 3: Online API (FreeDictionaryAPI) [Configure] │
+│  │      Status: ✅ Active                                 │
+│  │      Timeout: 2 seconds          [Edit]               │
+│  │      Retry attempts: 2           [Edit]               │
+│  │      Cache results: ✅ On                              │
+│  ├────────────────────────────────────────────────────────┤
+│  ☰  ○  LAYER 4: Groq AI (Free - Mixtral)   [Configure]   │
+│  │      Status: ✅ Active                                 │
+│  │      Daily limit used: 12/1000                        │
+│  │      Explanation length: 2-3 sentences  [Edit]        │
+│  │      Include example: ✅ On                            │
+│  │      Timeout: 3 seconds           [Edit]              │
+│  ├────────────────────────────────────────────────────────┤
+│  ☰  ○  LAYER 5: OpenAI (Optional)          [Configure]   │
+│  │      Status: ⚪ Inactive (No API key)                 │
+│  │      API Key: [sk-...________________] [Save]         │
+│  │      Model: GPT-4o-mini / GPT-4o / GPT-3.5-turbo     │
+│  │      Timeout: 5 seconds           [Edit]              │
+│  ├────────────────────────────────────────────────────────┤
+│  ☰  ○  LAYER 6: On-Device AI (Phi-2/Llama) [Configure]   │
+│  │      Status: ⚪ Inactive (Model not downloaded)       │
+│  │      Model size: 1.6 GB         [Download]            │
+│  │      Works offline: ✅ Yes                            │
+│  ├────────────────────────────────────────────────────────┤
+│  ☰  ○  LAYER 7: Rule-Based Fallback         [Configure]   │
+│  │      Status: ✅ Active                                 │
+│  │      Mode: Basic / Enhanced / Off                     │
+│  │      Show "AI Generated" badge: ✅ On                  │
+│  └────────────────────────────────────────────────────────┘
+│                                                              │
+│  ⚙️ GLOBAL SETTINGS                                         │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │ If ALL layers disabled: Show error message         │   │
+│  │ Parallel lookup (check multiple layers at once): Off│   │
+│  │ Show loading skeleton: ✅ On                        │   │
+│  │ Max total lookup time: 5 seconds    [Edit]          │   │
+│  └────────────────────────────────────────────────────┘   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+```
+
+---
+
+## 🔄 DRAG-TO-REORDER IMPLEMENTATION
+
+The user can drag any layer to change its priority:
+
+```kotlin
+// ReorderableList implementation using Jetpack Compose
+@Composable
+fun LayerReorderList(
+    layers: List<LookupLayer>,
+    onOrderChanged: (List<LookupLayer>) -> Unit
+) {
+    Column {
+        layers.forEach { layer ->
+            ReorderableItem(
+                onMove = { from, to ->
+                    val newOrder = layers.toMutableList()
+                    newOrder.add(to, newOrder.removeAt(from))
+                    onOrderChanged(newOrder)
+                }
+            ) {
+                LayerCard(layer)
+            }
+        }
+    }
+}
+
+// User preferences storage
+data class LayerOrderConfig(
+    val layerOrder: List<String> = listOf(
+        "cache", "offline_db", "online_api", "groq_ai", 
+        "openai", "on_device_ai", "rule_based"
+    ),
+    val enabledLayers: Map<String, Boolean> = mapOf(
+        "cache" to true,
+        "offline_db" to true,
+        "online_api" to true,
+        "groq_ai" to true,
+        "openai" to false,
+        "on_device_ai" to false,
+        "rule_based" to true
+    ),
+    val layerConfigs: Map<String, LayerConfig> = emptyMap()
+)
+```
+
+---
+
+⚙️ PER-LAYER CONFIGURATION OPTIONS
+
+Layer 1: Memory Cache
+
+```kotlin
+data class CacheConfig(
+    val maxSize: Int = 200,        // Words to keep in memory
+    val ttl: TTL = TTL.SESSION,    // SESSION, HOUR, DAY, FOREVER
+    val enableCompression: Boolean = true
+)
+
+enum class TTL { SESSION, HOUR, DAY, FOREVER }
+```
+
+Layer 2: Offline Database
+
+```kotlin
+data class OfflineDBConfig(
+    val enableFullTextSearch: Boolean = true,
+    val fuzzyMatchEnabled: Boolean = true,
+    val fuzzyMatchThreshold: Int = 80,  // 0-100%
+    val preferShortMeaning: Boolean = false,
+    val includeEtymology: Boolean = true,
+    val maxExamplesPerWord: Int = 2
+)
+```
+
+Layer 3: Online API
+
+```kotlin
+data class OnlineAPIConfig(
+    val enabled: Boolean = true,
+    val timeoutSeconds: Int = 2,
+    val retryCount: Int = 2,
+    val retryDelayMs: Int = 500,
+    val cacheResults: Boolean = true,
+    val cacheDurationDays: Int = 30,
+    val apiEndpoint: String = "https://api.dictionaryapi.dev/api/v2/entries/en/"
+)
+```
+
+Layer 4: Groq AI (Free - Default)
+
+```kotlin
+data class GroqAIConfig(
+    val enabled: Boolean = true,
+    val model: String = "mixtral-8x7b-32768",
+    val maxTokens: Int = 150,
+    val temperature: Double = 0.7,
+    val explanationSentences: Int = 3,  // 1-5
+    val includeExample: Boolean = true,
+    val includePartOfSpeech: Boolean = true,
+    val timeoutSeconds: Int = 3,
+    val dailyLimitWarning: Int = 900,   // Show warning at 900/1000
+    val usePublicEndpoint: Boolean = true,  // No API key needed
+    val customApiKey: String? = null   // Optional for higher limits
+)
+```
+
+Layer 5: OpenAI (Optional)
+
+```kotlin
+data class OpenAIConfig(
+    val enabled: Boolean = false,
+    val apiKey: String = "",
+    val model: String = "gpt-4o-mini",
+    val maxTokens: Int = 150,
+    val temperature: Double = 0.7,
+    val timeoutSeconds: Int = 5
+)
+```
+
+Layer 6: On-Device AI
+
+```kotlin
+data class OnDeviceAIConfig(
+    val enabled: Boolean = false,
+    val modelType: ModelType = ModelType.PHI_2,
+    val modelDownloaded: Boolean = false,
+    val downloadProgress: Float = 0f,
+    val modelPath: String? = null
+)
+
+enum class ModelType(
+    val displayName: String,
+    val sizeMB: Int,
+    val ramRequiredMB: Int,
+    val quality: String
+) {
+    TINY("Phi-2 Mini", 400, 3072, "70% ChatGPT"),
+    STANDARD("Phi-2", 1600, 4096, "80% ChatGPT"),
+    PRO("Llama 3.2 3B", 2500, 6144, "90% ChatGPT")
+}
+```
+
+Layer 7: Rule-Based Fallback
+
+```kotlin
+data class RuleBasedConfig(
+    val enabled: Boolean = true,
+    val mode: RuleMode = RuleMode.ENHANCED,
+    val showAIBadge: Boolean = true,
+    val maxSentenceLength: Int = 100
+)
+
+enum class RuleMode {
+    BASIC,      // "The act of [word]ing"
+    ENHANCED,   // Detects suffixes, prefixes, roots
+    OFF         // Disabled completely
+}
+```
+
+---
+
+🎛️ QUICK PRESETS
+
+Add preset buttons at the top of the Layer Settings screen:
+
+Preset Description Layers Enabled
+🏃 Speed Demon Fastest possible lookups Cache + Offline DB only
+🎓 Student Best definitions + AI explanations All layers, AI prioritized
+📡 Offline Warrior Works without internet Cache + Offline DB + On-Device AI + Rule-Based
+💰 Zero Cost No API costs ever Cache + Offline DB + Online API + Rule-Based
+🧠 Max Quality Best explanations possible All layers, Groq/OpenAI/On-Device prioritized
+🔧 Custom User's manual configuration As selected
+
+```kotlin
+fun applyPreset(preset: LookupPreset) {
+    when(preset) {
+        LookupPreset.SPEED_DEMON -> {
+            disableLayer("groq_ai")
+            disableLayer("openai")
+            disableLayer("on_device_ai")
+            setLayerPriority("cache", 0)
+            setLayerPriority("offline_db", 1)
+        }
+        LookupPreset.STUDENT -> {
+            enableAllLayers()
+            setLayerPriority("groq_ai", 0)  // AI first
+            setLayerPriority("openai", 1)
+            setLayerPriority("offline_db", 2)
+        }
+        // ... other presets
+    }
+}
+```
+
+---
+
+🚦 LOOKUP FLOW WITH CUSTOMIZATION
+
+The lookup engine must respect user's layer order and enabled status:
+
+```kotlin
+class CustomizableLookupEngine(
+    private val layerOrderConfig: LayerOrderConfig
+) {
+    suspend fun lookupWord(word: String): LookupResult {
+        val activeLayers = layerOrderConfig.layerOrder
+            .filter { layerOrderConfig.enabledLayers[it] == true }
+        
+        for (layerName in activeLayers) {
+            val result = when (layerName) {
+                "cache" -> cacheLayer.lookup(word)
+                "offline_db" -> offlineDbLayer.lookup(word)
+                "online_api" -> onlineApiLayer.lookup(word)
+                "groq_ai" -> groqAILayer.lookup(word)
+                "openai" -> openAILayer.lookup(word)
+                "on_device_ai" -> onDeviceAILayer.lookup(word)
+                "rule_based" -> ruleBasedLayer.lookup(word)
+                else -> null
+            }
+            
+            if (result != null) {
+                // Cache result from higher priority layer
+                cacheLayer.save(word, result)
+                return result
+            }
+        }
+        
+        return LookupResult.NotFound(
+            message = "Word not found. Enable more layers in Settings."
+        )
+    }
+}
+```
+
+---
+
+📱 USER-FRIENDLY TOGGLES (Quick Settings)
+
+Add a Quick Settings panel accessible from the popup itself:
+
+```
+┌─────────────────────────────────────────────┐
+│  ⚡ QUICK SETTINGS                    ✕    │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Lookup Priority:                           │
+│  ┌─────────────────────────────────────┐  │
+│  │ 🏃 Speed    🎓 Student   📡 Offline │  │
+│  └─────────────────────────────────────┘  │
+│                                             │
+│  Current active layers:                     │
+│  ☑️ Memory Cache                            │
+│  ☑️ Offline Database                        │
+│  ☐ Online API (Tap to enable)              │
+│  ☑️ Groq AI                                 │
+│  ☐ OpenAI (No API key)                     │
+│  ☐ On-Device AI (Not downloaded)           │
+│  ☑️ Rule-Based                              │
+│                                             │
+│  [Open Full Settings]                       │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+💾 STORAGE & SYNC
+
+All layer configurations are saved to DataStore Preferences:
+
+```kotlin
+// Auto-save on every change
+data class LayerPreferences(
+    val layerOrder: List<String>,
+    val enabledLayers: Map<String, Boolean>,
+    val cacheConfig: CacheConfig,
+    val offlineDbConfig: OfflineDBConfig,
+    val onlineApiConfig: OnlineAPIConfig,
+    val groqAIConfig: GroqAIConfig,
+    val openAIConfig: OpenAIConfig,
+    val onDeviceAIConfig: OnDeviceAIConfig,
+    val ruleBasedConfig: RuleBasedConfig,
+    val globalConfig: GlobalConfig
+)
+
+// Export/Import settings
+fun exportSettings(): String = gson.toJson(layerPreferences)
+fun importSettings(json: String) { /* restore all settings */ }
+```
+
+---
+
+🧪 TESTING REQUIREMENTS
+
+The agent must verify:
+
+1. User can disable ANY layer individually
+2. User can reorder layers by dragging
+3. Disabled layers are completely skipped
+4. Presets apply correctly and instantly
+5. Settings persist after app restart
+6. Export/import works correctly
+7. Quick Settings panel accessible from popup
+8. Each layer's individual settings work
+
+---
+
+✅ SUMMARY OF CUSTOMIZATION FEATURES
+
+Feature Available
+Enable/disable any layer ✅ Yes
+Reorder layers (drag & drop) ✅ Yes
+Adjust timeouts per layer ✅ Yes
+Configure cache size/TTL ✅ Yes
+Toggle fuzzy search ✅ Yes
+Change AI explanation length ✅ Yes
+Switch between Groq/OpenAI ✅ Yes
+Download on-device AI models ✅ Yes
+Quick presets ✅ Yes
+Export/import settings ✅ Yes
+Quick Settings from popup ✅ Yes
+
+---
+
+🎯 ADD TO YOUR PROMPT
+
+Copy and paste the entire block above into your main prompt. Then add this final instruction:
+
+"Implement ALL layer customization features described above. The user must be able to enable/disable any layer, reorder them via drag-and-drop, configure each layer's individual settings, save/load presets, and export/import their configuration. All settings must persist across app restarts and apply instantly without reboot."
+
+---
+
+This gives you complete manual control over every aspect of the lookup process. You can turn off any layer you don't want, reorder them however you prefer, and fine-tune each one's behavior.
+
+```

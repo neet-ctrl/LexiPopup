@@ -47,7 +47,16 @@ class SettingsDataStore @Inject constructor(
         val USE_DARK_MODE = booleanPreferencesKey("dark_mode")
         val USE_SYSTEM_THEME = booleanPreferencesKey("system_theme")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
+
+        // AI — legacy OpenAI key
         val OPEN_AI_KEY = stringPreferencesKey("open_ai_key")
+
+        // AI — dual provider system
+        val GROQ_API_KEY = stringPreferencesKey("groq_api_key")
+        val AI_PROVIDER = stringPreferencesKey("ai_provider")
+        val HYBRID_AUTO_SELECT = booleanPreferencesKey("hybrid_auto_select")
+        val HYBRID_SHOW_COMPARISON = booleanPreferencesKey("hybrid_show_comparison")
+        val ON_DEVICE_MODEL_ID = stringPreferencesKey("on_device_model_id")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -80,7 +89,12 @@ class SettingsDataStore @Inject constructor(
             autoGenerateFlashcards = prefs[AUTO_FLASHCARDS] ?: true,
             useDarkMode = prefs[USE_DARK_MODE] ?: false,
             useSystemTheme = prefs[USE_SYSTEM_THEME] ?: true,
-            openAiApiKey = prefs[OPEN_AI_KEY] ?: ""
+            openAiApiKey = prefs[OPEN_AI_KEY] ?: "",
+            groqApiKey = prefs[GROQ_API_KEY] ?: "",
+            aiProviderName = prefs[AI_PROVIDER] ?: "groq",
+            hybridAutoSelectBest = prefs[HYBRID_AUTO_SELECT] ?: true,
+            hybridShowComparison = prefs[HYBRID_SHOW_COMPARISON] ?: true,
+            onDeviceModelId = prefs[ON_DEVICE_MODEL_ID] ?: "gemma-2b-tiny"
         )
     }
 

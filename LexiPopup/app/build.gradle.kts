@@ -114,6 +114,9 @@ dependencies {
     implementation(libs.hilt.work)
     ksp(libs.hilt.work.compiler)
 
+    // On-Device AI — MediaPipe LLM Inference Task (Gemma 2B / Phi-2 .task models)
+    implementation("com.google.mediapipe:tasks-genai:0.10.14")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

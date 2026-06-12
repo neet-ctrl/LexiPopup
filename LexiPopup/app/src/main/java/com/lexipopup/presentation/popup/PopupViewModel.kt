@@ -14,6 +14,8 @@ import com.lexipopup.domain.usecases.LookupWordUseCase
 import com.lexipopup.utils.NotificationHelper
 import com.lexipopup.utils.SettingsDataStore
 import com.lexipopup.utils.TtsHelper
+import com.lexipopup.utils.ai.AiProviderManager
+import com.lexipopup.utils.ai.HybridAiResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -39,7 +41,8 @@ class PopupViewModel @Inject constructor(
     private val vocabularyRepository: VocabularyRepository,
     private val settingsDataStore: SettingsDataStore,
     private val ttsHelper: TtsHelper,
-    private val notificationHelper: NotificationHelper
+    private val notificationHelper: NotificationHelper,
+    private val aiProviderManager: AiProviderManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<PopupUiState>(PopupUiState.Idle)
@@ -47,6 +50,9 @@ class PopupViewModel @Inject constructor(
 
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions.asStateFlow()
+
+    /** Non-null only when provider is Hybrid and both AI calls returned results. */
+    val hybridAiResult: StateFlow<HybridAiResult?> = aiProviderManager.lastHybridResult
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()

@@ -42,6 +42,13 @@ data class AppSettings(
     val useDarkMode: Boolean = false,
     val useSystemTheme: Boolean = true,
 
-    // AI Features
-    val openAiApiKey: String = ""
+    // AI Features — legacy OpenAI key (still supported)
+    val openAiApiKey: String = "",
+
+    // Dual AI System
+    val groqApiKey: String = "",
+    val aiProviderName: String = "groq",       // "groq" | "openai" | "on_device" | "hybrid"
+    val hybridAutoSelectBest: Boolean = true,
+    val hybridShowComparison: Boolean = true,
+    val onDeviceModelId: String = "gemma-2b-tiny"
 )

@@ -28,8 +28,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,6 +40,8 @@ import com.lexipopup.presentation.dictionary.DictionaryBrowserViewModel
 import com.lexipopup.presentation.dictionary.WordDetailScreen
 import com.lexipopup.presentation.flashcards.FlashcardsScreen
 import com.lexipopup.presentation.flashcards.FlashcardsViewModel
+import com.lexipopup.presentation.ai.AiSettingsScreen
+import com.lexipopup.presentation.ai.AiSettingsViewModel
 import com.lexipopup.presentation.download.DownloadProgressScreen
 import com.lexipopup.utils.ExportFormat
 import com.lexipopup.utils.SettingsDataStore
@@ -57,6 +57,7 @@ sealed class AppDestination {
     data class WordDetail(val word: String) : AppDestination()
     object About : AppDestination()
     object DownloadPacks : AppDestination()
+    object AiSettings : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,6 +91,7 @@ fun DashboardScreen(
             is AppDestination.WordDetail  -> AppDestination.Home
             AppDestination.About         -> AppDestination.Settings
             AppDestination.DownloadPacks -> AppDestination.Settings
+            AppDestination.AiSettings   -> AppDestination.Settings
             else -> AppDestination.Home
         }
     }
@@ -110,6 +112,11 @@ fun DashboardScreen(
         }
         AppDestination.DownloadPacks -> {
             DownloadProgressScreen(onBack = { destination = AppDestination.Settings })
+            return
+        }
+        AppDestination.AiSettings -> {
+            val aiVm: AiSettingsViewModel = hiltViewModel()
+            AiSettingsScreen(viewModel = aiVm, onBack = { destination = AppDestination.Settings })
             return
         }
         else -> Unit
@@ -200,7 +207,8 @@ fun DashboardScreen(
                     recentWords = recentWords,
                     viewModel = viewModel,
                     context = context,
-                    onManagePacks = { destination = AppDestination.DownloadPacks }
+                    onManagePacks = { destination = AppDestination.DownloadPacks },
+                    onOpenAiSettings = { destination = AppDestination.AiSettings }
                 )
                 else -> Unit
             }
@@ -507,7 +515,8 @@ fun SettingsScreen(
     recentWords: List<WordEntry>,
     viewModel: DashboardViewModel,
     context: android.content.Context,
-    onManagePacks: () -> Unit = {}
+    onManagePacks: () -> Unit = {},
+    onOpenAiSettings: () -> Unit = {}
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -590,33 +599,48 @@ fun SettingsScreen(
         }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
-        item { SectionHeader("🤖 AI Features (Optional)") }
+        item { SectionHeader("🤖 AI Assistant") }
         item {
-            var keyVisible by remember { mutableStateOf(false) }
-            OutlinedTextField(
-                value = settings.openAiApiKey,
-                onValueChange = { viewModel.updateApiKey(it) },
-                label = { Text("OpenAI API Key") },
-                placeholder = { Text("sk-…  (unlocks AI fallback for unknown words)") },
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { keyVisible = !keyVisible }) {
-                        Icon(
-                            if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (keyVisible) "Hide key" else "Show key"
+            val providerLabel = when (settings.aiProviderName) {
+                "groq"      -> "Groq Cloud"
+                "openai"    -> "OpenAI"
+                "on_device" -> "On-Device AI"
+                "hybrid"    -> "Hybrid (Both)"
+                else        -> "Groq Cloud"
+            }
+            val isReady = when (settings.aiProviderName) {
+                "groq"   -> settings.groqApiKey.isNotBlank()
+                "openai" -> settings.openAiApiKey.isNotBlank()
+                else     -> true
+            }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Provider: $providerLabel",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            if (isReady) "✅ Ready — AI fallback active" else "⚠️ API key required",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isReady) MaterialTheme.colorScheme.tertiary
+                            else MaterialTheme.colorScheme.error
                         )
                     }
-                },
-                singleLine = true,
-                supportingText = {
-                    Text(
-                        "When set, words not found in the offline dictionary are explained by GPT-4o-mini.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    FilledTonalButton(onClick = onOpenAiSettings) {
+                        Icon(Icons.Default.Tune, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Configure")
+                    }
                 }
-            )
+            }
         }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }

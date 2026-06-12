@@ -82,6 +82,12 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun updateStringSetting(key: androidx.datastore.preferences.core.Preferences.Key<String>, value: String) {
+        viewModelScope.launch {
+            settingsDataStore.update { prefs -> prefs[key] = value }
+        }
+    }
+
     /** Export all vocabulary as CSV/JSON/Anki and open share sheet */
     fun exportVocabulary(words: List<WordEntry>, format: ExportFormat, context: Context) {
         viewModelScope.launch {

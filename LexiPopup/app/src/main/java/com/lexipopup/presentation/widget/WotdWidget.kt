@@ -196,12 +196,13 @@ private fun WotdCard(word: WordEntity?) {
     }
 }
 
+// Uses "lookup_word" extra instead of ACTION_SEND + MIME type so the word survives
+// Glance's PendingIntent wrapping — Android can strip the MIME type from PendingIntents,
+// causing processIntent to fall through to manual-search mode.
 private fun wotdIntent(context: Context, word: String?): Intent =
     Intent(context, PopupActivity::class.java).apply {
         if (word != null) {
-            action = Intent.ACTION_SEND
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, word)
+            putExtra("lookup_word", word)
         } else {
             putExtra("mode", "manual_search")
         }

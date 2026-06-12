@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -41,7 +42,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -141,6 +142,24 @@ fun PopupScreen(
         windowMode == PopupWindowState.EDGE_LEFT  -> PopupWindowState.EDGE_LEFT
         windowMode == PopupWindowState.EDGE_RIGHT -> PopupWindowState.EDGE_RIGHT
         else                                  -> PopupWindowState.FULL
+    }
+
+    // ── Bug fix: pass touches through to underlying app in bubble/edge modes ─────
+    val activity = LocalContext.current as? androidx.activity.ComponentActivity
+    SideEffect {
+        val win = activity?.window ?: return@SideEffect
+        when (effectiveWindowState) {
+            PopupWindowState.BUBBLE,
+            PopupWindowState.EDGE_LEFT,
+            PopupWindowState.EDGE_RIGHT -> {
+                win.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+                win.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            }
+            else -> {
+                win.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+                win.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            }
+        }
     }
 
     // ── Parallax tilt ─────────────────────────────────────────────────────────
@@ -315,14 +334,40 @@ fun PopupScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         BubbleMode(
                             uiState  = uiState,
-                            onExpand = { viewModel.toggleBubble() },
                             modifier = Modifier
                                 .offset { IntOffset(bubbleX.value.toInt(), bubbleY.value.toInt()) }
                                 .pointerInput(Unit) {
-                                    detectDragGestures(onDragEnd = { snapBubbleToEdge() }) { _, drag ->
-                                        scope.launch {
-                                            bubbleX.snapTo(bubbleX.value + drag.x)
-                                            bubbleY.snapTo(bubbleY.value + drag.y)
+                                    // Unified tap-to-expand + drag-to-move in one gesture block.
+                                    // Fixes conflict between clickable() on child and separate drag detector.
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        down.consume()
+                                        var totalDrag = Offset.Zero
+                                        var dragging = false
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+                                            if (!change.pressed) {
+                                                if (!dragging) {
+                                                    // Tap — expand bubble back to full popup
+                                                    viewModel.toggleBubble()
+                                                } else {
+                                                    snapBubbleToEdge()
+                                                }
+                                                break
+                                            }
+                                            val delta = change.positionChange()
+                                            totalDrag += delta
+                                            if (!dragging && totalDrag.getDistance() > viewConfiguration.touchSlop) {
+                                                dragging = true
+                                            }
+                                            if (dragging) {
+                                                change.consume()
+                                                scope.launch {
+                                                    bubbleX.snapTo(bubbleX.value + delta.x)
+                                                    bubbleY.snapTo(bubbleY.value + delta.y)
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -400,9 +445,9 @@ fun PopupScreen(
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                                    glassSurface.copy(alpha = 0.82f)
+                                    glassSurface.copy(alpha = 0.82f * settings.popupBgAlpha)
                                 else
-                                    glassSurface.copy(alpha = 0.97f)
+                                    glassSurface.copy(alpha = 0.97f * settings.popupBgAlpha)
                             ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 22.dp)
                         ) {
@@ -1744,7 +1789,7 @@ fun ParticleBurst(modifier: Modifier, onFinish: () -> Unit) {
 // ── Bubble mode ───────────────────────────────────────────────────────────────
 
 @Composable
-fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) {
+fun BubbleMode(uiState: PopupUiState, modifier: Modifier) {
     val inf = rememberInfiniteTransition(label = "bubble_inf")
     val pulse by inf.animateFloat(
         initialValue = 0.95f, targetValue = 1.06f,
@@ -1786,11 +1831,7 @@ fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) 
                     )
                 ),
                 shape = CircleShape
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onExpand() },
+            ),
         contentAlignment = Alignment.Center
     ) {
         Text(

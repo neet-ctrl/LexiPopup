@@ -54,6 +54,7 @@ class SettingsDataStore @Inject constructor(
         val BUTTON_ORDER = stringPreferencesKey("button_order")
         val POPUP_WIDTH_FRACTION = androidx.datastore.preferences.core.floatPreferencesKey("popup_width_fraction")
         val POPUP_HEIGHT_FRACTION = androidx.datastore.preferences.core.floatPreferencesKey("popup_height_fraction")
+        val POPUP_BG_ALPHA = androidx.datastore.preferences.core.floatPreferencesKey("popup_bg_alpha")
         val POPUP_LAST_X = androidx.datastore.preferences.core.floatPreferencesKey("popup_last_x")
         val POPUP_LAST_Y = androidx.datastore.preferences.core.floatPreferencesKey("popup_last_y")
         val SAVE_HISTORY = booleanPreferencesKey("save_history")
@@ -115,6 +116,7 @@ class SettingsDataStore @Inject constructor(
             buttonOrder = prefs[BUTTON_ORDER] ?: "copy,speak,meaning,translate,share,note,details,web,flashcard,browser",
             popupWidthFraction = prefs[POPUP_WIDTH_FRACTION] ?: 0.88f,
             popupHeightFraction = prefs[POPUP_HEIGHT_FRACTION] ?: 0.65f,
+            popupBgAlpha = prefs[POPUP_BG_ALPHA] ?: 1.0f,
             popupLastOffsetX = prefs[POPUP_LAST_X] ?: 0f,
             popupLastOffsetY = prefs[POPUP_LAST_Y] ?: 0f,
             showPersistentNotification = prefs[SHOW_NOTIFICATION] ?: true,
@@ -172,6 +174,7 @@ class SettingsDataStore @Inject constructor(
             prefs[ENABLE_DRAGGING] = true
             prefs[ENABLE_RESIZING] = true
             prefs[ENABLE_BUBBLE] = true
+            prefs[POPUP_BG_ALPHA] = 1.0f
             prefs[AUTO_CLOSE_SECONDS] = 0
             prefs[SHOW_NOTIFICATION] = true
             prefs[SAVE_HISTORY] = true

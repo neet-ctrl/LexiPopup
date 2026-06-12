@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -1013,6 +1014,89 @@ fun SettingsScreen(
                 }
             }
         }
+        item {
+            // Transparency slider with live preview card
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Popup transparency",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "${((1f - settings.popupBgAlpha) * 100).toInt()}% transparent",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // Live mini-preview card that shows the transparency effect
+                    Box(
+                        modifier = Modifier
+                            .size(width = 72.dp, height = 44.dp)
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant,
+                                RoundedCornerShape(10.dp)
+                            )
+                    ) {
+                        // Checkerboard pattern to show transparency
+                        Canvas(modifier = Modifier.matchParentSize()) {
+                            val cellSz = 8.dp.toPx()
+                            val cols = (size.width / cellSz).toInt() + 1
+                            val rows = (size.height / cellSz).toInt() + 1
+                            for (r in 0..rows) for (c in 0..cols) {
+                                drawRect(
+                                    color   = if ((r + c) % 2 == 0) Color.LightGray else Color.White,
+                                    topLeft = Offset(c * cellSz, r * cellSz),
+                                    size    = Size(cellSz, cellSz)
+                                )
+                            }
+                        }
+                        // Simulated popup card with live alpha
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    MaterialTheme.colorScheme.surface.copy(
+                                        alpha = settings.popupBgAlpha * 0.95f
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "📖",
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+                }
+                Slider(
+                    value = settings.popupBgAlpha,
+                    onValueChange = { viewModel.updateFloatSetting(SettingsDataStore.POPUP_BG_ALPHA, it) },
+                    valueRange = 0.25f..1.0f,
+                    steps = 14,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Very transparent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Fully opaque", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         item { ToggleRow("Auto-close after 5 seconds", settings.autoCloseSeconds > 0) { viewModel.updateSetting(SettingsDataStore.AUTO_CLOSE, it) } }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
@@ -1348,46 +1432,9 @@ private fun ButtonReorderPanel(
         color    = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         tonalElevation = 1.dp
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Single pointerInput on the Column drives all drag logic
-                .pointerInput(Unit) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { offset ->
-                            val idx = (offset.y / itemHeightPx).toInt()
-                                .coerceIn(0, orderedIds.size - 1)
-                            draggedIndex = idx
-                            dragOffsetY  = 0f
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                        onDrag = { _, dragAmount ->
-                            val di = draggedIndex ?: return@detectDragGesturesAfterLongPress
-                            dragOffsetY += dragAmount.y
-                            val target = (di + (dragOffsetY / itemHeightPx).roundToInt())
-                                .coerceIn(0, orderedIds.size - 1)
-                            if (target != di) {
-                                orderedIds = orderedIds.toMutableList().also { list ->
-                                    val removed = list.removeAt(di)
-                                    list.add(target, removed)
-                                }
-                                dragOffsetY -= (target - di) * itemHeightPx
-                                draggedIndex = target
-                            }
-                        },
-                        onDragEnd = {
-                            draggedIndex = null
-                            dragOffsetY  = 0f
-                            viewModel.updateButtonOrder(orderedIds)
-                        },
-                        onDragCancel = {
-                            draggedIndex = null
-                            dragOffsetY  = 0f
-                        }
-                    )
-                }
-        ) {
-            // ── Live mini-preview — updates every time orderedIds or enabled state changes ──
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // ── Live mini-preview — NO pointerInput here, so its height doesn't
+            //    confuse the drag index calculation below ──────────────────────
             ActionGridPreview(
                 orderedIds = orderedIds,
                 isEnabled  = ::isEnabled,
@@ -1399,6 +1446,47 @@ private fun ButtonReorderPanel(
                 thickness = 0.5.dp,
                 color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
             )
+
+            // ── Draggable rows — pointerInput is scoped to ONLY this Column so
+            //    offset.y == 0 at the very first row, giving correct indices ──
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(orderedIds) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                val idx = (offset.y / itemHeightPx).toInt()
+                                    .coerceIn(0, orderedIds.size - 1)
+                                draggedIndex = idx
+                                dragOffsetY  = 0f
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDrag = { _, dragAmount ->
+                                val di = draggedIndex ?: return@detectDragGesturesAfterLongPress
+                                dragOffsetY += dragAmount.y
+                                val target = (di + (dragOffsetY / itemHeightPx).roundToInt())
+                                    .coerceIn(0, orderedIds.size - 1)
+                                if (target != di) {
+                                    orderedIds = orderedIds.toMutableList().also { list ->
+                                        val removed = list.removeAt(di)
+                                        list.add(target, removed)
+                                    }
+                                    dragOffsetY -= (target - di) * itemHeightPx
+                                    draggedIndex = target
+                                }
+                            },
+                            onDragEnd = {
+                                draggedIndex = null
+                                dragOffsetY  = 0f
+                                viewModel.updateButtonOrder(orderedIds)
+                            },
+                            onDragCancel = {
+                                draggedIndex = null
+                                dragOffsetY  = 0f
+                            }
+                        )
+                    }
+            ) {
 
             orderedIds.forEachIndexed { index, id ->
                 val meta      = metaById[id] ?: return@forEachIndexed
@@ -1501,8 +1589,9 @@ private fun ButtonReorderPanel(
                     )
                 }
             }
-        }
-    }
+            } // close inner pointerInput Column
+        }     // close outer Column
+    }         // close Surface
 }
 
 // ── Action Grid Live Preview ───────────────────────────────────────────────────

@@ -41,6 +41,9 @@ data class AppSettings(
     val popupWidthFraction: Float = 0.88f,   // 0.50 – 0.95
     val popupHeightFraction: Float = 0.65f,  // 0.35 – 0.88
 
+    // Window transparency (1.0 = fully opaque, 0.3 = very transparent)
+    val popupBgAlpha: Float = 1.0f,
+
     // Last window position (restored on next open)
     val popupLastOffsetX: Float = 0f,
     val popupLastOffsetY: Float = 0f,

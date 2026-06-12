@@ -263,28 +263,10 @@ def rank_wordnet(word_map: dict) -> list:
 
 
 # ── Wiktionary via kaikki.org ─────────────────────────────────────────────────
-#
-# kaikki.org provides pre-parsed Wiktionary as JSONL (one JSON object per line).
-# English section URL (updated 2025 — file extension changed from .json → .jsonl):
-#   https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl
-# Each line example:
-# {
-#   "word": "procrastinate", "pos": "verb", "lang": "English", "lang_code": "en",
-#   "senses": [{"glosses": ["To put off..."], "examples": [{"text": "..."}]}],
-#   "sounds": [{"ipa": "/prəˈkræs.tɪ.neɪt/"}],
-#   "etymology_text": "From Latin procrastinatus…",
-#   "synonyms": [{"word": "delay"}],
-#   "antonyms": []
-# }
-#
-# We filter: lang_code == "en"  (English words only)
-# ─────────────────────────────────────────────────────────────────────────────
 
-# Primary URL — post-processed JSONL (~2.7 GB uncompressed)
 KAIKKI_URL = ("https://kaikki.org/dictionary/English/"
               "kaikki.org-dictionary-English.jsonl")
 
-# Fallback URL in case the primary moves again
 KAIKKI_URL_FALLBACK = ("https://kaikki.org/dictionary/English/"
                        "kaikki.org-dictionary-English-all.jsonl")
 
@@ -360,17 +342,22 @@ def parse_wiktionary(path: str, wordnet_map: dict, cmu: dict) -> dict:
     Returns wikt_map: word → entry dict.
     Words already in wordnet_map are enriched (IPA, etymology, examples added);
     new words are added fresh.
+    
+    FIXED: No f.tell() call to avoid OSError. Manual byte tracking instead.
     """
     print(f"\n[Wiktionary] Parsing {path}…")
     wikt_map: dict = {}
     skipped = 0
     t0 = time.time()
     file_size = os.path.getsize(path)
+    bytes_read = 0
 
     with open(path, 'r', encoding='utf-8', errors='replace') as f:
         for lineno, line in enumerate(f, 1):
+            bytes_read += len(line.encode('utf-8'))
+            
             if lineno % 200_000 == 0:
-                mb_read = f.tell() / (1 << 20)
+                mb_read = bytes_read / (1 << 20)
                 elapsed = time.time() - t0
                 print(f"  {lineno:,} lines | {mb_read:.0f}/{file_size/(1<<20):.0f} MB"
                       f" | {len(wikt_map):,} entries | {elapsed:.0f}s", flush=True)
@@ -705,7 +692,6 @@ def main():
     merged_map = merge_maps(wordnet_map, wikt_map, wn_ordered)
     print(f"  Total entries to write: {len(merged_map):,}")
     # Sort full pack by frequency descending so most-common words are inserted first
-    # (helps if DB is truncated/interrupted mid-run)
     full_words = sorted(merged_map.values(),
                         key=lambda e: -e.get('frequency_rating', 50))
     db = "output/dict_full_v1.db"

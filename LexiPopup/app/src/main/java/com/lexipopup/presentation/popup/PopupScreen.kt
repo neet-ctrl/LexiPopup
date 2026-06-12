@@ -61,6 +61,9 @@ import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.utils.ParallaxOffset
 import com.lexipopup.utils.SensorHelper
 import androidx.compose.ui.res.painterResource
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.lexipopup.presentation.chat.AiChatScreen
+import com.lexipopup.presentation.chat.AiChatViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -227,6 +230,20 @@ fun PopupScreen(
     var showNoteDialog by remember { mutableStateOf(false) }
     var noteText       by remember { mutableStateOf("") }
     var showParticles  by remember { mutableStateOf(false) }
+
+    // ── AI Chat mode ──────────────────────────────────────────────────────────
+    var showAiChat       by remember { mutableStateOf(false) }
+    val aiChatViewModel: AiChatViewModel = hiltViewModel()
+    val currentWordForChat by remember {
+        derivedStateOf { (uiState as? PopupUiState.Success)?.entry?.word ?: "" }
+    }
+    LaunchedEffect(showAiChat) {
+        if (showAiChat && currentWordForChat.isNotBlank()) {
+            aiChatViewModel.startNewSession()
+            delay(120)
+            aiChatViewModel.sendMessage("Let's talk more about this word \"${currentWordForChat}\"")
+        }
+    }
 
     // ── Layer picker state ────────────────────────────────────────────────────
     val showLayerPicker by viewModel.showLayerPicker.collectAsState()
@@ -536,6 +553,14 @@ fun PopupScreen(
                                         )
                                     }
 
+                                    if (showAiChat) {
+                                        PopupAiChatContent(
+                                            word      = currentWordForChat,
+                                            viewModel = aiChatViewModel,
+                                            onBack    = { showAiChat = false },
+                                            onClose   = safeClose
+                                        )
+                                    } else {
                                     // ── Header ────────────────────────────────
                                     PopupHeader(
                                         uiState          = uiState,
@@ -660,7 +685,8 @@ fun PopupScreen(
                                                 }
                                             },
                                             onSearchWeb    = { viewModel.openSearchWeb(context) },
-                                            onAddFlashcard = { viewModel.addFlashcard() }
+                                            onAddFlashcard = { viewModel.addFlashcard() },
+                                            onAiChat       = { showAiChat = true }
                                         )
                                     }
 
@@ -688,6 +714,7 @@ fun PopupScreen(
                                             )
                                         }
                                     }
+                                    } // end else (showAiChat)
 
                                 } // end Column
 
@@ -1481,7 +1508,8 @@ fun PopupActionGrid(
     onSaveNote: () -> Unit,
     onFullDetails: () -> Unit,
     onSearchWeb: () -> Unit,
-    onAddFlashcard: () -> Unit
+    onAddFlashcard: () -> Unit,
+    onAiChat: () -> Unit = {}
 ) {
     data class BtnDef(
         val icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1497,6 +1525,7 @@ fun PopupActionGrid(
     )
 
     val allButtons = listOf(
+        BtnDefWithId("ai",        Icons.Default.AutoAwesome,     "AI\nChat",      onAiChat,        true),
         BtnDefWithId("copy",      Icons.Default.ContentCopy,     "Copy",          onCopy,          settings.showCopyButton),
         BtnDefWithId("speak",     Icons.Default.VolumeUp,        "Speak\nWord",   onSpeakWord,     settings.showSpeakWordButton),
         BtnDefWithId("meaning",   Icons.Default.RecordVoiceOver, "Speak\nMeaning",onSpeakMeaning,  settings.showSpeakMeaningButton),
@@ -2470,4 +2499,85 @@ fun ActionButton(
     onClick: () -> Unit
 ) {
     GridActionButton(icon = icon, label = label, onClick = onClick)
+}
+
+// ── Inline AI chat panel (shown inside popup card when AI button is tapped) ───
+
+@Composable
+private fun PopupAiChatContent(
+    word: String,
+    viewModel: AiChatViewModel,
+    onBack: () -> Unit,
+    onClose: () -> Unit
+) {
+    val primary   = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+
+    Column(Modifier.fillMaxSize()) {
+
+        // ── Mini top bar: back · title · close ────────────────────────────────
+        Surface(shadowElevation = 2.dp, color = MaterialTheme.colorScheme.surface) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back to word",
+                        tint = primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        "AI Chat",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = onSurface
+                    )
+                    if (word.isNotBlank()) {
+                        Text(
+                            " · $word",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = onSurface.copy(alpha = 0.55f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close popup",
+                        tint = onSurface.copy(alpha = 0.55f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // ── Full AiChatScreen embedded — same UI, all features ─────────────────
+        AiChatScreen(
+            viewModel       = viewModel,
+            onWordSelected  = {},
+            isFullscreenMode = false,
+            onExitFullscreen = {}
+        )
+    }
 }

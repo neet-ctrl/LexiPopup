@@ -917,20 +917,62 @@ fun SettingsScreen(
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
         item { SectionHeader("🔘 Action Buttons") }
-        item { ToggleRow("Copy button", settings.showCopyButton) { viewModel.updateSetting(SettingsDataStore.SHOW_COPY, it) } }
-        item { ToggleRow("Speak word button", settings.showSpeakWordButton) { viewModel.updateSetting(SettingsDataStore.SHOW_SPEAK_WORD, it) } }
+        item { ToggleRow("Copy button",          settings.showCopyButton)         { viewModel.updateSetting(SettingsDataStore.SHOW_COPY,        it) } }
+        item { ToggleRow("Speak word button",    settings.showSpeakWordButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_SPEAK_WORD,  it) } }
         item { ToggleRow("Speak meaning button", settings.showSpeakMeaningButton) { viewModel.updateSetting(SettingsDataStore.SHOW_SPEAK_MEANING, it) } }
-        item { ToggleRow("Translate button", settings.showTranslateButton) { viewModel.updateSetting(SettingsDataStore.SHOW_TRANSLATE, it) } }
-        item { ToggleRow("Share button", settings.showShareButton) { viewModel.updateSetting(SettingsDataStore.SHOW_SHARE, it) } }
-        item { ToggleRow("Save note button", settings.showSaveNoteButton) { viewModel.updateSetting(SettingsDataStore.SHOW_SAVE_NOTE, it) } }
-        item { ToggleRow("Favorite button", settings.showFavoriteButton) { viewModel.updateSetting(SettingsDataStore.SHOW_FAVORITE, it) } }
-        item { ToggleRow("Full details button", settings.showFullDetailsButton) { viewModel.updateSetting(SettingsDataStore.SHOW_FULL_DETAILS, it) } }
+        item { ToggleRow("Translate button",     settings.showTranslateButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_TRANSLATE,   it) } }
+        item { ToggleRow("Share button",         settings.showShareButton)        { viewModel.updateSetting(SettingsDataStore.SHOW_SHARE,       it) } }
+        item { ToggleRow("Save note button",     settings.showSaveNoteButton)     { viewModel.updateSetting(SettingsDataStore.SHOW_SAVE_NOTE,   it) } }
+        item { ToggleRow("Favorite button",      settings.showFavoriteButton)     { viewModel.updateSetting(SettingsDataStore.SHOW_FAVORITE,    it) } }
+        item { ToggleRow("Full details button",  settings.showFullDetailsButton)  { viewModel.updateSetting(SettingsDataStore.SHOW_FULL_DETAILS, it) } }
+        item { ToggleRow("Search web button",    settings.showSearchWebButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_SEARCH_WEB,  it) } }
+        item { ToggleRow("Flashcard button",     settings.showFlashcardButton)    { viewModel.updateSetting(SettingsDataStore.SHOW_FLASHCARD_BTN, it) } }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
-        item { SectionHeader("🧩 Popup Behavior") }
-        item { ToggleRow("Enable dragging", settings.enableDragging) { viewModel.updateSetting(SettingsDataStore.ENABLE_DRAGGING, it) } }
-        item { ToggleRow("Enable resizing (bottom-right handle)", settings.enableResizing) { viewModel.updateSetting(SettingsDataStore.ENABLE_RESIZING, it) } }
-        item { ToggleRow("Collapse to bubble mode", settings.enableCollapseTooBubble) { viewModel.updateSetting(SettingsDataStore.ENABLE_BUBBLE, it) } }
+        item { SectionHeader("🪟 Floating Window") }
+        item { ToggleRow("Enable dragging",                     settings.enableDragging)      { viewModel.updateSetting(SettingsDataStore.ENABLE_DRAGGING,     it) } }
+        item { ToggleRow("Enable resize handle (corner drag)",  settings.enableResizing)      { viewModel.updateSetting(SettingsDataStore.ENABLE_RESIZING,     it) } }
+        item { ToggleRow("Edge-collapse (YouTube-style tab)",   settings.enableEdgeCollapse)  { viewModel.updateSetting(SettingsDataStore.ENABLE_EDGE_COLLAPSE, it) } }
+        item { ToggleRow("Show collapse / minimize button",     settings.enableCollapseTooBubble) { viewModel.updateSetting(SettingsDataStore.ENABLE_BUBBLE,   it) } }
+        item {
+            // Default size presets
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    "Default popup size",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "Width ${(settings.popupWidthFraction * 100).toInt()}% · Height ${(settings.popupHeightFraction * 100).toInt()}% · Drag the corner ◢ handle on the popup to resize",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val sizes = listOf(
+                        "Compact" to (0.72f to 0.55f),
+                        "Standard" to (0.88f to 0.65f),
+                        "Large" to (0.94f to 0.80f)
+                    )
+                    sizes.forEach { (label, wh) ->
+                        val (w, h) = wh
+                        val active = (settings.popupWidthFraction - w).let { kotlin.math.abs(it) } < 0.05f
+                        FilterChip(
+                            selected  = active,
+                            onClick   = {
+                                viewModel.updateFloatSetting(SettingsDataStore.POPUP_WIDTH_FRACTION,  w)
+                                viewModel.updateFloatSetting(SettingsDataStore.POPUP_HEIGHT_FRACTION, h)
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+        }
         item { ToggleRow("Auto-close after 5 seconds", settings.autoCloseSeconds > 0) { viewModel.updateSetting(SettingsDataStore.AUTO_CLOSE, it) } }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }

@@ -170,6 +170,41 @@ class PopupViewModel @Inject constructor(
         }
     }
 
+    fun openSearchWeb(context: Context) {
+        val state = _uiState.value
+        if (state is PopupUiState.Success) {
+            val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(state.entry.word + " definition")}")
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+        }
+    }
+
+    fun addFlashcard() {
+        val state = _uiState.value
+        if (state is PopupUiState.Success) {
+            viewModelScope.launch {
+                vocabularyRepository.createFlashcard(state.entry.word, state.entry.word, state.entry.shortMeaning.take(100))
+            }
+        }
+    }
+
+    fun saveWindowPosition(x: Float, y: Float) {
+        viewModelScope.launch {
+            settingsDataStore.update { prefs ->
+                prefs[SettingsDataStore.POPUP_LAST_X] = x
+                prefs[SettingsDataStore.POPUP_LAST_Y] = y
+            }
+        }
+    }
+
+    fun saveWindowSize(widthFraction: Float, heightFraction: Float) {
+        viewModelScope.launch {
+            settingsDataStore.update { prefs ->
+                prefs[SettingsDataStore.POPUP_WIDTH_FRACTION] = widthFraction
+                prefs[SettingsDataStore.POPUP_HEIGHT_FRACTION] = heightFraction
+            }
+        }
+    }
+
     fun shareWord(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {

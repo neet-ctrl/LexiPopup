@@ -116,6 +116,9 @@ class DictionaryRepositoryImpl @Inject constructor(
 
     override suspend fun getDifficultyDistribution(): Map<Int, Int> =
         wordDao.getDifficultyDistribution().associate { it.difficultyLevel to it.count }
+
+    override suspend fun deletePackWords(source: String) =
+        wordDao.deleteWordsBySource(source)
 }
 
 private val STRING_LIST_TYPE = TypeToken.getParameterized(List::class.java, String::class.java).type

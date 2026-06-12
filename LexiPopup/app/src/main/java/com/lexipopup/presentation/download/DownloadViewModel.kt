@@ -6,6 +6,7 @@ import androidx.work.*
 import com.lexipopup.data.download.DatabasePack
 import com.lexipopup.data.download.DictionaryDownloadWorker
 import com.lexipopup.data.download.DownloadStateStore
+import com.lexipopup.domain.repositories.DictionaryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -33,7 +34,8 @@ data class PackDownloadUiState(
 @HiltViewModel
 class DownloadViewModel @Inject constructor(
     private val workManager: WorkManager,
-    private val downloadStateStore: DownloadStateStore
+    private val downloadStateStore: DownloadStateStore,
+    private val dictionaryRepository: DictionaryRepository
 ) : ViewModel() {
 
     private val _packStates = MutableStateFlow(
@@ -149,9 +151,8 @@ class DownloadViewModel @Inject constructor(
     fun deletePack(pack: DatabasePack) {
         cancelDownload(pack)
         viewModelScope.launch {
+            dictionaryRepository.deletePackWords(pack.name.lowercase())
             downloadStateStore.markUninstalled(pack)
-            // Note: words remain in DB as they may overlap with other packs;
-            // a full clean requires filtering by source column.
         }
     }
 }

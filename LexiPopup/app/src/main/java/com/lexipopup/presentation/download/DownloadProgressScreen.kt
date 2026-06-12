@@ -244,7 +244,7 @@ private fun PackDownloadCard(
                     ) {
                         Text(
                             when (state.status) {
-                                DownloadStatus.QUEUED      -> "Waiting for network…"
+                                DownloadStatus.QUEUED      -> "Queued — waiting for other download…"
                                 DownloadStatus.DOWNLOADING -> buildDownloadLabel(state)
                                 DownloadStatus.VERIFYING   -> "Verifying checksum…"
                                 DownloadStatus.IMPORTING   -> "Importing ${formatNum(state.wordsImported)} words…"

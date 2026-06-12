@@ -43,6 +43,9 @@ interface WordDao {
     @Query("DELETE FROM dictionary_cache WHERE source = 'local' AND word = :word")
     suspend fun deleteWord(word: String)
 
+    @Query("DELETE FROM dictionary_cache WHERE source = :source")
+    suspend fun deleteWordsBySource(source: String)
+
     @Query("""
         SELECT * FROM dictionary_cache
         WHERE word LIKE '%' || :query || '%'

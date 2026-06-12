@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lexipopup.data.local.dao.FavoriteWordDao
 import com.lexipopup.data.local.dao.FlashcardDao
@@ -29,7 +30,7 @@ import kotlinx.coroutines.CoroutineScope
         UserNoteEntity::class,
         UserSettingsEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -42,6 +43,17 @@ abstract class LexiDatabase : RoomDatabase() {
     companion object {
         const val DATABASE_NAME = "lexi_dictionary.db"
 
+        /**
+         * Migration 2 → 3: wipe the old built-in seed words so the new
+         * 1 000-word set is inserted fresh by the onOpen re-seed guard.
+         * All user data (favourites, flashcards, notes, history) is untouched.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DELETE FROM dictionary_cache WHERE source = 'seed'")
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
@@ -53,6 +65,7 @@ abstract class LexiDatabase : RoomDatabase() {
                 // what Callback.onCreate receives) is illegal on Android 16 / SQLite 3.46+
                 // and causes the "Safety level may not be changed inside a transaction" crash.
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+                .addMigrations(MIGRATION_2_3)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.roundToInt
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.presentation.about.AboutScreen
@@ -305,6 +306,7 @@ fun DashboardScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (destination) {
                 AppDestination.Home -> HomeScreen(
+                    activeMode = activeMode,
                     todayCount = todayCount,
                     totalWordCount = totalWordCount,
                     recentWords = recentWords,
@@ -383,6 +385,7 @@ fun DashboardScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    activeMode: AppMode,
     todayCount: Int,
     totalWordCount: Int,
     recentWords: List<WordEntry>,

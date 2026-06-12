@@ -91,8 +91,8 @@ fun parseWordEntryFromJson(word: String, json: String, source: String, gson: Gso
         shortMeaning = meaning,
         hindiMeaning = obj["hindi_meaning"]?.asString ?: "",
         exampleSentence = obj["example"]?.asString ?: "",
-        synonyms = runCatching { gson.fromJson<List<String>>(obj["synonyms"], listType) }.getOrDefault(emptyList()),
-        antonyms = runCatching { gson.fromJson<List<String>>(obj["antonyms"], listType) }.getOrDefault(emptyList()),
+        synonyms = runCatching { gson.fromJson<List<String>>(obj["synonyms"], listType) }.getOrNull() ?: emptyList(),
+        antonyms = runCatching { gson.fromJson<List<String>>(obj["antonyms"], listType) }.getOrNull() ?: emptyList(),
         etymology = obj["etymology"]?.asString ?: "",
         source = source,
         mode = AppMode.ENGLISH.id
@@ -118,11 +118,11 @@ fun parseBiologyEntryFromJson(term: String, json: String, source: String, gson: 
         } else emptyMap()
     } catch (_: Exception) { emptyMap() }
 
-    val functions = try { gson.fromJson<List<String>>(obj["functions"], listType) } catch (_: Exception) { emptyList() }
-    val structure = try { gson.fromJson<List<String>>(obj["structure"], listType) } catch (_: Exception) { emptyList() }
-    val diseases = try { gson.fromJson<List<String>>(obj["diseases"], listType) } catch (_: Exception) { emptyList() }
-    val relatedTerms = try { gson.fromJson<List<String>>(obj["related_terms"], listType) } catch (_: Exception) { emptyList() }
-    val synonyms = try { gson.fromJson<List<String>>(obj["synonyms"], listType) } catch (_: Exception) { emptyList() }
+    val functions = try { gson.fromJson<List<String>>(obj["functions"], listType) } catch (_: Exception) { null } ?: emptyList()
+    val structure = try { gson.fromJson<List<String>>(obj["structure"], listType) } catch (_: Exception) { null } ?: emptyList()
+    val diseases = try { gson.fromJson<List<String>>(obj["diseases"], listType) } catch (_: Exception) { null } ?: emptyList()
+    val relatedTerms = try { gson.fromJson<List<String>>(obj["related_terms"], listType) } catch (_: Exception) { null } ?: emptyList()
+    val synonyms = try { gson.fromJson<List<String>>(obj["synonyms"], listType) } catch (_: Exception) { null } ?: emptyList()
     val difficultyLabel = obj["difficulty_label"]?.asString ?: ""
     val difficultyPercent = try { obj["difficulty_percent"]?.asInt ?: 0 } catch (_: Exception) { 0 }
     val frequencyPercent = try { obj["frequency_percent"]?.asInt ?: 50 } catch (_: Exception) { 50 }

@@ -11,28 +11,33 @@ A production-ready Android popup dictionary that integrates with Moon+ Reader an
 ## ⚡ Quick start (3 steps)
 
 ```bash
-# 1. Every push → debug APK auto-builds → download from Releases
+# 1. Push code to GitHub
 git push origin main
 
-# 2. Version release → signed APK
-git tag v1.0.0 && git push origin v1.0.0
+# 2. Generate dictionary packs (once):
+#    GitHub → Actions → "Generate Dictionary Packs" → Run workflow
+#    (auto-patches checksums into the app, auto-commits — you just wait)
 
-# 3. Generate dictionary packs (once) → GitHub Actions → "Generate Dictionary Packs" → Run
+# 3. Build APK:
+#    GitHub → Actions → "Debug APK" → Run workflow   (debug, any time)
+#    GitHub → Actions → "Release APK" → Run workflow → enter v1.0.0   (signed release)
 ```
 
-→ **See [SETUP_COMPLETE.md](SETUP_COMPLETE.md) for the full step-by-step guide including Termux commands.**
+→ **See [SETUP_COMPLETE.md](SETUP_COMPLETE.md) for the full step-by-step guide.**
 
 ---
 
 ## CI/CD Workflows
 
+All three workflows live at **`.github/workflows/`** in the repository root (not inside `LexiPopup/`).
+
 | Workflow | Trigger | Result |
 |----------|---------|--------|
-| **Debug APK** | Every `git push` | Debug APK → GitHub pre-release `debug-latest` |
-| **Release APK** | Push `v*` tag | Signed APK → GitHub Release |
-| **Generate Dictionary Packs** | Manual (Actions tab) | `.db.gz` files → GitHub Release `dict-v1` |
+| **Debug APK** | Manual (Actions tab) | Debug APK → GitHub pre-release `debug-latest` |
+| **Release APK** | Manual — enter version tag (e.g. `v1.0.0`) | Signed APK → GitHub Release |
+| **Generate Dictionary Packs** | Manual (Actions tab) | `.db.gz` files → GitHub Release `dict-v1`; checksums auto-patched into app |
 
-No secrets to configure. `GITHUB_TOKEN` is automatic.
+No secrets to configure. `GITHUB_TOKEN` is automatic. Keystore is embedded.
 
 ---
 
@@ -87,41 +92,42 @@ Word tapped in Moon+ Reader
 ## Project Structure
 
 ```
+.github/workflows/               ← Root-level (triggers on GitHub)
+├── debug.yml                    ← Manual debug APK build
+├── release.yml                  ← Manual signed release APK
+└── generate-dicts.yml           ← Manual dictionary pack generation + auto-checksum patch
+
 LexiPopup/
-├── .github/workflows/
-│   ├── debug.yml            ← Auto debug APK on every push
-│   ├── release.yml          ← Signed release APK on v* tag
-│   └── generate-dicts.yml   ← Generate dictionary .db.gz packs
 ├── scripts/
-│   └── generate_dicts.py    ← Python script for dict generation (WordNet-based)
+│   └── generate_dicts.py        ← Python script: Wiktionary + WordNet + Hindi WordNet
 ├── app/src/main/java/com/lexipopup/
 │   ├── data/
-│   │   ├── download/        DictionaryDownloadWorker (checksum + resume)
+│   │   ├── download/            DictionaryDownloadWorker, DownloadStateStore, DatabasePack enum
 │   │   ├── local/
-│   │   │   ├── dao/         WordDao, VocabularyDao, FlashcardDao, ...
-│   │   │   ├── database/    LexiDatabase (Room), DatabaseSeeder (1000 words)
-│   │   │   └── entities/    WordEntity, VocabularyHistoryEntity, ...
-│   │   └── remote/          DictionaryApi (FreeDictionaryAPI)
-│   ├── di/                  AppModule, DataStoreModule
+│   │   │   ├── dao/             WordDao, VocabularyDao, FlashcardDao, ...
+│   │   │   ├── database/        LexiDatabase (Room), DatabaseSeeder (1000 words)
+│   │   │   └── entities/        WordEntity, VocabularyHistoryEntity, ...
+│   │   └── remote/              DictionaryApi (FreeDictionaryAPI)
+│   ├── di/                      AppModule, DataStoreModule
 │   ├── domain/
-│   │   ├── models/          WordEntry, AppSettings, Flashcard, ...
-│   │   ├── repositories/    DictionaryRepository, VocabularyRepository
-│   │   └── usecases/        LookupWordUseCase (5-layer), SpacedRepetitionUseCase
+│   │   ├── models/              WordEntry, AppSettings, Flashcard, ...
+│   │   ├── repositories/        DictionaryRepository, VocabularyRepository
+│   │   └── usecases/            LookupWordUseCase (5-layer), SpacedRepetitionUseCase
 │   ├── presentation/
-│   │   ├── ai/              AiSettingsScreen, AiSettingsViewModel
-│   │   ├── dashboard/       DashboardScreen (5 tabs), DashboardViewModel
-│   │   ├── flashcards/      FlashcardsScreen, FlashcardsViewModel
-│   │   ├── onboarding/      OnboardingActivity, DatabasePackScreen
-│   │   ├── popup/           PopupActivity, PopupScreen (glassmorphism UI)
-│   │   └── theme/           Material 3 theme
+│   │   ├── ai/                  AiSettingsScreen, AiSettingsViewModel
+│   │   ├── dashboard/           DashboardScreen (5 tabs), DashboardViewModel
+│   │   ├── flashcards/          FlashcardsScreen, FlashcardsViewModel
+│   │   ├── onboarding/          OnboardingActivity, DatabasePackScreen
+│   │   ├── popup/               PopupActivity, PopupScreen (glassmorphism UI)
+│   │   └── theme/               Material 3 theme
 │   └── utils/
-│       ├── ai/              AiProvider, GroqAiProvider, OnDeviceAiProvider,
-│       │                    AiProviderManager (Hybrid orchestrator)
-│       ├── ExportHelper     CSV / JSON / Anki TSV
-│       ├── NotificationHelper Persistent notification
-│       ├── SettingsDataStore 30 toggle keys (all with defaults)
-│       └── TtsHelper        TTS word/meaning speaking
-└── SETUP_COMPLETE.md        ← Full step-by-step setup guide
+│       ├── ai/                  AiProvider, GroqAiProvider, OnDeviceAiProvider,
+│       │                        AiProviderManager (Hybrid orchestrator)
+│       ├── ExportHelper         CSV / JSON / Anki TSV
+│       ├── NotificationHelper   Persistent notification
+│       ├── SettingsDataStore    30 toggle keys (all with defaults)
+│       └── TtsHelper            TTS word/meaning speaking
+└── SETUP_COMPLETE.md            ← Full step-by-step setup guide
 ```
 
 ---
@@ -139,9 +145,10 @@ LexiPopup/
 
 | Source | License | Words |
 |--------|---------|-------|
-| WordNet 3.1 (Princeton) | Free for all use | ~117,000 |
-| CMU Pronouncing Dictionary | Free/Public Domain | IPA pronunciation |
-| Hindi WordNet (IIT Bombay) | GNU FDL — non-commercial | ~28,000 |
+| Wiktionary (kaikki.org JSONL) | CC BY-SA 3.0 | ~700,000+ English entries |
+| WordNet 3.1 (Princeton) | Free for all use | ~155,000 lemmas |
+| CMU Pronouncing Dictionary | Public Domain | IPA pronunciation |
+| Hindi WordNet / OMW 1.4 (IIT Bombay) | GNU FDL — non-commercial | Hindi meanings |
 | FreeDictionaryAPI | Free | Online fallback |
 
 ---
@@ -168,8 +175,7 @@ cd LexiPopup
 ## Complete Setup Guide
 
 **→ [SETUP_COMPLETE.md](SETUP_COMPLETE.md)** — Step-by-step guide including:
-- Termux setup commands
-- How to generate and host dictionary packs
+- How to generate dictionary packs (fully automated via GitHub Actions)
 - APK build + install
 - Groq AI configuration
 - Moon+ Reader setup

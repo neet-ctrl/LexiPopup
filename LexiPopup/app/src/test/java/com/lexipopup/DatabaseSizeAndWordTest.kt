@@ -15,7 +15,8 @@ import java.io.File
 /**
  * Verifies that critical words are in the seed database,
  * lookup performance meets the <50ms target, and that when
- * the full pack is downloaded it fits within the 120MB budget.
+ * the full pack is downloaded it fits within the 300MB budget
+ * (Full pack is Wiktionary + WordNet + Hindi WordNet, up to ~200MB on-disk).
  */
 @RunWith(AndroidJUnit4::class)
 class DatabaseSizeAndWordTest {
@@ -115,7 +116,7 @@ class DatabaseSizeAndWordTest {
             return
         }
         val sizeMb = dbFile.length() / (1024 * 1024)
-        assertTrue("Production DB must be under 120MB but is ${sizeMb}MB", sizeMb < 120)
+        assertTrue("Production DB must be under 300MB but is ${sizeMb}MB", sizeMb < 300)
     }
 
     @Test

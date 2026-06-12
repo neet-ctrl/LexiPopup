@@ -88,7 +88,7 @@ fun OnboardingScreen(
         OnboardingPage(
             Icons.Default.CloudDownload,
             "Download Full Dictionary",
-            "The app comes with 1,000 seed words. Download the full Wiktionary + WordNet + Hindi pack (offline) to unlock 100,000+ definitions."
+            "The app comes with 1,000 seed words. Download the Standard pack (155K words) or Full pack (700K+ words) to unlock complete offline coverage."
         )
     )
     var currentPage by remember { mutableIntStateOf(0) }

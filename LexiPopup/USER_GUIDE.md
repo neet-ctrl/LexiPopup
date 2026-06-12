@@ -11,9 +11,9 @@
 | **Online fallback** | ~200,000+ common English words | Internet connection (no key needed) |
 | **Groq AI fallback** | Any word including rare/technical | Free API key from console.groq.com |
 | **On-Device AI** | Any word, fully offline | One-time model download (1.5–2.7 GB) |
-| **Downloaded packs** | ~10K–60K+ offline words | Internet once to download |
+| **Downloaded packs** | ~10K – 700K+ offline words | Internet once to download |
 
-> **Short answer:** You get 1,000 seed words on first install. For best coverage: download the Standard pack (offline, ~60K words) + configure free Groq AI key (explains anything the dictionary misses).
+> **Short answer:** You get 1,000 seed words on first install. For best coverage: download the Standard pack (offline, ~155K words) + configure a free Groq AI key (explains anything the dictionary misses).
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### Option A: Download from GitHub Releases (easiest)
 1. Go to **https://github.com/neet-ctrl/LexiPopup/releases**
-2. Download the latest `LexiPopup-debug-*.apk`
+2. Download the latest `LexiPopup-debug-*.apk` or the signed release APK
 3. Transfer to your phone → tap to install
 4. Enable "Install from unknown sources" if prompted
 
@@ -154,13 +154,13 @@ Persistent notification launcher on/off
 Save history · Auto-generate flashcards
 
 ### 📖 Dictionary Data
-**Manage Dictionary Packs** — download Wiktionary-based packs:
+**Manage Dictionary Packs** — download offline packs:
 
 | Pack | Words | Size | Contents |
 |------|-------|------|----------|
-| **Minimal** | ~10,000 | ~15 MB | Most common English |
-| **Standard** | ~60,000 | ~80 MB | Full WordNet coverage |
-| **Full** | ~60,000+ | ~120 MB | Standard + Hindi meanings |
+| **Minimal** | ~10,000 | ~15 MB | Most common English + Hindi |
+| **Standard** | ~155,000 | ~80 MB | Full WordNet + Hindi — recommended |
+| **Full** | ~700,000+ | ~200 MB | Wiktionary + WordNet + Hindi WordNet |
 
 ### 🤖 AI Assistant
 LexiPopup uses AI only as a last resort — offline dictionary first, then online FreeDictionaryAPI, then AI.
@@ -173,10 +173,6 @@ Tap **"Configure"** to open the AI settings:
 3. Paste it in LexiPopup → AI Settings → Groq API Key
 - **Free: 1,000 lookups/day, 30/minute**
 - Model: llama-3.3-70b-versatile
-
-#### OpenAI
-- Requires a paid OpenAI account at platform.openai.com
-- Uses GPT-4o-mini
 
 #### On-Device AI (offline, no API key)
 1. Select a model:
@@ -238,9 +234,10 @@ Word tapped in Moon+ Reader
 
 | Source | License | Coverage |
 |--------|---------|----------|
-| **WordNet 3.1** (Princeton) | Free for all use | ~117,000 words, synonyms, antonyms |
+| **Wiktionary** (kaikki.org) | CC BY-SA 3.0 | ~700,000+ English entries |
+| **WordNet 3.1** (Princeton) | Free for all use | ~155,000 lemmas, synonyms, antonyms |
 | **CMU Pronouncing Dictionary** | Free / Public Domain | IPA pronunciation |
-| **Hindi WordNet** (IIT Bombay) | GNU FDL — **non-commercial only** | Hindi meanings |
+| **Hindi WordNet / OMW** (IIT Bombay) | GNU FDL — **non-commercial only** | Hindi meanings |
 | **FreeDictionaryAPI** | Free | Online fallback |
 | **Groq AI** | Free tier | AI explanations |
 
@@ -269,7 +266,7 @@ Word tapped in Moon+ Reader
 - [ ] Grant "Display over other apps" during onboarding
 - [ ] Install Moon+ Reader
 - [ ] In Moon+: Settings → Read → Dictionary → LexiPopup
-- [ ] Download dictionary pack (Standard recommended)
+- [ ] Download dictionary pack (Standard recommended — ~155K words)
 - [ ] Get free Groq key → console.groq.com → paste in AI Settings
 - [ ] Long-press a word in Moon+ → LexiPopup → enjoy 🎉
 

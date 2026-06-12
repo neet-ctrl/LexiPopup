@@ -1,6 +1,7 @@
 package com.lexipopup.presentation.flashcards
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,11 +22,52 @@ import com.lexipopup.domain.models.Flashcard
 import kotlin.math.abs
 
 @Composable
-fun FlashcardsScreen(viewModel: FlashcardsViewModel = hiltViewModel()) {
+fun FlashcardsScreen(
+    viewModel: FlashcardsViewModel = hiltViewModel(),
+    historyCount: Int = 0,
+    onNavigateToHistory: () -> Unit = {}
+) {
     val dueCards by viewModel.dueCards.collectAsState()
     val stats by viewModel.stats.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+        // ── Word History entry card ─────────────────────────────────────────
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToHistory),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Word History", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (historyCount > 0) "$historyCount words — all offline" else "All words you've ever looked up",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
         // Stats header
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             StatChip("Due", stats.due, Color(0xFFFF9800))

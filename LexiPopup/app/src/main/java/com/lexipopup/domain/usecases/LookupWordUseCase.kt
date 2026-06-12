@@ -34,6 +34,7 @@ class LookupWordUseCase @Inject constructor(
         val aiEntry = aiProviderManager.explain(word)
         if (aiEntry != null) {
             repository.saveToCache(aiEntry)
+            repository.markAccessed(word)
             memoryCache.put(word, aiEntry)
             return@withContext Result.success(aiEntry)
         }

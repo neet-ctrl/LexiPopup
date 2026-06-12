@@ -40,6 +40,8 @@ import com.lexipopup.presentation.dictionary.DictionaryBrowserViewModel
 import com.lexipopup.presentation.dictionary.WordDetailScreen
 import com.lexipopup.presentation.flashcards.FlashcardsScreen
 import com.lexipopup.presentation.flashcards.FlashcardsViewModel
+import com.lexipopup.presentation.history.WordHistoryScreen
+import com.lexipopup.presentation.history.WordHistoryViewModel
 import com.lexipopup.presentation.ai.AiSettingsScreen
 import com.lexipopup.presentation.ai.AiSettingsViewModel
 import com.lexipopup.presentation.download.DownloadProgressScreen
@@ -60,6 +62,7 @@ sealed class AppDestination {
     object DownloadPacks : AppDestination()
     object AiSettings : AppDestination()
     object Backup : AppDestination()
+    object WordHistory : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,6 +134,7 @@ fun DashboardScreen(
             AppDestination.DownloadPacks -> AppDestination.Settings
             AppDestination.AiSettings   -> AppDestination.Settings
             AppDestination.Backup        -> AppDestination.Settings
+            AppDestination.WordHistory   -> AppDestination.Flashcards
             else -> AppDestination.Home
         }
     }
@@ -161,6 +165,15 @@ fun DashboardScreen(
         AppDestination.Backup -> {
             val backupVm: com.lexipopup.presentation.backup.BackupViewModel = hiltViewModel()
             com.lexipopup.presentation.backup.BackupRestoreScreen(viewModel = backupVm, onBack = { destination = AppDestination.Settings })
+            return
+        }
+        AppDestination.WordHistory -> {
+            val historyVm: WordHistoryViewModel = hiltViewModel()
+            WordHistoryScreen(
+                onBack = { destination = AppDestination.Flashcards },
+                onWordSelected = { word -> destination = AppDestination.WordDetail(word) },
+                viewModel = historyVm
+            )
             return
         }
         else -> Unit
@@ -240,7 +253,13 @@ fun DashboardScreen(
                 )
                 AppDestination.Flashcards -> {
                     val flashVm: FlashcardsViewModel = hiltViewModel()
-                    FlashcardsScreen(viewModel = flashVm)
+                    val historyVm: WordHistoryViewModel = hiltViewModel()
+                    val historyCount by historyVm.historyCount.collectAsState()
+                    FlashcardsScreen(
+                        viewModel = flashVm,
+                        historyCount = historyCount,
+                        onNavigateToHistory = { destination = AppDestination.WordHistory }
+                    )
                 }
                 AppDestination.Stats -> StatsScreen(
                     todayCount = todayCount,

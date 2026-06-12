@@ -24,4 +24,7 @@ interface DictionaryRepository {
     suspend fun getWordOfDay(mode: String = "global", userLevel: Int = 2): WordEntry?
     suspend fun getDifficultyDistribution(): Map<Int, Int>
     suspend fun deletePackWords(source: String)
+    fun getWordHistory(): Flow<List<WordEntry>>
+    fun getWordHistoryCount(): Flow<Int>
+    suspend fun markAccessed(word: String)
 }

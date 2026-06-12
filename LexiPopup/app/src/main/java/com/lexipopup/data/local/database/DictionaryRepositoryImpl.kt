@@ -30,6 +30,7 @@ class DictionaryRepositoryImpl @Inject constructor(
             val remote = api.getDefinition(word)
             val entry = remote.firstOrNull()?.toWordEntry(word) ?: return null
             saveToCache(entry)
+            wordDao.updateAccess(word)
             entry
         } catch (e: Exception) {
             null
@@ -119,6 +120,13 @@ class DictionaryRepositoryImpl @Inject constructor(
 
     override suspend fun deletePackWords(source: String) =
         wordDao.deleteWordsBySource(source)
+
+    override fun getWordHistory(): Flow<List<WordEntry>> =
+        wordDao.getAllHistoryWords().map { list -> list.map { it.toDomain(gson) } }
+
+    override fun getWordHistoryCount(): Flow<Int> = wordDao.getHistoryWordCountFlow()
+
+    override suspend fun markAccessed(word: String) = wordDao.updateAccess(word)
 }
 
 private val STRING_LIST_TYPE = TypeToken.getParameterized(List::class.java, String::class.java).type

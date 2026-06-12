@@ -141,6 +141,19 @@ interface WordDao {
     suspend fun getRandomWordOfDayCandidate(
         minFreq: Int, maxFreq: Int, minDiff: Int, maxDiff: Int
     ): WordEntity?
+
+    @Query("""
+        SELECT * FROM dictionary_cache
+        WHERE access_count > 0 OR source IN ('online', 'groq', 'openai', 'on_device')
+        ORDER BY last_accessed DESC
+    """)
+    fun getAllHistoryWords(): Flow<List<WordEntity>>
+
+    @Query("""
+        SELECT COUNT(*) FROM dictionary_cache
+        WHERE access_count > 0 OR source IN ('online', 'groq', 'openai', 'on_device')
+    """)
+    fun getHistoryWordCountFlow(): Flow<Int>
 }
 
 data class DifficultyCountRow(

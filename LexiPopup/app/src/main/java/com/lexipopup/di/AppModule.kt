@@ -3,6 +3,7 @@ package com.lexipopup.di
 import android.content.Context
 import androidx.work.WorkManager
 import com.google.gson.Gson
+import com.lexipopup.data.local.dao.ChatDao
 import com.lexipopup.data.local.database.DictionaryRepositoryImpl
 import com.lexipopup.data.local.database.LexiDatabase
 import com.lexipopup.data.local.database.VocabularyRepositoryImpl
@@ -58,6 +59,9 @@ object AppModule {
 
     @Provides
     fun provideUserNoteDao(db: LexiDatabase) = db.userNoteDao()
+
+    @Provides
+    fun provideChatDao(db: LexiDatabase): ChatDao = db.chatDao()
 
     @Provides
     @Singleton

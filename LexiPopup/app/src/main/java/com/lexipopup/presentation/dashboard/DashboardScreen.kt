@@ -62,6 +62,8 @@ import com.lexipopup.presentation.history.WordHistoryScreen
 import com.lexipopup.presentation.history.WordHistoryViewModel
 import com.lexipopup.presentation.ai.AiSettingsScreen
 import com.lexipopup.presentation.ai.AiSettingsViewModel
+import com.lexipopup.presentation.chat.AiChatScreen
+import com.lexipopup.presentation.chat.AiChatViewModel
 import com.lexipopup.presentation.download.DownloadProgressScreen
 import com.lexipopup.utils.ExportFormat
 import com.lexipopup.utils.SettingsDataStore
@@ -83,6 +85,7 @@ sealed class AppDestination {
     object WordHistory : AppDestination()
     object SeedWordList : AppDestination()
     object LookupLayers : AppDestination()
+    object AiChat : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -229,6 +232,7 @@ fun DashboardScreen(
     val bottomNavItems = listOf(
         Triple(AppDestination.Home, Icons.Default.Home, "Home"),
         Triple(AppDestination.Dictionary, Icons.Default.MenuBook, "Dictionary"),
+        Triple(AppDestination.AiChat, Icons.Default.SmartToy, "AI Chat"),
         Triple(AppDestination.Flashcards, Icons.Default.School, "Flashcards"),
         Triple(AppDestination.Stats, Icons.Default.BarChart, "Stats"),
         Triple(AppDestination.Settings, Icons.Default.Settings, "Settings")
@@ -242,6 +246,7 @@ fun DashboardScreen(
                         when (destination) {
                             AppDestination.Home -> "LexiPopup"
                             AppDestination.Dictionary -> "Dictionary"
+                            AppDestination.AiChat -> "AI Chat"
                             AppDestination.Flashcards -> "Flashcards"
                             AppDestination.Stats -> "Statistics"
                             AppDestination.Settings -> "Settings"
@@ -317,6 +322,13 @@ fun DashboardScreen(
                     activityData = activityData,
                     difficultyDistribution = difficultyDistribution
                 )
+                AppDestination.AiChat -> {
+                    val chatVm: AiChatViewModel = hiltViewModel()
+                    AiChatScreen(
+                        viewModel = chatVm,
+                        onWordSelected = { word -> destination = AppDestination.WordDetail(word) }
+                    )
+                }
                 AppDestination.Settings -> SettingsScreen(
                     settings = settings,
                     recentWords = recentWords,

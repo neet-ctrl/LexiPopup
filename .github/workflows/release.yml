@@ -1,13 +1,10 @@
 name: Release APK → GitHub Release
 
-# Currently: manual trigger only.
-# To make automatic, uncomment the push block below:
-#   push:
-#     branches:
-#       - main
-#     tags:
-#       - 'v*'
 on:
+  push:
+    branches:
+      - main
+      - master
   workflow_dispatch:
     inputs:
       tag:
@@ -147,8 +144,14 @@ jobs:
 
       - name: Resolve version tag
         run: |
-          # workflow_dispatch → use the tag input; tag push → use ref_name
-          RAW="${{ github.event.inputs.tag || github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger — use the tag the user typed
+            RAW="${{ github.event.inputs.tag }}"
+          else
+            # Auto push trigger — derive tag from versionName + build number
+            VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+            RAW="v${VERSION_NAME}-build.${{ github.run_number }}"
+          fi
           VER="${RAW#v}"
           echo "RELEASE_TAG=${RAW}" >> $GITHUB_ENV
           echo "APK_VER=${VER}"     >> $GITHUB_ENV
@@ -182,6 +185,8 @@ jobs:
           name: "🚀 LexiPopup ${{ env.RELEASE_TAG }}"
           body: |
             ## LexiPopup ${{ env.RELEASE_TAG }}
+
+            ${{ github.event_name == 'push' && format('Auto-built from commit `{0}` on `{1}`', github.sha, github.ref_name) || 'Manual release' }}
 
             ### Installation
             1. Download `LexiPopup-${{ env.APK_VER }}-signed.apk` below

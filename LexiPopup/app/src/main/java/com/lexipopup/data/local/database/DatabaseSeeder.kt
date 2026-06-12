@@ -11,7 +11,8 @@ import org.json.JSONArray
 object DatabaseSeeder {
 
     fun seed(db: SupportSQLiteDatabase) {
-        db.beginTransaction()
+        val needsTransaction = !db.inTransaction()
+        if (needsTransaction) db.beginTransaction()
         try {
             val words = getSeedWords()
             for (w in words) {
@@ -29,9 +30,9 @@ object DatabaseSeeder {
                     )
                 )
             }
-            db.setTransactionSuccessful()
+            if (needsTransaction) db.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            if (needsTransaction) db.endTransaction()
         }
     }
 

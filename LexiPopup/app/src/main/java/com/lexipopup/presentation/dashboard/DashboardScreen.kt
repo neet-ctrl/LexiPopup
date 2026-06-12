@@ -296,7 +296,6 @@ fun DashboardScreen(
                     settings = settings,
                     recentWords = recentWords,
                     viewModel = viewModel,
-                    context = context,
                     onManagePacks = { destination = AppDestination.DownloadPacks },
                     onOpenAiSettings = { destination = AppDestination.AiSettings },
                     onOpenBackup = { destination = AppDestination.Backup },
@@ -869,7 +868,6 @@ fun SettingsScreen(
     settings: AppSettings,
     recentWords: List<WordEntry>,
     viewModel: DashboardViewModel,
-    context: android.content.Context,
     onManagePacks: () -> Unit = {},
     onOpenAiSettings: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
@@ -877,6 +875,34 @@ fun SettingsScreen(
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var pendingExportFormat by remember { mutableStateOf<ExportFormat?>(null) }
+
+    val ts = remember { System.currentTimeMillis() }
+
+    val csvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri -> uri?.let { viewModel.exportVocabularyToUri(recentWords, ExportFormat.CSV, it) } }
+
+    val jsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let { viewModel.exportVocabularyToUri(recentWords, ExportFormat.JSON, it) } }
+
+    val ankiLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri -> uri?.let { viewModel.exportVocabularyToUri(recentWords, ExportFormat.ANKI_TSV, it) } }
+
+    val settingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let { viewModel.exportSettingsToUri(it) } }
+
+    LaunchedEffect(pendingExportFormat) {
+        when (pendingExportFormat) {
+            ExportFormat.CSV      -> { csvLauncher.launch("lexipopup_vocab_$ts.csv");   pendingExportFormat = null }
+            ExportFormat.JSON     -> { jsonLauncher.launch("lexipopup_vocab_$ts.json");  pendingExportFormat = null }
+            ExportFormat.ANKI_TSV -> { ankiLauncher.launch("lexipopup_anki_$ts.txt");   pendingExportFormat = null }
+            null -> {}
+        }
+    }
 
     if (showResetDialog) {
         AlertDialog(
@@ -892,8 +918,8 @@ fun SettingsScreen(
         ExportDialog(
             onDismiss = { showExportDialog = false },
             onExport = { format ->
-                viewModel.exportVocabulary(recentWords, format, context)
                 showExportDialog = false
+                pendingExportFormat = format
             }
         )
     }
@@ -1086,20 +1112,11 @@ fun SettingsScreen(
         item {
             OutlinedButton(
                 onClick = {
-                    val uri = viewModel.exportSettingsUri()
-                    if (uri != null) {
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/json"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            putExtra(Intent.EXTRA_SUBJECT, "LexiPopup Settings")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "Export settings"))
-                    }
+                    settingsLauncher.launch("lexipopup_settings_${System.currentTimeMillis()}.json")
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Share, null)
+                Icon(Icons.Default.SaveAlt, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Export Settings as JSON")
             }

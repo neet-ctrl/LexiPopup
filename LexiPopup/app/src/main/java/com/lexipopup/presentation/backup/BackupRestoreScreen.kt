@@ -30,6 +30,12 @@ fun BackupRestoreScreen(
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
 
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri != null) viewModel.exportBackup(context, uri)
+    }
+
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -57,7 +63,6 @@ fun BackupRestoreScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Status banner
             AnimatedVisibility(
                 visible = state !is BackupUiState.Idle,
                 enter = fadeIn(),
@@ -75,7 +80,7 @@ fun BackupRestoreScreen(
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 Text(
-                                    if (state is BackupUiState.Exporting) "Preparing backup…" else "Restoring data…",
+                                    if (state is BackupUiState.Exporting) "Saving backup…" else "Restoring data…",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -85,7 +90,7 @@ fun BackupRestoreScreen(
                         StatusCard(
                             icon = Icons.Default.CheckCircle,
                             tint = Color(0xFF4CAF50),
-                            message = "Backup ready — ${s.wordCount} words with full details. Choose an app to save it.",
+                            message = "Backup saved — ${s.wordCount} words with full details.",
                             onDismiss = { viewModel.resetState() }
                         )
                     }
@@ -109,7 +114,6 @@ fun BackupRestoreScreen(
                 }
             }
 
-            // Export card
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -141,18 +145,19 @@ fun BackupRestoreScreen(
                     )
 
                     Button(
-                        onClick = { viewModel.exportBackup(context) },
+                        onClick = {
+                            exportLauncher.launch("lexipopup-backup-${System.currentTimeMillis()}.json")
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = state is BackupUiState.Idle || state is BackupUiState.ExportDone || state is BackupUiState.Error
                     ) {
-                        Icon(Icons.Default.Share, null)
+                        Icon(Icons.Default.SaveAlt, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Export & Share Backup")
+                        Text("Save Backup to Storage")
                     }
                 }
             }
 
-            // Import card
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -205,7 +210,6 @@ fun BackupRestoreScreen(
                 }
             }
 
-            // Info card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -213,7 +217,7 @@ fun BackupRestoreScreen(
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("ℹ️ About backups", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        "Backups are saved as plain JSON files you can store anywhere — Google Drive, email, local storage. They're human-readable and not encrypted.",
+                        "Tap 'Save Backup to Storage' to choose where to save the file on your phone — Downloads, Google Drive, or any folder. Backups are plain JSON files you can store anywhere.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

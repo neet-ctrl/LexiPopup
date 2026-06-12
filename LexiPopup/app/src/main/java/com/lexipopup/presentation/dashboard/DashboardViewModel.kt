@@ -1,6 +1,5 @@
 package com.lexipopup.presentation.dashboard
 
-import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -97,22 +96,20 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    /** Export all vocabulary as CSV/JSON/Anki and open share sheet */
-    fun exportVocabulary(words: List<WordEntry>, format: ExportFormat, context: Context) {
+    /** Export all vocabulary directly to a SAF URI chosen by the user */
+    fun exportVocabularyToUri(words: List<WordEntry>, format: ExportFormat, uri: Uri) {
         viewModelScope.launch {
-            val uri = exportHelper.exportWords(words, format)
-            val intent = exportHelper.shareExport(uri, format)
-            context.startActivity(intent)
+            runCatching { exportHelper.exportWordsToUri(words, format, uri) }
         }
     }
 
-    /** Export current settings as JSON and return Uri for sharing */
-    fun exportSettingsUri(): Uri? {
-        return try {
-            val json = gson.toJson(settings.value)
-            exportHelper.exportSettingsJson(json)
-        } catch (e: Exception) {
-            null
+    /** Export current settings directly to a SAF URI chosen by the user */
+    fun exportSettingsToUri(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val json = gson.toJson(settings.value)
+                exportHelper.exportSettingsToUri(json, uri)
+            }
         }
     }
 

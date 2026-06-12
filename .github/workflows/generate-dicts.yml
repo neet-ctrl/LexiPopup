@@ -82,11 +82,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Print next steps
+      - name: Auto-patch checksums into DictionaryDownloadWorker.kt
         run: |
-          echo ""
-          echo "=== NEXT STEP ==="
-          echo "Copy checksums from output/checksums.txt into"
-          echo "LexiPopup/app/src/main/java/com/lexipopup/data/download/DictionaryDownloadWorker.kt"
-          echo ""
-          cat output/checksums.txt
+          MINIMAL_SHA=$(grep  "^MINIMAL "  output/checksums.txt | awk '{print $3}')
+          STANDARD_SHA=$(grep "^STANDARD " output/checksums.txt | awk '{print $3}')
+          FULL_SHA=$(grep     "^FULL "     output/checksums.txt | awk '{print $3}')
+
+          echo "MINIMAL  SHA: $MINIMAL_SHA"
+          echo "STANDARD SHA: $STANDARD_SHA"
+          echo "FULL     SHA: $FULL_SHA"
+
+          FILE="LexiPopup/app/src/main/java/com/lexipopup/data/download/DictionaryDownloadWorker.kt"
+
+          sed -i "s|DatabasePack.MINIMAL.name  to \"[^\"]*\"|DatabasePack.MINIMAL.name  to \"${MINIMAL_SHA}\"|"  "$FILE"
+          sed -i "s|DatabasePack.STANDARD.name to \"[^\"]*\"|DatabasePack.STANDARD.name to \"${STANDARD_SHA}\"|" "$FILE"
+          sed -i "s|DatabasePack.FULL.name     to \"[^\"]*\"|DatabasePack.FULL.name     to \"${FULL_SHA}\"|"     "$FILE"
+
+          echo "--- Patched PACK_CHECKSUMS section ---"
+          grep -A5 "PACK_CHECKSUMS" "$FILE"
+
+      - name: Commit and push updated checksums
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add LexiPopup/app/src/main/java/com/lexipopup/data/download/DictionaryDownloadWorker.kt
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: auto-update dictionary pack checksums [skip ci]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

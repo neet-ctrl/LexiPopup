@@ -50,6 +50,7 @@ class SettingsDataStore @Inject constructor(
         // Floating window extras
         val SHOW_SEARCH_WEB = booleanPreferencesKey("show_search_web")
         val SHOW_FLASHCARD_BTN = booleanPreferencesKey("show_flashcard_btn")
+        val SHOW_BROWSER_BTN = booleanPreferencesKey("show_browser_btn")
         val BUTTON_ORDER = stringPreferencesKey("button_order")
         val POPUP_WIDTH_FRACTION = androidx.datastore.preferences.core.floatPreferencesKey("popup_width_fraction")
         val POPUP_HEIGHT_FRACTION = androidx.datastore.preferences.core.floatPreferencesKey("popup_height_fraction")
@@ -110,7 +111,8 @@ class SettingsDataStore @Inject constructor(
             autoCloseSeconds = prefs[AUTO_CLOSE_SECONDS] ?: 0,
             showSearchWebButton = prefs[SHOW_SEARCH_WEB] ?: false,
             showFlashcardButton = prefs[SHOW_FLASHCARD_BTN] ?: false,
-            buttonOrder = prefs[BUTTON_ORDER] ?: "copy,speak,meaning,translate,share,note,details,web,flashcard",
+            showBrowserButton = prefs[SHOW_BROWSER_BTN] ?: true,
+            buttonOrder = prefs[BUTTON_ORDER] ?: "copy,speak,meaning,translate,share,note,details,web,flashcard,browser",
             popupWidthFraction = prefs[POPUP_WIDTH_FRACTION] ?: 0.88f,
             popupHeightFraction = prefs[POPUP_HEIGHT_FRACTION] ?: 0.65f,
             popupLastOffsetX = prefs[POPUP_LAST_X] ?: 0f,

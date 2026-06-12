@@ -165,7 +165,19 @@ class PopupViewModel @Inject constructor(
     fun openTranslate(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            val uri = Uri.parse("https://translate.google.com/?text=${Uri.encode(state.entry.word)}&sl=en&tl=hi")
+            // Translate the full meaning text (short + detailed if different), not just the word
+            val meaningText = buildString {
+                append(state.entry.shortMeaning)
+                if (state.entry.detailedMeaning.isNotBlank() &&
+                    state.entry.detailedMeaning != state.entry.shortMeaning
+                ) {
+                    append(". ")
+                    append(state.entry.detailedMeaning)
+                }
+            }.trim()
+            val uri = Uri.parse(
+                "https://translate.google.com/?text=${Uri.encode(meaningText)}&sl=en&tl=hi"
+            )
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
@@ -174,6 +186,15 @@ class PopupViewModel @Inject constructor(
         val state = _uiState.value
         if (state is PopupUiState.Success) {
             val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(state.entry.word + " definition")}")
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+        }
+    }
+
+    fun openInBrowser(context: Context) {
+        val state = _uiState.value
+        if (state is PopupUiState.Success) {
+            // Opens "<word> meaning" in browser — standard dictionary search suffix
+            val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(state.entry.word + " meaning")}")
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }

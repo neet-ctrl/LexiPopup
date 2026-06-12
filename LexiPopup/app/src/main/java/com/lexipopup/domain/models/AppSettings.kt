@@ -24,9 +24,10 @@ data class AppSettings(
     val showFullDetailsButton: Boolean = true,
     val showSearchWebButton: Boolean = false,
     val showFlashcardButton: Boolean = false,
+    val showBrowserButton: Boolean = true,
 
     // Button order — comma-separated button IDs
-    val buttonOrder: String = "copy,speak,meaning,translate,share,note,details,web,flashcard",
+    val buttonOrder: String = "copy,speak,meaning,translate,share,note,details,web,flashcard,browser",
 
     // Popup Behavior
     val enableDragging: Boolean = true,

@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
@@ -535,6 +536,7 @@ fun PopupScreen(
                                             settings       = settings,
                                             haptic         = haptic,
                                             onCopy         = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.copyToClipboard(context) },
+                                            onOpenBrowser  = { viewModel.openInBrowser(context) },
                                             onSpeakWord    = { viewModel.speakWord(context) },
                                             onSpeakMeaning = { viewModel.speakMeaning(context) },
                                             onTranslate    = { viewModel.openTranslate(context) },
@@ -653,58 +655,68 @@ fun PopupHeader(
 
         Spacer(Modifier.width(10.dp))
 
-        // Center: word, speaker icon inline, pronunciation
-        Column(modifier = Modifier.weight(1f)) {
+        // Center: WORD [🔊] /pronunciation/ — all on ONE row (matching screenshot exactly)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
             when (val st = uiState) {
                 is PopupUiState.Success -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = st.entry.word.uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        if (settings.showSpeakWordButton) {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(primaryColor.copy(alpha = 0.12f))
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onSpeakWord() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.VolumeUp,
-                                    contentDescription = "Speak",
-                                    tint = primaryColor,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
+                    // Word — bold, large
+                    Text(
+                        text = st.entry.word.uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // Speaker icon — inline, same row as word
+                    if (settings.showSpeakWordButton) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(primaryColor.copy(alpha = 0.13f))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onSpeakWord() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.VolumeUp,
+                                contentDescription = "Speak",
+                                tint = primaryColor,
+                                modifier = Modifier.size(14.dp)
+                            )
                         }
                     }
+                    // Pronunciation — same row, immediately after speaker icon
                     if (settings.showPronunciation && st.entry.pronunciation.isNotBlank()) {
                         Text(
                             text = st.entry.pronunciation,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                     }
                 }
                 is PopupUiState.Loading ->
-                    Text("Looking up…", style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Looking up…",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 else ->
-                    Text("LexiPopup", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
+                    Text(
+                        "LexiPopup",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
             }
         }
 
@@ -768,18 +780,18 @@ fun WordInfoRow(entry: WordEntry, settings: AppSettings) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // POS chip
+        // POS chip — solid filled background (matches screenshot "Verb" chip style)
         if (settings.showPartOfSpeech && entry.partOfSpeech.isNotBlank()) {
             Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = posColor.copy(alpha = 0.15f)
+                color = posColor
             ) {
                 Text(
                     text = entry.partOfSpeech.replaceFirstChar { it.uppercase() },
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = posColor
+                    color = Color.White
                 )
             }
         }
@@ -831,10 +843,18 @@ fun PopupContent(
     settings: AppSettings,
     onWordChipClick: (String) -> Unit
 ) {
-    val scroll = rememberScrollState()
-    val primary  = MaterialTheme.colorScheme.primary
-    val tertiary = MaterialTheme.colorScheme.tertiary
+    val scroll    = rememberScrollState()
+    val context   = LocalContext.current
+    val primary   = MaterialTheme.colorScheme.primary
+    val tertiary  = MaterialTheme.colorScheme.tertiary
     val secondary = MaterialTheme.colorScheme.secondary
+
+    // Helper: copy any text to clipboard instantly
+    fun copyField(label: String, text: String) {
+        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+    }
 
     Column(
         modifier = Modifier
@@ -851,9 +871,11 @@ fun PopupContent(
         ) {
             ContentBulletRow(
                 bulletColor = Color(0xFF7C4DFF),
-                label = "Why Important",
-                text  = entry.detailedMeaning,
-                italic = false
+                label   = "Why Important",
+                text    = entry.detailedMeaning,
+                italic  = false,
+                diamond = true,                // ♦ rotated-square bullet, matches screenshot
+                onCopy  = { copyField("Why Important", entry.detailedMeaning) }
             )
         }
 
@@ -861,26 +883,32 @@ fun PopupContent(
         if (entry.shortMeaning.isNotBlank()) {
             ContentBulletRow(
                 bulletColor = primary,
-                label = "Meaning",
-                text  = entry.shortMeaning,
-                italic = false
+                label  = "Meaning",
+                text   = entry.shortMeaning,
+                italic = false,
+                onCopy = { copyField("Meaning", entry.shortMeaning) }
             )
         }
 
         // ── Hindi ─────────────────────────────────────────────────────────────
         if (settings.showHindiMeaning && entry.hindiMeaning.isNotBlank()) {
+            val hindiCopyText = buildString {
+                append(entry.hindiMeaning)
+                if (entry.hindiPronunciation.isNotBlank()) append(" (${entry.hindiPronunciation})")
+            }
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Box(
                     Modifier
-                        .padding(top = 3.dp)
+                        .padding(top = 4.dp)
                         .size(6.dp)
                         .clip(CircleShape)
                         .background(primary)
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
                         "Hindi:",
                         style = MaterialTheme.typography.labelSmall,
@@ -895,7 +923,8 @@ fun PopupContent(
                         Text(
                             entry.hindiMeaning,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         if (entry.hindiPronunciation.isNotBlank()) {
                             Text(
@@ -906,16 +935,20 @@ fun PopupContent(
                         }
                     }
                 }
+                // Copy icon for Hindi field
+                FieldCopyButton { copyField("Hindi", hindiCopyText) }
             }
         }
 
         // ── Example ───────────────────────────────────────────────────────────
         if (settings.showExampleSentence && entry.exampleSentence.isNotBlank()) {
+            val cleanExample = entry.exampleSentence.trim('"', '\u201C', '\u201D')
             ContentBulletRow(
                 bulletColor = primary,
-                label = "Example",
-                text  = "\"${entry.exampleSentence.trim('"', '\u201C', '\u201D')}\"",
-                italic = true
+                label  = "Example",
+                text   = "\"$cleanExample\"",
+                italic = true,
+                onCopy = { copyField("Example", cleanExample) }
             )
         }
 
@@ -932,7 +965,8 @@ fun PopupContent(
                         label      = "Detailed Meaning:",
                         labelColor = tertiary,
                         text       = entry.detailedMeaning,
-                        modifier   = Modifier.weight(1f)
+                        modifier   = Modifier.weight(1f),
+                        onCopy     = { copyField("Detailed Meaning", entry.detailedMeaning) }
                     )
                 }
                 if (showEtymology) {
@@ -940,7 +974,8 @@ fun PopupContent(
                         label      = "Etymology / Origin:",
                         labelColor = secondary,
                         text       = entry.etymology,
-                        modifier   = Modifier.weight(1f)
+                        modifier   = Modifier.weight(1f),
+                        onCopy     = { copyField("Etymology", entry.etymology) }
                     )
                 }
             }
@@ -949,17 +984,24 @@ fun PopupContent(
         // ── Synonyms ──────────────────────────────────────────────────────────
         if (settings.showSynonyms && entry.synonyms.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "Synonyms",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = primary
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "🔗 Synonyms",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FieldCopyButton { copyField("Synonyms", entry.synonyms.joinToString(", ")) }
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val visible = entry.synonyms.take(4)
+                    val visible  = entry.synonyms.take(4)
                     val overflow = entry.synonyms.size - visible.size
                     visible.forEach { syn ->
                         WordChip(syn, MaterialTheme.colorScheme.primaryContainer) { onWordChipClick(syn) }
@@ -978,13 +1020,21 @@ fun PopupContent(
 
         // ── Antonyms ──────────────────────────────────────────────────────────
         if (settings.showAntonyms && entry.antonyms.isNotEmpty()) {
+            val errorColor = MaterialTheme.colorScheme.error
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "Antonyms",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "⚡ Antonyms",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = errorColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FieldCopyButton { copyField("Antonyms", entry.antonyms.joinToString(", ")) }
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -998,7 +1048,7 @@ fun PopupContent(
                         Text(
                             "+ $overflow more",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = errorColor,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -1007,8 +1057,8 @@ fun PopupContent(
         }
 
         // ── Difficulty + Frequency progress bars ──────────────────────────────
-        val showDiff  = settings.showDifficultyBadge
-        val showFreq  = settings.showFrequencyMeter
+        val showDiff = settings.showDifficultyBadge
+        val showFreq = settings.showFrequencyMeter
         if (showDiff || showFreq) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -1019,13 +1069,13 @@ fun PopupContent(
                     val diffColor  = diffColors.getOrElse(entry.difficultyLevel - 1) { diffColors[0] }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Difficulty", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("🎯 Difficulty", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(entry.difficultyLabel, style = MaterialTheme.typography.labelSmall, color = diffColor, fontWeight = FontWeight.Medium)
                         }
                         LinearProgressIndicator(
                             progress = { entry.difficultyLevel / 4f },
                             modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(50)),
-                            color     = diffColor,
+                            color = diffColor,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     }
@@ -1033,13 +1083,13 @@ fun PopupContent(
                 if (showFreq) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Frequency", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("📊 Frequency", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("${entry.frequencyRating}%", style = MaterialTheme.typography.labelSmall, color = primary, fontWeight = FontWeight.Medium)
                         }
                         LinearProgressIndicator(
                             progress = { entry.frequencyRating / 100f },
                             modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(50)),
-                            color     = primary,
+                            color = primary,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     }
@@ -1053,27 +1103,66 @@ fun PopupContent(
     }
 }
 
-// ── Bullet row helper (for Why Important / Meaning / Example) ─────────────────
+// ── Tiny copy icon button used next to each field ─────────────────────────────
+
+@Composable
+private fun FieldCopyButton(onCopy: () -> Unit) {
+    var copied by remember { mutableStateOf(false) }
+    val scope  = rememberCoroutineScope()
+    val tint   = if (copied) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    val sc by animateFloatAsState(if (copied) 1.18f else 1f, label = "copy_scale")
+
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .scale(sc)
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onCopy()
+                copied = true
+                scope.launch { delay(1400); copied = false }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+            contentDescription = if (copied) "Copied" else "Copy",
+            tint = tint,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+// ── Bullet row helper (Why Important / Meaning / Example) ─────────────────────
 
 @Composable
 private fun ContentBulletRow(
     bulletColor: Color,
     label: String,
     text: String,
-    italic: Boolean
+    italic: Boolean,
+    onCopy: () -> Unit,
+    diamond: Boolean = false   // true → ♦ rotated square; false → • circle (matches screenshot)
 ) {
     Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Bullet shape: ♦ diamond for "Why Important", • circle for the rest
         Box(
             Modifier
                 .padding(top = 4.dp)
-                .size(6.dp)
-                .clip(CircleShape)
+                .size(7.dp)
+                .rotate(if (diamond) 45f else 0f)
+                .clip(if (diamond) RoundedCornerShape(1.5.dp) else CircleShape)
                 .background(bulletColor)
         )
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 "$label:",
                 style = MaterialTheme.typography.labelSmall,
@@ -1089,13 +1178,21 @@ private fun ContentBulletRow(
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
+        // Copy icon for this field
+        FieldCopyButton(onCopy = onCopy)
     }
 }
 
 // ── Two-column small card helper ──────────────────────────────────────────────
 
 @Composable
-private fun TwoColCard(label: String, labelColor: Color, text: String, modifier: Modifier = Modifier) {
+private fun TwoColCard(
+    label: String,
+    labelColor: Color,
+    text: String,
+    modifier: Modifier = Modifier,
+    onCopy: () -> Unit = {}
+) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -1106,8 +1203,26 @@ private fun TwoColCard(label: String, labelColor: Color, text: String, modifier:
             Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = labelColor)
-            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 5, overflow = TextOverflow.Ellipsis)
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = labelColor,
+                    modifier = Modifier.weight(1f)
+                )
+                FieldCopyButton(onCopy = onCopy)
+            }
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 5,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1183,14 +1298,17 @@ fun WordChip(word: String, color: Color, onClick: () -> Unit) {
     }
 }
 
-// ── 2-row action grid ─────────────────────────────────────────────────────────
-// Row 1: first 5 enabled buttons | Row 2: next up-to-5 enabled buttons
+// ── 2-row action grid  +  More overflow bottom sheet ──────────────────────────
+// Layout: row1 = first 5 enabled, row2 = next 4 enabled + "More" at slot 5
+// "More" opens a ModalBottomSheet showing every overflow button in a grid.
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PopupActionGrid(
     settings: AppSettings,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     onCopy: () -> Unit,
+    onOpenBrowser: () -> Unit,
     onSpeakWord: () -> Unit,
     onSpeakMeaning: () -> Unit,
     onTranslate: () -> Unit,
@@ -1207,78 +1325,166 @@ fun PopupActionGrid(
         val enabled: Boolean
     )
 
+    // All possible buttons — exactly 10; each has a distinct icon
     val allButtons = listOf(
-        BtnDef(Icons.Default.ContentCopy,    "Copy",      onCopy,          settings.showCopyButton),
-        BtnDef(Icons.Default.VolumeUp,       "Speak\nWord",    onSpeakWord,     settings.showSpeakWordButton),
-        BtnDef(Icons.Default.RecordVoiceOver,"Speak\nMeaning", onSpeakMeaning,  settings.showSpeakMeaningButton),
-        BtnDef(Icons.Default.Translate,      "Translate", onTranslate,     settings.showTranslateButton),
-        BtnDef(Icons.Default.Share,          "Share",     onShare,         settings.showShareButton),
-        BtnDef(Icons.Default.Edit,           "Save Note", onSaveNote,      settings.showSaveNoteButton),
-        BtnDef(Icons.Default.MenuBook,       "Full\nDetails",  onFullDetails,   settings.showFullDetailsButton),
-        BtnDef(Icons.Default.Language,       "Search\nWeb",    onSearchWeb,     settings.showSearchWebButton),
-        BtnDef(Icons.Default.Style,          "Add\nFlashcard", onAddFlashcard,  settings.showFlashcardButton)
+        BtnDef(Icons.Default.ContentCopy,     "Copy",            onCopy,          settings.showCopyButton),
+        BtnDef(Icons.Default.VolumeUp,        "Speak\nWord",     onSpeakWord,     settings.showSpeakWordButton),
+        BtnDef(Icons.Default.RecordVoiceOver, "Speak\nMeaning",  onSpeakMeaning,  settings.showSpeakMeaningButton),
+        BtnDef(Icons.Default.Translate,       "Translate",       onTranslate,     settings.showTranslateButton),
+        BtnDef(Icons.Default.Share,           "Share",           onShare,         settings.showShareButton),
+        BtnDef(Icons.Default.Edit,            "Save\nNote",      onSaveNote,      settings.showSaveNoteButton),
+        BtnDef(Icons.Default.MenuBook,        "Full\nDetails",   onFullDetails,   settings.showFullDetailsButton),
+        BtnDef(Icons.Default.Language,        "Search\nWeb",     onSearchWeb,     settings.showSearchWebButton),
+        BtnDef(Icons.Default.Style,           "Flashcard",       onAddFlashcard,  settings.showFlashcardButton),
+        BtnDef(Icons.Default.OpenInBrowser,   "Open in\nBrowser",onOpenBrowser,   settings.showBrowserButton)
     )
 
-    val enabled = allButtons.filter { it.enabled }
+    val enabled   = allButtons.filter { it.enabled }
     if (enabled.isEmpty()) return
 
-    // Split into rows of 5
-    val rows = enabled.chunked(5)
+    // First 9 shown in 2 rows; slot 10 (row2-pos5) is always "More ⋯"
+    val visible   = enabled.take(9)
+    val overflow  = enabled.drop(9)           // buttons that didn't fit
+    val hasMore   = overflow.isNotEmpty()
+
+    var showSheet by remember { mutableStateOf(false) }
+
+    // Build display rows: row1 = slots 0-4, row2 = slots 5-8 + More
+    val row1 = visible.take(5)
+    val row2 = visible.drop(5)   // 0-4 items
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
-            .padding(vertical = 6.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
+            .padding(vertical = 4.dp)
     ) {
-        rows.take(2).forEach { row ->
+        // Row 1
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            row1.forEach { btn ->
+                GridActionButton(
+                    icon     = btn.icon,
+                    label    = btn.label,
+                    modifier = Modifier.weight(1f),
+                    onClick  = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); btn.action() }
+                )
+            }
+            // Pad to 5 if fewer
+            repeat(5 - row1.size) { Spacer(Modifier.weight(1f)) }
+        }
+
+        // Row 2 (only render if there is at least one row2 button or More is needed)
+        if (row2.isNotEmpty() || hasMore) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
+                    .padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                row.forEach { btn ->
+                row2.forEach { btn ->
                     GridActionButton(
-                        icon   = btn.icon,
-                        label  = btn.label,
+                        icon     = btn.icon,
+                        label    = btn.label,
                         modifier = Modifier.weight(1f),
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            btn.action()
-                        }
+                        onClick  = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); btn.action() }
                     )
                 }
-                // Fill remaining slots so spacing is consistent
-                if (row.size < 5) {
-                    repeat(5 - row.size) {
-                        Spacer(Modifier.weight(1f))
-                    }
+                // More button at slot 5 of row 2 when there are overflow items
+                if (hasMore) {
+                    GridActionButton(
+                        icon     = Icons.Default.MoreHoriz,
+                        label    = "More",
+                        modifier = Modifier.weight(1f),
+                        onClick  = { showSheet = true }
+                    )
                 }
+                // Pad remaining slots
+                val filled = row2.size + if (hasMore) 1 else 0
+                repeat(5 - filled) { Spacer(Modifier.weight(1f)) }
             }
         }
 
-        // Page dots if more than 10 buttons (rare)
-        if (enabled.size > 10) {
-            Row(
-                Modifier
+        // ── Page dots — always 3, first is active (matches screenshot exactly) ─
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val dotActive   = MaterialTheme.colorScheme.primary
+            val dotInactive = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
+            repeat(3) { i ->
+                Box(
+                    Modifier
+                        .padding(horizontal = 3.dp)
+                        .size(if (i == 0) 6.dp else 4.dp)
+                        .clip(CircleShape)
+                        .background(if (i == 0) dotActive else dotInactive)
+                )
+            }
+        }
+    }
+
+    // ── More overflow bottom sheet ────────────────────────────────────────────
+    if (showSheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            dragHandle = {
+                Box(
+                    Modifier
+                        .padding(vertical = 10.dp)
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f))
+                )
+            }
+        ) {
+            Column(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .navigationBarsPadding()
             ) {
-                repeat(minOf(rows.size, 3)) { i ->
-                    Box(
+                Text(
+                    "More Actions",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
+                )
+                // Show overflow buttons in rows of 5
+                overflow.chunked(5).forEach { row ->
+                    Row(
                         Modifier
-                            .padding(horizontal = 3.dp)
-                            .size(if (i == 0) 6.dp else 4.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (i == 0) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        row.forEach { btn ->
+                            GridActionButton(
+                                icon     = btn.icon,
+                                label    = btn.label,
+                                modifier = Modifier.weight(1f),
+                                onClick  = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    btn.action()
+                                    showSheet = false
+                                }
                             )
-                    )
+                        }
+                        repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
+                Spacer(Modifier.height(12.dp))
             }
         }
     }

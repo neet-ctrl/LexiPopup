@@ -212,7 +212,7 @@ interface WordDao {
     @Query("""
         SELECT * FROM dictionary_cache
         WHERE source = 'seed'
-          AND mode = 'english'
+          AND mode = :mode
           AND (:query = '' OR LOWER(word) LIKE '%' || LOWER(:query) || '%'
                OR LOWER(short_meaning) LIKE '%' || LOWER(:query) || '%'
                OR LOWER(part_of_speech) LIKE '%' || LOWER(:query) || '%')
@@ -222,10 +222,10 @@ interface WordDao {
             word ASC
         LIMIT :limit
     """)
-    suspend fun getSeedWords(query: String, limit: Int): List<WordEntity>
+    suspend fun getSeedWords(query: String, limit: Int, mode: String = "english"): List<WordEntity>
 
-    @Query("SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed' AND mode = 'english'")
-    suspend fun getSeedWordCount(): Int
+    @Query("SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed' AND mode = :mode")
+    suspend fun getSeedWordCount(mode: String = "english"): Int
 }
 
 data class DifficultyCountRow(

@@ -33,6 +33,6 @@ interface DictionaryRepository {
     fun getWordHistory(mode: AppMode = AppMode.ENGLISH): Flow<List<WordEntry>>
     fun getWordHistoryCount(mode: AppMode = AppMode.ENGLISH): Flow<Int>
     suspend fun markAccessed(word: String, mode: AppMode = AppMode.ENGLISH)
-    suspend fun getSeedWords(query: String = "", limit: Int = 1000): List<WordEntry>
-    suspend fun getSeedWordCount(): Int
+    suspend fun getSeedWords(query: String = "", limit: Int = 1000, mode: AppMode = AppMode.ENGLISH): List<WordEntry>
+    suspend fun getSeedWordCount(mode: AppMode = AppMode.ENGLISH): Int
 }

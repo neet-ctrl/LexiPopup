@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
 import com.lexipopup.domain.usecases.LookupWordUseCase
+import com.lexipopup.utils.ModeManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +16,8 @@ import javax.inject.Inject
 @HiltViewModel
 class WordDetailViewModel @Inject constructor(
     private val lookupWord: LookupWordUseCase,
-    private val repo: DictionaryRepository
+    private val repo: DictionaryRepository,
+    private val modeManager: ModeManager
 ) : ViewModel() {
 
     private val _wordEntry = MutableStateFlow<WordEntry?>(null)
@@ -40,7 +42,7 @@ class WordDetailViewModel @Inject constructor(
         if (_wordEntry.value?.word == word) return
         viewModelScope.launch {
             _isLoading.value = true
-            _wordEntry.value = lookupWord(word).getOrNull()
+            _wordEntry.value = lookupWord(word, modeManager.currentMode.value).getOrNull()
             _isLoading.value = false
         }
     }
@@ -48,7 +50,7 @@ class WordDetailViewModel @Inject constructor(
     fun toggleFavorite() {
         val w = _wordEntry.value ?: return
         viewModelScope.launch {
-            repo.toggleFavorite(w.word)
+            repo.toggleFavorite(w.word, modeManager.currentMode.value)
             _wordEntry.value = w.copy(isFavorite = !w.isFavorite)
             _snackMessage.value = if (!w.isFavorite) "Added to favorites ⭐" else "Removed from favorites"
         }
@@ -66,7 +68,7 @@ class WordDetailViewModel @Inject constructor(
     fun saveNote() {
         val w = _wordEntry.value ?: return
         viewModelScope.launch {
-            repo.saveNote(w.word, _noteText.value)
+            repo.saveNote(w.word, _noteText.value, modeManager.currentMode.value)
             _wordEntry.value = w.copy(userNote = _noteText.value)
             _showNoteDialog.value = false
             _snackMessage.value = "Note saved ✓"

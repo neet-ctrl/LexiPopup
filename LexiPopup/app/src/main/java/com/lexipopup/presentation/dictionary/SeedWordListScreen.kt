@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lexipopup.domain.models.AppMode
 import kotlinx.coroutines.launch
 
 private val DIFFICULTY_COLORS = mapOf(
@@ -53,6 +54,8 @@ fun SeedWordListScreen(
     onWordSelected: (String) -> Unit,
     onBack: () -> Unit
 ) {
+    val activeMode by viewModel.activeMode.collectAsState()
+    val isBiology = activeMode == AppMode.BIOLOGY
     val searchQuery by viewModel.searchQuery.collectAsState()
     val words by viewModel.words.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
@@ -76,14 +79,14 @@ fun SeedWordListScreen(
                     title = {
                         Column {
                             Text(
-                                "Built-in Dictionary",
+                                if (isBiology) "Biology Term Database" else "Built-in Dictionary",
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
                                 when {
-                                    isForcingReseed -> "Re-seeding…"
-                                    totalCount > 0  -> "$totalCount seed words · offline ready"
+                                    isForcingReseed -> if (isBiology) "Loading biology terms…" else "Re-seeding…"
+                                    totalCount > 0  -> if (isBiology) "$totalCount biology terms · offline ready" else "$totalCount seed words · offline ready"
                                     else            -> "Loading…"
                                 },
                                 style = MaterialTheme.typography.labelSmall,

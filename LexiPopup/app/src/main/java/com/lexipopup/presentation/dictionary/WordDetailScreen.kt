@@ -147,6 +147,27 @@ fun WordDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // ── Biology mode badge ─────────────────────────────────────────────
+            if (e.isBiology()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1B5E20).copy(alpha = 0.12f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("🧬", fontSize = 14.sp)
+                    Text(
+                        "Biology Term",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2E7D32)
+                    )
+                }
+            }
+
             // ── Pronunciation + Listen ─────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),

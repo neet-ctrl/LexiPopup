@@ -1,1 +1,2 @@
 - [Biology feature parity audit](bio-parity-audit.md) — 6 gaps found and fixed; key pattern: always check `entry.isBiology()` before adding mode-specific UI/logic.
+- [Mode intermingling fixes](mode-intermingling.md) — DAO seed queries, AiChatViewModel, WordDetailViewModel all need explicit mode passing; defaults silently use "english".

@@ -330,14 +330,15 @@ Use precise scientific language. When mentioning a biological term, briefly note
                 return@launch
             }
 
+            val currentModeId = modeManager.currentMode.value.id
             var saved = 0
             var skipped = 0
             words.forEach { word ->
-                val existing = wordDao.findWord(word.word)
+                val existing = wordDao.findWord(word.word, currentModeId)
                 if (existing == null) {
                     try {
                         wordDao.insertWord(word.toEntity(gson))
-                        wordDao.updateAccess(word.word)
+                        wordDao.updateAccess(word.word, currentModeId)
                         saved++
                     } catch (_: Exception) { skipped++ }
                 } else {
@@ -359,7 +360,8 @@ Use precise scientific language. When mentioning a biological term, briefly note
     fun lookupWord(word: String) {
         _wordLookup.value = WordLookupState.Loading(word)
         viewModelScope.launch(Dispatchers.IO) {
-            val local = wordDao.findWord(word)
+            val currentModeId = modeManager.currentMode.value.id
+            val local = wordDao.findWord(word, currentModeId)
             if (local != null) {
                 _wordLookup.value = WordLookupState.Found(word, local.toDomain(gson))
                 return@launch
@@ -375,11 +377,12 @@ Use precise scientific language. When mentioning a biological term, briefly note
 
     fun saveWordToHistory(entry: WordEntry) {
         viewModelScope.launch(Dispatchers.IO) {
-            val existing = wordDao.findWord(entry.word)
+            val currentModeId = modeManager.currentMode.value.id
+            val existing = wordDao.findWord(entry.word, currentModeId)
             if (existing == null) {
                 wordDao.insertWord(entry.toEntity(gson))
             }
-            wordDao.updateAccess(entry.word)
+            wordDao.updateAccess(entry.word, currentModeId)
         }
     }
 

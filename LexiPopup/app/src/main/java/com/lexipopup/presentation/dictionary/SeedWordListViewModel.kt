@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lexipopup.data.local.database.DatabaseSeeder
 import com.lexipopup.data.local.database.LexiDatabase
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
+import com.lexipopup.utils.ModeManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,8 +23,11 @@ import javax.inject.Inject
 @HiltViewModel
 class SeedWordListViewModel @Inject constructor(
     private val repo: DictionaryRepository,
-    private val db: LexiDatabase
+    private val db: LexiDatabase,
+    private val modeManager: ModeManager
 ) : ViewModel() {
+
+    val activeMode: StateFlow<AppMode> = modeManager.currentMode
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -49,10 +54,12 @@ class SeedWordListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _totalCount.value = repo.getSeedWordCount()
+            modeManager.currentMode.collect {
+                _totalCount.value = repo.getSeedWordCount(it)
+                loadWords("", it)
+                refreshDiagnostics()
+            }
         }
-        loadWords("")
-        refreshDiagnostics()
     }
 
     fun onSearch(query: String) {
@@ -61,36 +68,39 @@ class SeedWordListViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             if (query.isNotBlank()) delay(250)
             _isLoading.value = true
-            _words.value = repo.getSeedWords(query.trim(), 1000)
+            _words.value = repo.getSeedWords(query.trim(), 1000, modeManager.currentMode.value)
             _isLoading.value = false
         }
     }
 
     fun clearSearch() {
         _searchQuery.value = ""
-        loadWords("")
+        loadWords("", modeManager.currentMode.value)
     }
 
     fun refreshDiagnostics() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val dao = db.wordDao()
-                val total = dao.getTotalCount()
-                val seedCount = dao.getSeedWordCount()
-                val recentCount = dao.getRecentWordsList(500).size
-                val favCount = dao.getFavoritesList().size
-                val diffDist = dao.getDifficultyDistribution()
+                val mode = modeManager.currentMode.value
+                val modeId = mode.id
+                val total = dao.getTotalCount(modeId)
+                val seedCount = dao.getSeedWordCount(modeId)
+                val recentCount = dao.getRecentWordsList(500, modeId).size
+                val favCount = dao.getFavoritesList(modeId).size
+                val diffDist = dao.getDifficultyDistribution(modeId)
 
                 val dbPath = try {
                     db.openHelper.writableDatabase.path ?: "unknown"
                 } catch (_: Exception) { "unavailable" }
 
                 val sb = StringBuilder()
-                sb.appendLine("══ LexiPopup DB Diagnostics ══")
-                sb.appendLine("Total words (all sources) : $total")
-                sb.appendLine("Seed words (source=seed)  : $seedCount")
-                sb.appendLine("Recent lookups            : $recentCount")
-                sb.appendLine("Favourites starred        : $favCount")
+                val modeLabel = if (mode == AppMode.BIOLOGY) "Biology" else "English"
+                sb.appendLine("══ LexiPopup DB Diagnostics [$modeLabel Mode] ══")
+                sb.appendLine("Total entries (all sources) : $total")
+                sb.appendLine("Seed entries (source=seed)  : $seedCount")
+                sb.appendLine("Recent lookups              : $recentCount")
+                sb.appendLine("Favourites starred          : $favCount")
                 sb.appendLine()
                 sb.appendLine("Difficulty breakdown:")
                 diffDist.forEach { row ->
@@ -126,11 +136,12 @@ class SeedWordListViewModel @Inject constructor(
                 val sqlDb = db.openHelper.writableDatabase
                 val result = DatabaseSeeder.seedSafely(sqlDb)
 
-                val newSeedCount = db.wordDao().getSeedWordCount()
+                val mode = modeManager.currentMode.value
+                val newSeedCount = db.wordDao().getSeedWordCount(mode.id)
                 withContext(Dispatchers.Main) {
                     _totalCount.value = newSeedCount
                 }
-                _words.value = repo.getSeedWords(_searchQuery.value, 1000)
+                _words.value = repo.getSeedWords(_searchQuery.value, 1000, mode)
                 refreshDiagnostics()
 
                 _forceSeedMessage.value = buildString {
@@ -157,10 +168,10 @@ class SeedWordListViewModel @Inject constructor(
         _forceSeedMessage.value = null
     }
 
-    private fun loadWords(query: String) {
+    private fun loadWords(query: String, mode: AppMode) {
         viewModelScope.launch {
             _isLoading.value = true
-            _words.value = repo.getSeedWords(query, 1000)
+            _words.value = repo.getSeedWords(query, 1000, mode)
             _isLoading.value = false
         }
     }

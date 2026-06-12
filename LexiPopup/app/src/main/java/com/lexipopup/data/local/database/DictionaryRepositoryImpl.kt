@@ -147,10 +147,10 @@ class DictionaryRepositoryImpl @Inject constructor(
     override suspend fun markAccessed(word: String, mode: AppMode) =
         wordDao.updateAccess(word, mode.id)
 
-    override suspend fun getSeedWords(query: String, limit: Int): List<WordEntry> =
-        wordDao.getSeedWords(query, limit).map { it.toDomain(gson) }
+    override suspend fun getSeedWords(query: String, limit: Int, mode: AppMode): List<WordEntry> =
+        wordDao.getSeedWords(query, limit, mode.id).map { it.toDomain(gson) }
 
-    override suspend fun getSeedWordCount(): Int = wordDao.getSeedWordCount()
+    override suspend fun getSeedWordCount(mode: AppMode): Int = wordDao.getSeedWordCount(mode.id)
 }
 
 private val STRING_LIST_TYPE = TypeToken.getParameterized(List::class.java, String::class.java).type

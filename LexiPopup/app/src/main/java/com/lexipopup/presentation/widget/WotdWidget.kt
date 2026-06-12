@@ -56,51 +56,53 @@ class WotdWidget : GlanceAppWidget() {
     companion object {
         val TRAY = DpSize(200.dp, 60.dp)
         val CARD = DpSize(200.dp, 160.dp)
+        val DUAL = DpSize(200.dp, 300.dp)
     }
 
-    override val sizeMode = SizeMode.Responsive(setOf(TRAY, CARD))
+    override val sizeMode = SizeMode.Responsive(setOf(TRAY, CARD, DUAL))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val (word, mode) = fetchWordOfDay(context)
+        val (englishWord, bioWord) = fetchBothWords(context)
         provideContent {
             val h = LocalSize.current.height
-            if (h < 100.dp) WotdTray(word, mode) else WotdCard(word, mode)
+            when {
+                h < 100.dp  -> WotdTray(englishWord, bioWord)
+                h < 260.dp  -> WotdCard(englishWord, bioWord, dualMode = false)
+                else        -> WotdCard(englishWord, bioWord, dualMode = true)
+            }
         }
     }
 
-    private suspend fun fetchWordOfDay(context: Context): Pair<WordEntity?, AppMode> = try {
+    private suspend fun fetchBothWords(context: Context): Pair<WordEntity?, WordEntity?> = try {
         val ep = EntryPointAccessors
             .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-        val currentMode = ep.modeManager().currentMode.value
         val dao = ep.wordDao()
         val dayOffset = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-        val modeId = currentMode.id
-        val word = if (currentMode == AppMode.BIOLOGY) {
-            val total = dao.getTotalCount(modeId).coerceAtLeast(1)
-            dao.getWordAtOffset(dayOffset % total, modeId)
-                ?: dao.getWordAtOffset(0, modeId)
-        } else {
-            val total = dao.getTotalCount(modeId).coerceAtLeast(1)
-            dao.getWordAtOffset(dayOffset % total, modeId)
-        }
-        Pair(word, currentMode)
+
+        val englishTotal = dao.getTotalCount(AppMode.ENGLISH.id).coerceAtLeast(1)
+        val englishWord = dao.getWordAtOffset(dayOffset % englishTotal, AppMode.ENGLISH.id)
+            ?: dao.getWordAtOffset(0, AppMode.ENGLISH.id)
+
+        val bioTotal = dao.getTotalCount(AppMode.BIOLOGY.id).coerceAtLeast(1)
+        val bioWord = if (bioTotal > 1) {
+            dao.getWordAtOffset(dayOffset % bioTotal, AppMode.BIOLOGY.id)
+                ?: dao.getWordAtOffset(0, AppMode.BIOLOGY.id)
+        } else null
+
+        Pair(englishWord, bioWord)
     } catch (_: Exception) {
-        Pair(null, AppMode.ENGLISH)
+        Pair(null, null)
     }
 }
 
 @Composable
-private fun WotdTray(word: WordEntity?, mode: AppMode) {
+private fun WotdTray(englishWord: WordEntity?, bioWord: WordEntity?) {
     val ctx = LocalContext.current
-    val bgColor = if (mode == AppMode.BIOLOGY) BgBioGreen else BgPurple
-    val starColor = if (mode == AppMode.BIOLOGY) BioGold else Gold
-    val arrowColor = if (mode == AppMode.BIOLOGY) BioAccent else Lilac
-
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(bgColor)
-            .clickable(actionStartActivity(wotdIntent(ctx, word?.word, mode))),
+            .background(BgPurple)
+            .clickable(actionStartActivity(wotdIntent(ctx, englishWord?.word, AppMode.ENGLISH))),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
@@ -109,101 +111,177 @@ private fun WotdTray(word: WordEntity?, mode: AppMode) {
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (mode == AppMode.BIOLOGY) "🧬" else "★",
-                style = TextStyle(color = starColor, fontSize = 13.sp)
-            )
-            Spacer(GlanceModifier.width(8.dp))
+            Text(text = "★", style = TextStyle(color = Gold, fontSize = 13.sp))
+            Spacer(GlanceModifier.width(6.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
-                    text = word?.word?.replaceFirstChar { it.uppercaseChar() }
-                        ?: if (mode == AppMode.BIOLOGY) "Term of Day" else "Word of Day",
-                    style = TextStyle(color = White100, fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                    text = englishWord?.word?.replaceFirstChar { it.uppercaseChar() } ?: "Word of Day",
+                    style = TextStyle(color = White100, fontSize = 14.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1
                 )
-                if (!word?.pronunciation.isNullOrBlank()) {
-                    Text(
-                        text = word!!.pronunciation,
-                        style = TextStyle(color = White70, fontSize = 10.sp),
-                        maxLines = 1
-                    )
-                }
             }
-            Text(text = "›", style = TextStyle(color = arrowColor, fontSize = 22.sp, fontWeight = FontWeight.Bold))
+            Spacer(GlanceModifier.width(8.dp))
+            Text(text = "🧬", style = TextStyle(color = BioGold, fontSize = 13.sp))
+            Spacer(GlanceModifier.width(6.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Text(
+                    text = bioWord?.word?.replaceFirstChar { it.uppercaseChar() } ?: "Term of Day",
+                    style = TextStyle(color = White100, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                    maxLines = 1
+                )
+            }
+            Text(text = "›", style = TextStyle(color = Lilac, fontSize = 22.sp, fontWeight = FontWeight.Bold))
         }
     }
 }
 
 @Composable
-private fun WotdCard(word: WordEntity?, mode: AppMode) {
+private fun WotdCard(englishWord: WordEntity?, bioWord: WordEntity?, dualMode: Boolean) {
     val ctx = LocalContext.current
-    val bgColor = if (mode == AppMode.BIOLOGY) BgBioGreen else BgPurple
-    val starColor = if (mode == AppMode.BIOLOGY) BioGold else Gold
-    val accentColor = if (mode == AppMode.BIOLOGY) BioAccent else Lilac
-    val label = if (mode == AppMode.BIOLOGY) "TERM OF THE DAY" else "WORD OF THE DAY"
-    val modeIcon = if (mode == AppMode.BIOLOGY) "🧬" else "★"
 
-    Box(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .background(bgColor)
-            .clickable(actionStartActivity(wotdIntent(ctx, word?.word, mode)))
-    ) {
-        Column(
+    if (!dualMode) {
+        // Single card showing English word of the day
+        Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .padding(14.dp)
+                .background(BgPurple)
+                .clickable(actionStartActivity(wotdIntent(ctx, englishWord?.word, AppMode.ENGLISH)))
         ) {
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = GlanceModifier.fillMaxSize().padding(14.dp)
             ) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "WORD OF THE DAY",
+                        style = TextStyle(color = White40, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(GlanceModifier.defaultWeight())
+                    Text(text = "★", style = TextStyle(color = Gold, fontSize = 14.sp))
+                }
+                Spacer(GlanceModifier.height(10.dp))
                 Text(
-                    text = label,
-                    style = TextStyle(color = White40, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                )
-                Spacer(GlanceModifier.defaultWeight())
-                Text(text = modeIcon, style = TextStyle(color = starColor, fontSize = 14.sp))
-            }
-
-            Spacer(GlanceModifier.height(10.dp))
-
-            Text(
-                text = word?.word?.replaceFirstChar { it.uppercaseChar() } ?: "—",
-                style = TextStyle(color = White100, fontSize = 24.sp, fontWeight = FontWeight.Bold),
-                maxLines = 1
-            )
-
-            if (word != null) {
-                Spacer(GlanceModifier.height(2.dp))
-                Text(
-                    text = listOfNotNull(
-                        word.pronunciation.takeIf { it.isNotBlank() },
-                        word.partOfSpeech.takeIf { it.isNotBlank() }
-                    ).joinToString("  ·  "),
-                    style = TextStyle(color = accentColor, fontSize = 10.sp),
+                    text = englishWord?.word?.replaceFirstChar { it.uppercaseChar() } ?: "—",
+                    style = TextStyle(color = White100, fontSize = 22.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1
                 )
-                Spacer(GlanceModifier.height(8.dp))
-                Text(
-                    text = word.shortMeaning,
-                    style = TextStyle(color = White70, fontSize = 12.sp),
-                    maxLines = 2
-                )
-            } else {
-                Spacer(GlanceModifier.height(8.dp))
-                Text(
-                    text = "Tap to look up a word",
-                    style = TextStyle(color = White70, fontSize = 12.sp)
-                )
+                if (englishWord != null) {
+                    Spacer(GlanceModifier.height(2.dp))
+                    Text(
+                        text = listOfNotNull(
+                            englishWord.pronunciation.takeIf { it.isNotBlank() },
+                            englishWord.partOfSpeech.takeIf { it.isNotBlank() }
+                        ).joinToString("  ·  "),
+                        style = TextStyle(color = Lilac, fontSize = 10.sp),
+                        maxLines = 1
+                    )
+                    Spacer(GlanceModifier.height(8.dp))
+                    Text(
+                        text = englishWord.shortMeaning,
+                        style = TextStyle(color = White70, fontSize = 12.sp),
+                        maxLines = 2
+                    )
+                } else {
+                    Spacer(GlanceModifier.height(8.dp))
+                    Text(text = "Tap to look up a word", style = TextStyle(color = White70, fontSize = 12.sp))
+                }
+                Spacer(GlanceModifier.defaultWeight())
+                Text(text = "Tap to explore →", style = TextStyle(color = Lilac, fontSize = 9.sp))
+            }
+        }
+    } else {
+        // Dual card: English on top, Biology below
+        Column(modifier = GlanceModifier.fillMaxSize()) {
+
+            // ── English Word of the Day ──────────────────────────────────────
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .defaultWeight()
+                    .background(BgPurple)
+                    .clickable(actionStartActivity(wotdIntent(ctx, englishWord?.word, AppMode.ENGLISH)))
+            ) {
+                Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp)) {
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "WORD OF THE DAY",
+                            style = TextStyle(color = White40, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(GlanceModifier.defaultWeight())
+                        Text(text = "★", style = TextStyle(color = Gold, fontSize = 12.sp))
+                    }
+                    Spacer(GlanceModifier.height(6.dp))
+                    Text(
+                        text = englishWord?.word?.replaceFirstChar { it.uppercaseChar() } ?: "—",
+                        style = TextStyle(color = White100, fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                        maxLines = 1
+                    )
+                    if (englishWord != null && englishWord.shortMeaning.isNotBlank()) {
+                        Spacer(GlanceModifier.height(4.dp))
+                        Text(
+                            text = englishWord.shortMeaning,
+                            style = TextStyle(color = White70, fontSize = 11.sp),
+                            maxLines = 2
+                        )
+                    }
+                    Spacer(GlanceModifier.defaultWeight())
+                }
             }
 
-            Spacer(GlanceModifier.defaultWeight())
+            // ── Thin divider ─────────────────────────────────────────────────
+            Box(
+                modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(Color(0x44FFFFFF))
+            ) {}
 
-            Text(
-                text = "Tap to explore →",
-                style = TextStyle(color = accentColor, fontSize = 9.sp)
-            )
+            // ── Biology Term of the Day ──────────────────────────────────────
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .defaultWeight()
+                    .background(BgBioGreen)
+                    .clickable(actionStartActivity(wotdIntent(ctx, bioWord?.word, AppMode.BIOLOGY)))
+            ) {
+                Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp)) {
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "TERM OF THE DAY",
+                            style = TextStyle(color = White40, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(GlanceModifier.defaultWeight())
+                        Text(text = "🧬", style = TextStyle(color = BioGold, fontSize = 12.sp))
+                    }
+                    Spacer(GlanceModifier.height(6.dp))
+                    Text(
+                        text = bioWord?.word?.replaceFirstChar { it.uppercaseChar() } ?: "—",
+                        style = TextStyle(color = White100, fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                        maxLines = 1
+                    )
+                    if (bioWord != null && bioWord.shortMeaning.isNotBlank()) {
+                        Spacer(GlanceModifier.height(4.dp))
+                        Text(
+                            text = bioWord.shortMeaning,
+                            style = TextStyle(color = BioAccent, fontSize = 11.sp),
+                            maxLines = 2
+                        )
+                    } else {
+                        Spacer(GlanceModifier.height(4.dp))
+                        Text(
+                            text = "Look up biology terms to see them here",
+                            style = TextStyle(color = BioAccent, fontSize = 11.sp),
+                            maxLines = 2
+                        )
+                    }
+                    Spacer(GlanceModifier.defaultWeight())
+                }
+            }
         }
     }
 }

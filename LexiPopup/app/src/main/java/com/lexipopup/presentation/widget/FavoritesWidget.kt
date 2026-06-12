@@ -9,11 +9,11 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
-import androidx.glance.action.ActionCallback
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.lazy.LazyColumn
@@ -25,7 +25,6 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -35,40 +34,41 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.glance.unit.DayNightColorProvider
 import com.lexipopup.data.local.entities.WordEntity
 import com.lexipopup.presentation.popup.PopupActivity
 import dagger.hilt.android.EntryPointAccessors
 
 private val FavHeaderBg = Color(0xFF0D47A1)
 private val FavHeaderText = ColorProvider(Color.White)
-private val FavHeaderSub = ColorProvider(Color(0x99FFFFFF))
-private val FavCardBg = ColorProvider(day = Color(0xFFF5F7FA), night = Color(0xFF1A1A2E))
-private val FavDivider = ColorProvider(day = Color(0x14000000), night = Color(0x14FFFFFF))
-private val FavMeaning = ColorProvider(day = Color(0xFF546E7A), night = Color(0xFF90A4AE))
-private val FavEmpty = ColorProvider(day = Color(0xFF90A4AE), night = Color(0xFF546E7A))
+private val FavHeaderSub = DayNightColorProvider(day = Color(0x99FFFFFF), night = Color(0x99FFFFFF))
+private val FavCardBg = DayNightColorProvider(day = Color(0xFFF5F7FA), night = Color(0xFF1A1A2E))
+private val FavDivider = DayNightColorProvider(day = Color(0x14000000), night = Color(0x14FFFFFF))
+private val FavMeaning = DayNightColorProvider(day = Color(0xFF546E7A), night = Color(0xFF90A4AE))
+private val FavEmpty = DayNightColorProvider(day = Color(0xFF90A4AE), night = Color(0xFF546E7A))
 
 private fun favDiffBg(level: Int) = when (level) {
-    1 -> ColorProvider(day = Color(0xFFE8F5E9), night = Color(0xFF1A3020))
-    2 -> ColorProvider(day = Color(0xFFE3F2FD), night = Color(0xFF0D2045))
-    3 -> ColorProvider(day = Color(0xFFFFF8E1), night = Color(0xFF3D2000))
-    4 -> ColorProvider(day = Color(0xFFFFEBEE), night = Color(0xFF3D000F))
-    else -> ColorProvider(day = Color(0xFFF5F5F5), night = Color(0xFF252525))
+    1 -> DayNightColorProvider(day = Color(0xFFE8F5E9), night = Color(0xFF1A3020))
+    2 -> DayNightColorProvider(day = Color(0xFFE3F2FD), night = Color(0xFF0D2045))
+    3 -> DayNightColorProvider(day = Color(0xFFFFF8E1), night = Color(0xFF3D2000))
+    4 -> DayNightColorProvider(day = Color(0xFFFFEBEE), night = Color(0xFF3D000F))
+    else -> DayNightColorProvider(day = Color(0xFFF5F5F5), night = Color(0xFF252525))
 }
 
 private fun favDiffAccent(level: Int) = when (level) {
-    1 -> ColorProvider(day = Color(0xFF2E7D32), night = Color(0xFF81C784))
-    2 -> ColorProvider(day = Color(0xFF1565C0), night = Color(0xFF64B5F6))
-    3 -> ColorProvider(day = Color(0xFFE65100), night = Color(0xFFFFB74D))
-    4 -> ColorProvider(day = Color(0xFFB71C1C), night = Color(0xFFEF9A9A))
-    else -> ColorProvider(day = Color(0xFF455A64), night = Color(0xFF90A4AE))
+    1 -> DayNightColorProvider(day = Color(0xFF2E7D32), night = Color(0xFF81C784))
+    2 -> DayNightColorProvider(day = Color(0xFF1565C0), night = Color(0xFF64B5F6))
+    3 -> DayNightColorProvider(day = Color(0xFFE65100), night = Color(0xFFFFB74D))
+    4 -> DayNightColorProvider(day = Color(0xFFB71C1C), night = Color(0xFFEF9A9A))
+    else -> DayNightColorProvider(day = Color(0xFF455A64), night = Color(0xFF90A4AE))
 }
 
 private fun favDiffText(level: Int) = when (level) {
-    1 -> ColorProvider(day = Color(0xFF1B5E20), night = Color(0xFFC8E6C9))
-    2 -> ColorProvider(day = Color(0xFF0D47A1), night = Color(0xFFBBDEFB))
-    3 -> ColorProvider(day = Color(0xFFBF360C), night = Color(0xFFFFE0B2))
-    4 -> ColorProvider(day = Color(0xFF7F0000), night = Color(0xFFFFCDD2))
-    else -> ColorProvider(day = Color(0xFF263238), night = Color(0xFFCFD8DC))
+    1 -> DayNightColorProvider(day = Color(0xFF1B5E20), night = Color(0xFFC8E6C9))
+    2 -> DayNightColorProvider(day = Color(0xFF0D47A1), night = Color(0xFFBBDEFB))
+    3 -> DayNightColorProvider(day = Color(0xFFBF360C), night = Color(0xFFFFE0B2))
+    4 -> DayNightColorProvider(day = Color(0xFF7F0000), night = Color(0xFFFFCDD2))
+    else -> DayNightColorProvider(day = Color(0xFF263238), night = Color(0xFFCFD8DC))
 }
 
 class FavoritesWidget : GlanceAppWidget() {
@@ -168,7 +168,7 @@ private fun FavWordCard(word: WordEntity, ctx: Context) {
                     .width(3.dp)
                     .height(36.dp)
                     .background(accent)
-            )
+            ) {}
             Spacer(GlanceModifier.width(10.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
@@ -191,7 +191,7 @@ private fun FavWordCard(word: WordEntity, ctx: Context) {
                 )
             }
         }
-        Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(FavDivider))
+        Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(FavDivider)) {}
     }
 }
 

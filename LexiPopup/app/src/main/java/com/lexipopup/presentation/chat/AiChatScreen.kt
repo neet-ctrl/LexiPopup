@@ -211,7 +211,7 @@ fun AiChatScreen(
 
             // FAB extract vocab shortcut (visible when scrolled down)
             val showFab by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = showFab && messages.isNotEmpty(),
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp),
                 enter = fadeIn() + scaleIn(),
@@ -377,9 +377,10 @@ private fun ChatBubble(
     onWordTap: (String) -> Unit
 ) {
     val isUser = message.role == "user"
+    val gson = remember { Gson() }
     val underlined = remember(message.underlinedWords) {
         runCatching {
-            Gson().fromJson(message.underlinedWords, Array<String>::class.java).toSet()
+            gson.fromJson(message.underlinedWords, Array<String>::class.java).toSet()
         }.getOrDefault(emptySet())
     }
 
@@ -698,7 +699,7 @@ private fun EmptyState(provider: AiProviderType, groqAvail: Boolean, openAiAvail
             SuggestionChip(
                 onClick = {},
                 label = { Text(suggestion, fontSize = 12.sp) },
-                leadingIcon = { Icon(Icons.Default.Lightbulb, null, modifier = Modifier.size(14.dp)) }
+                icon = { Icon(Icons.Default.Lightbulb, null, modifier = Modifier.size(14.dp)) }
             )
         }
     }

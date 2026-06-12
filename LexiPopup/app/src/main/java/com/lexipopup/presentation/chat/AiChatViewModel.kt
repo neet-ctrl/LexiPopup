@@ -184,6 +184,11 @@ Be conversational, educational, accurate, and concise. When you mention an inter
                 newId
             }
 
+            // Snapshot existing messages before inserting — the collect() coroutine that
+            // updates _messages is dispatched separately and may not have fired yet,
+            // so reading _messages.value after insertMessage risks missing the new message.
+            val historySnapshot = _messages.value
+
             // Persist user message
             chatDao.insertMessage(ChatMessageEntity(
                 sessionId = sessionId,
@@ -193,12 +198,13 @@ Be conversational, educational, accurate, and concise. When you mention an inter
             ))
             chatDao.incrementMessageCount(sessionId)
 
-            // Build full history for AI context (last 24 messages, plus system)
+            // Build full history: prior messages (snapshot) + the new user message, totalling up to 25
             val history = buildList {
                 add(AiChatClient.Message("system", SYSTEM_PROMPT))
-                _messages.value.takeLast(24).forEach { m ->
+                historySnapshot.takeLast(23).forEach { m ->
                     add(AiChatClient.Message(m.role, m.content))
                 }
+                add(AiChatClient.Message("user", text))
             }
 
             // Call AI — animate typing while waiting

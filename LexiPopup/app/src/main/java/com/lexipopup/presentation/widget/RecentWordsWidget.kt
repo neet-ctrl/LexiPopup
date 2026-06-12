@@ -9,11 +9,11 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
-import androidx.glance.action.ActionCallback
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.lazy.LazyColumn
@@ -25,7 +25,6 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -35,44 +34,45 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.glance.unit.DayNightColorProvider
 import com.lexipopup.data.local.entities.WordEntity
 import com.lexipopup.presentation.popup.PopupActivity
 import dagger.hilt.android.EntryPointAccessors
 
 private val RecentHeaderBg = Color(0xFF004D40)
 private val RecentHeaderText = ColorProvider(Color.White)
-private val RecentHeaderSub = ColorProvider(Color(0x99FFFFFF))
+private val RecentHeaderSub = DayNightColorProvider(day = Color(0x99FFFFFF), night = Color(0x99FFFFFF))
 private val RecentTealAccent = ColorProvider(Color(0xFF80CBC4))
-private val RecentCardBg = ColorProvider(day = Color(0xFFF5F7FA), night = Color(0xFF0D1F1E))
-private val RecentWordText = ColorProvider(day = Color(0xFF0D1B2A), night = Color(0xFFECEFF1))
-private val RecentMeaning = ColorProvider(day = Color(0xFF546E7A), night = Color(0xFF80A4A0))
-private val RecentDivider = ColorProvider(day = Color(0x14000000), night = Color(0x14FFFFFF))
-private val RecentEmpty = ColorProvider(day = Color(0xFF80A4A0), night = Color(0xFF37635F))
+private val RecentCardBg = DayNightColorProvider(day = Color(0xFFF5F7FA), night = Color(0xFF0D1F1E))
+private val RecentWordText = DayNightColorProvider(day = Color(0xFF0D1B2A), night = Color(0xFFECEFF1))
+private val RecentMeaning = DayNightColorProvider(day = Color(0xFF546E7A), night = Color(0xFF80A4A0))
+private val RecentDivider = DayNightColorProvider(day = Color(0x14000000), night = Color(0x14FFFFFF))
+private val RecentEmpty = DayNightColorProvider(day = Color(0xFF80A4A0), night = Color(0xFF37635F))
 
 private val CARD_ACCENTS = listOf(
-    ColorProvider(day = Color(0xFF00695C), night = Color(0xFF4DB6AC)),
-    ColorProvider(day = Color(0xFF00796B), night = Color(0xFF80CBC4)),
-    ColorProvider(day = Color(0xFF00838F), night = Color(0xFF80DEEA)),
-    ColorProvider(day = Color(0xFF0277BD), night = Color(0xFF4FC3F7)),
-    ColorProvider(day = Color(0xFF6A1B9A), night = Color(0xFFCE93D8)),
-    ColorProvider(day = Color(0xFFAD1457), night = Color(0xFFF48FB1)),
-    ColorProvider(day = Color(0xFF558B2F), night = Color(0xFFAED581)),
-    ColorProvider(day = Color(0xFFE65100), night = Color(0xFFFFB74D)),
-    ColorProvider(day = Color(0xFF1565C0), night = Color(0xFF90CAF9)),
-    ColorProvider(day = Color(0xFF37474F), night = Color(0xFF90A4AE)),
+    DayNightColorProvider(day = Color(0xFF00695C), night = Color(0xFF4DB6AC)),
+    DayNightColorProvider(day = Color(0xFF00796B), night = Color(0xFF80CBC4)),
+    DayNightColorProvider(day = Color(0xFF00838F), night = Color(0xFF80DEEA)),
+    DayNightColorProvider(day = Color(0xFF0277BD), night = Color(0xFF4FC3F7)),
+    DayNightColorProvider(day = Color(0xFF6A1B9A), night = Color(0xFFCE93D8)),
+    DayNightColorProvider(day = Color(0xFFAD1457), night = Color(0xFFF48FB1)),
+    DayNightColorProvider(day = Color(0xFF558B2F), night = Color(0xFFAED581)),
+    DayNightColorProvider(day = Color(0xFFE65100), night = Color(0xFFFFB74D)),
+    DayNightColorProvider(day = Color(0xFF1565C0), night = Color(0xFF90CAF9)),
+    DayNightColorProvider(day = Color(0xFF37474F), night = Color(0xFF90A4AE)),
 )
 
 private val CARD_BGS = listOf(
-    ColorProvider(day = Color(0xFFE0F2F1), night = Color(0xFF0D302C)),
-    ColorProvider(day = Color(0xFFE0F7FA), night = Color(0xFF082D30)),
-    ColorProvider(day = Color(0xFFE1F5FE), night = Color(0xFF082233)),
-    ColorProvider(day = Color(0xFFE3F2FD), night = Color(0xFF0D2045)),
-    ColorProvider(day = Color(0xFFF3E5F5), night = Color(0xFF2D1B33)),
-    ColorProvider(day = Color(0xFFFCE4EC), night = Color(0xFF330F1C)),
-    ColorProvider(day = Color(0xFFF9FBE7), night = Color(0xFF252D0A)),
-    ColorProvider(day = Color(0xFFFFF3E0), night = Color(0xFF3D2000)),
-    ColorProvider(day = Color(0xFFE8EAF6), night = Color(0xFF1A1E40)),
-    ColorProvider(day = Color(0xFFECEFF1), night = Color(0xFF1A2226)),
+    DayNightColorProvider(day = Color(0xFFE0F2F1), night = Color(0xFF0D302C)),
+    DayNightColorProvider(day = Color(0xFFE0F7FA), night = Color(0xFF082D30)),
+    DayNightColorProvider(day = Color(0xFFE1F5FE), night = Color(0xFF082233)),
+    DayNightColorProvider(day = Color(0xFFE3F2FD), night = Color(0xFF0D2045)),
+    DayNightColorProvider(day = Color(0xFFF3E5F5), night = Color(0xFF2D1B33)),
+    DayNightColorProvider(day = Color(0xFFFCE4EC), night = Color(0xFF330F1C)),
+    DayNightColorProvider(day = Color(0xFFF9FBE7), night = Color(0xFF252D0A)),
+    DayNightColorProvider(day = Color(0xFFFFF3E0), night = Color(0xFF3D2000)),
+    DayNightColorProvider(day = Color(0xFFE8EAF6), night = Color(0xFF1A1E40)),
+    DayNightColorProvider(day = Color(0xFFECEFF1), night = Color(0xFF1A2226)),
 )
 
 class RecentWordsWidget : GlanceAppWidget() {
@@ -207,7 +207,7 @@ private fun RecentWordCard(word: WordEntity, index: Int, ctx: Context) {
                 )
             }
         }
-        Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(RecentDivider))
+        Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(RecentDivider)) {}
     }
 }
 

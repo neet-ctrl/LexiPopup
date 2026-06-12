@@ -33,17 +33,23 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.lexipopup.data.local.entities.WordEntity
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.presentation.popup.PopupActivity
 import dagger.hilt.android.EntryPointAccessors
 import java.util.Calendar
 
+// ── English palette ───────────────────────────────────────────────────────────
 private val BgPurple = Color(0xFF4527A0)
-private val BgPurpleLight = Color(0xFF512DA8)
 private val White100 = ColorProvider(Color.White)
 private val White70 = ColorProvider(Color(0xB3FFFFFF))
 private val White40 = ColorProvider(Color(0x66FFFFFF))
 private val Gold = ColorProvider(Color(0xFFFFD54F))
 private val Lilac = ColorProvider(Color(0xFFCE93D8))
+
+// ── Biology palette ───────────────────────────────────────────────────────────
+private val BgBioGreen = Color(0xFF1B5E20)
+private val BioGold = ColorProvider(Color(0xFF69F0AE))
+private val BioAccent = ColorProvider(Color(0xFFA5D6A7))
 
 class WotdWidget : GlanceAppWidget() {
 
@@ -55,33 +61,46 @@ class WotdWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(TRAY, CARD))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val word = fetchWordOfDay(context)
+        val (word, mode) = fetchWordOfDay(context)
         provideContent {
             val h = LocalSize.current.height
-            if (h < 100.dp) WotdTray(word) else WotdCard(word)
+            if (h < 100.dp) WotdTray(word, mode) else WotdCard(word, mode)
         }
     }
 
-    private suspend fun fetchWordOfDay(context: Context): WordEntity? = try {
-        val dao = EntryPointAccessors
+    private suspend fun fetchWordOfDay(context: Context): Pair<WordEntity?, AppMode> = try {
+        val ep = EntryPointAccessors
             .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-            .wordDao()
-        val total = dao.getTotalCount().coerceAtLeast(1)
-        val offset = Calendar.getInstance().get(Calendar.DAY_OF_YEAR) % total
-        dao.getWordAtOffset(offset)
+        val currentMode = ep.modeManager().currentMode.value
+        val dao = ep.wordDao()
+        val dayOffset = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        val modeId = currentMode.id
+        val word = if (currentMode == AppMode.BIOLOGY) {
+            val total = dao.getTotalCount(modeId).coerceAtLeast(1)
+            dao.getWordAtOffset(dayOffset % total, modeId)
+                ?: dao.getWordAtOffset(0, modeId)
+        } else {
+            val total = dao.getTotalCount(modeId).coerceAtLeast(1)
+            dao.getWordAtOffset(dayOffset % total, modeId)
+        }
+        Pair(word, currentMode)
     } catch (_: Exception) {
-        null
+        Pair(null, AppMode.ENGLISH)
     }
 }
 
 @Composable
-private fun WotdTray(word: WordEntity?) {
+private fun WotdTray(word: WordEntity?, mode: AppMode) {
     val ctx = LocalContext.current
+    val bgColor = if (mode == AppMode.BIOLOGY) BgBioGreen else BgPurple
+    val starColor = if (mode == AppMode.BIOLOGY) BioGold else Gold
+    val arrowColor = if (mode == AppMode.BIOLOGY) BioAccent else Lilac
+
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(BgPurple)
-            .clickable(actionStartActivity(wotdIntent(ctx, word?.word))),
+            .background(bgColor)
+            .clickable(actionStartActivity(wotdIntent(ctx, word?.word, mode))),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
@@ -91,18 +110,15 @@ private fun WotdTray(word: WordEntity?) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "★",
-                style = TextStyle(color = Gold, fontSize = 13.sp)
+                text = if (mode == AppMode.BIOLOGY) "🧬" else "★",
+                style = TextStyle(color = starColor, fontSize = 13.sp)
             )
             Spacer(GlanceModifier.width(8.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
-                    text = word?.word?.replaceFirstChar { it.uppercaseChar() } ?: "Word of Day",
-                    style = TextStyle(
-                        color = White100,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
+                    text = word?.word?.replaceFirstChar { it.uppercaseChar() }
+                        ?: if (mode == AppMode.BIOLOGY) "Term of Day" else "Word of Day",
+                    style = TextStyle(color = White100, fontSize = 15.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1
                 )
                 if (!word?.pronunciation.isNullOrBlank()) {
@@ -113,22 +129,25 @@ private fun WotdTray(word: WordEntity?) {
                     )
                 }
             }
-            Text(
-                text = "›",
-                style = TextStyle(color = Lilac, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            )
+            Text(text = "›", style = TextStyle(color = arrowColor, fontSize = 22.sp, fontWeight = FontWeight.Bold))
         }
     }
 }
 
 @Composable
-private fun WotdCard(word: WordEntity?) {
+private fun WotdCard(word: WordEntity?, mode: AppMode) {
     val ctx = LocalContext.current
+    val bgColor = if (mode == AppMode.BIOLOGY) BgBioGreen else BgPurple
+    val starColor = if (mode == AppMode.BIOLOGY) BioGold else Gold
+    val accentColor = if (mode == AppMode.BIOLOGY) BioAccent else Lilac
+    val label = if (mode == AppMode.BIOLOGY) "TERM OF THE DAY" else "WORD OF THE DAY"
+    val modeIcon = if (mode == AppMode.BIOLOGY) "🧬" else "★"
+
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(BgPurple)
-            .clickable(actionStartActivity(wotdIntent(ctx, word?.word)))
+            .background(bgColor)
+            .clickable(actionStartActivity(wotdIntent(ctx, word?.word, mode)))
     ) {
         Column(
             modifier = GlanceModifier
@@ -140,25 +159,18 @@ private fun WotdCard(word: WordEntity?) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "WORD OF THE DAY",
+                    text = label,
                     style = TextStyle(color = White40, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                 )
                 Spacer(GlanceModifier.defaultWeight())
-                Text(
-                    text = "★",
-                    style = TextStyle(color = Gold, fontSize = 14.sp)
-                )
+                Text(text = modeIcon, style = TextStyle(color = starColor, fontSize = 14.sp))
             }
 
             Spacer(GlanceModifier.height(10.dp))
 
             Text(
                 text = word?.word?.replaceFirstChar { it.uppercaseChar() } ?: "—",
-                style = TextStyle(
-                    color = White100,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                ),
+                style = TextStyle(color = White100, fontSize = 24.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1
             )
 
@@ -169,7 +181,7 @@ private fun WotdCard(word: WordEntity?) {
                         word.pronunciation.takeIf { it.isNotBlank() },
                         word.partOfSpeech.takeIf { it.isNotBlank() }
                     ).joinToString("  ·  "),
-                    style = TextStyle(color = Lilac, fontSize = 10.sp),
+                    style = TextStyle(color = accentColor, fontSize = 10.sp),
                     maxLines = 1
                 )
                 Spacer(GlanceModifier.height(8.dp))
@@ -190,19 +202,18 @@ private fun WotdCard(word: WordEntity?) {
 
             Text(
                 text = "Tap to explore →",
-                style = TextStyle(color = Lilac, fontSize = 9.sp)
+                style = TextStyle(color = accentColor, fontSize = 9.sp)
             )
         }
     }
 }
 
-// Uses "lookup_word" extra instead of ACTION_SEND + MIME type so the word survives
-// Glance's PendingIntent wrapping — Android can strip the MIME type from PendingIntents,
-// causing processIntent to fall through to manual-search mode.
-private fun wotdIntent(context: Context, word: String?): Intent =
+// Uses "lookup_word" + "lookup_mode" extras so the mode survives Glance's PendingIntent wrapping.
+private fun wotdIntent(context: Context, word: String?, mode: AppMode): Intent =
     Intent(context, PopupActivity::class.java).apply {
         if (word != null) {
             putExtra("lookup_word", word)
+            putExtra("lookup_mode", mode.id)
         } else {
             putExtra("mode", "manual_search")
         }

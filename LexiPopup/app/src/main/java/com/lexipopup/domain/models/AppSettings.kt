@@ -1,7 +1,7 @@
 package com.lexipopup.domain.models
 
 data class AppSettings(
-    // Popup Layout
+    // Popup Layout — English mode
     val showPronunciation: Boolean = true,
     val showPartOfSpeech: Boolean = true,
     val showDetailedMeaning: Boolean = true,
@@ -32,19 +32,19 @@ data class AppSettings(
     // Popup Behavior
     val enableDragging: Boolean = true,
     val enableResizing: Boolean = true,
-    val enableEdgeCollapse: Boolean = true,   // YouTube-style edge tab collapse
+    val enableEdgeCollapse: Boolean = true,
     val enableCollapseTooBubble: Boolean = true,
     val autoCloseSeconds: Int = 0,
     val showOnTopOfAllApps: Boolean = true,
 
     // Window size
-    val popupWidthFraction: Float = 0.88f,   // 0.50 – 0.95
-    val popupHeightFraction: Float = 0.65f,  // 0.35 – 0.88
+    val popupWidthFraction: Float = 0.88f,
+    val popupHeightFraction: Float = 0.65f,
 
-    // Window transparency (1.0 = fully opaque, 0.3 = very transparent)
+    // Window transparency
     val popupBgAlpha: Float = 1.0f,
 
-    // Last window position (restored on next open)
+    // Last window position
     val popupLastOffsetX: Float = 0f,
     val popupLastOffsetY: Float = 0f,
 
@@ -60,19 +60,47 @@ data class AppSettings(
     val useDarkMode: Boolean = false,
     val useSystemTheme: Boolean = true,
 
-    // AI Features — legacy OpenAI key (still supported)
+    // AI — legacy OpenAI key (still supported)
     val openAiApiKey: String = "",
 
-    // Dual AI System
+    // Dual AI System (SHARED between modes)
     val groqApiKey: String = "",
     val aiProviderName: String = "groq",
     val hybridAutoSelectBest: Boolean = true,
     val hybridShowComparison: Boolean = true,
     val onDeviceModelId: String = "gemma-2b-tiny",
 
-    // Word of the Day
+    // Word of the Day (English)
     val wotdMode: String = "global",
     val wotdUserLevel: Int = 2,
     val wotdNotificationEnabled: Boolean = true,
-    val wotdNotificationHour: Int = 9
+    val wotdNotificationHour: Int = 9,
+
+    // ── Mode Enable / Disable ─────────────────────────────────────────────────
+    val englishModeEnabled: Boolean = true,
+    val biologyModeEnabled: Boolean = true,
+
+    // ── Biology Popup Display Settings ────────────────────────────────────────
+    val bioShowPronunciation: Boolean = true,
+    val bioShowCategory: Boolean = true,       // maps to partOfSpeech in bio context
+    val bioShowDefinition: Boolean = true,
+    val bioShowHindi: Boolean = true,
+    val bioShowExample: Boolean = true,
+    val bioShowClassification: Boolean = true,
+    val bioShowFunctions: Boolean = true,
+    val bioShowStructure: Boolean = true,
+    val bioShowRelatedTerms: Boolean = true,
+    val bioShowDiseases: Boolean = true,
+    val bioShowEtymology: Boolean = true,
+    val bioShowDifficulty: Boolean = true,
+    val bioShowFrequency: Boolean = true,
+    val bioShowCopyButton: Boolean = true,
+    val bioShowSpeakButton: Boolean = true,
+    val bioShowShareButton: Boolean = true,
+    val bioShowFavoriteButton: Boolean = true,
+    val bioShowSearchWebButton: Boolean = true,
+
+    // Biology Term of Day
+    val totdNotificationEnabled: Boolean = true,
+    val totdNotificationHour: Int = 9
 )

@@ -4,6 +4,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.lexipopup.domain.models.WordEntry
+import com.lexipopup.utils.ai.parseBiologyEntryFromJson
+import com.lexipopup.utils.ai.parseWordEntryFromJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -40,60 +42,61 @@ class AiExplanationHelper @Inject constructor(
   "antonyms": ["ant1", "ant2"],
   "etymology": "Brief word origin, e.g. Latin/Greek root, or empty string if unknown."
 }"""
-
-            val requestBody = gson.toJson(
-                mapOf(
-                    "model" to "gpt-4o-mini",
-                    "messages" to listOf(mapOf("role" to "user", "content" to prompt)),
-                    "max_tokens" to 400,
-                    "temperature" to 0.2
-                )
-            ).toRequestBody("application/json".toMediaType())
-
-            val request = Request.Builder()
-                .url(endpoint)
-                .post(requestBody)
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .build()
-
-            val response = aiClient.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext null
-
-            val body = response.body?.string() ?: return@withContext null
-            val root = gson.fromJson(body, JsonObject::class.java)
-            val content = root["choices"]?.asJsonArray
-                ?.get(0)?.asJsonObject
-                ?.get("message")?.asJsonObject
-                ?.get("content")?.asString ?: return@withContext null
-
-            parseResponse(word, content.trim())
-        } catch (_: Exception) {
-            null
-        }
+            val content = callOpenAI(prompt, apiKey, maxTokens = 400) ?: return@withContext null
+            parseWordEntryFromJson(word, content, "openai", gson)
+        } catch (_: Exception) { null }
     }
 
-    private fun parseResponse(word: String, json: String): WordEntry? {
-        return try {
-            val obj = gson.fromJson(json, JsonObject::class.java)
-            val meaning = obj["meaning"]?.asString?.takeIf { it.isNotBlank() } ?: return null
-            WordEntry(
-                word = word,
-                partOfSpeech = obj["part_of_speech"]?.asString ?: "",
-                shortMeaning = meaning,
-                hindiMeaning = obj["hindi_meaning"]?.asString ?: "",
-                exampleSentence = obj["example"]?.asString ?: "",
-                synonyms = runCatching {
-                    gson.fromJson<List<String>>(obj["synonyms"], listType)
-                }.getOrDefault(emptyList()),
-                antonyms = runCatching {
-                    gson.fromJson<List<String>>(obj["antonyms"], listType)
-                }.getOrDefault(emptyList()),
-                etymology = obj["etymology"]?.asString ?: "",
-                source = "ai"
+    suspend fun explainBiologyTerm(term: String, apiKey: String): WordEntry? = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) return@withContext null
+        try {
+            val prompt = """You are a biology expert. For the biology term "$term", respond ONLY with this JSON (no markdown, no code fences):
+{
+  "category": "Organelle/Hormone/Tissue/Organ/Process/Molecule/Cell/System/Disease/other",
+  "pronunciation": "/phonetic/ or empty string",
+  "definition": "Clear 1-2 sentence biology definition",
+  "hindi_name": "Hindi name in Devanagari or empty string",
+  "example_context": "One sentence showing it in a biological context",
+  "scientific_classification": {"Domain":"","Kingdom":"","Phylum":"","Class":"","Order":"","Family":"","Genus":"","Species":""},
+  "functions": ["function1","function2"],
+  "structure": ["component1","component2"],
+  "related_terms": ["term1","term2"],
+  "diseases": ["disease1","disease2"],
+  "etymology": "Brief word origin or empty string",
+  "synonyms": ["synonym1"],
+  "difficulty_label": "Basic/Intermediate/Advanced",
+  "difficulty_percent": 60,
+  "frequency_percent": 50
+}"""
+            val content = callOpenAI(prompt, apiKey, maxTokens = 700) ?: return@withContext null
+            parseBiologyEntryFromJson(term, content, "openai_bio", gson)
+        } catch (_: Exception) { null }
+    }
+
+    private suspend fun callOpenAI(prompt: String, apiKey: String, maxTokens: Int): String? {
+        val requestBody = gson.toJson(
+            mapOf(
+                "model" to "gpt-4o-mini",
+                "messages" to listOf(mapOf("role" to "user", "content" to prompt)),
+                "max_tokens" to maxTokens,
+                "temperature" to 0.2
             )
-        } catch (_: Exception) {
-            null
-        }
+        ).toRequestBody("application/json".toMediaType())
+
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(requestBody)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .build()
+
+        val response = aiClient.newCall(request).execute()
+        if (!response.isSuccessful) return null
+        val body = response.body?.string() ?: return null
+        val root = gson.fromJson(body, JsonObject::class.java)
+        return root["choices"]?.asJsonArray
+            ?.get(0)?.asJsonObject
+            ?.get("message")?.asJsonObject
+            ?.get("content")?.asString?.trim()
     }
 }

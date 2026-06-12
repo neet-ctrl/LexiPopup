@@ -23,11 +23,9 @@ class PopupActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Transparent window so the card's semi-transparent background lets content show through
         window.setBackgroundDrawable(
             android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
         )
-        // API 31+ (Android 12+): real window-level background blur for true frosted glass
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
             window.attributes = window.attributes.also { it.blurBehindRadius = 22 }
@@ -60,20 +58,26 @@ class PopupActivity : ComponentActivity() {
             return
         }
 
-        // Direct word lookup from widgets — most reliable channel because PendingIntents from
-        // Glance widgets can strip the MIME type, causing ACTION_SEND to fall through to manual
-        // search mode.  Check this before any MIME-dependent path.
+        // Direct word lookup from widgets — uses lookup_word extra to survive Glance PendingIntent
+        // MIME stripping. Widget intents may carry a "mode" extra ("english" or "biology") to
+        // bypass the mode selection sheet and go straight to the right mode.
         val directWord = intent.getStringExtra("lookup_word")
         if (!directWord.isNullOrBlank()) {
-            viewModel.lookupWord(directWord.trim())
+            val widgetMode = intent.getStringExtra("lookup_mode")
+            if (!widgetMode.isNullOrBlank()) {
+                val appMode = com.lexipopup.domain.models.AppMode.fromId(widgetMode)
+                viewModel.lookupWord(directWord.trim(), mode = appMode)
+            } else {
+                viewModel.lookupWord(directWord.trim())
+            }
             return
         }
 
-        // PROCESS_TEXT from Moon+ Reader / any app
+        // PROCESS_TEXT from Moon+ Reader / any text-selection source
+        // Show mode selection sheet so the user can choose English or Biology lookup
         val processText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
         if (!processText.isNullOrBlank()) {
-            val sourceApp = intent.getStringExtra("source_app") ?: "External App"
-            viewModel.lookupWord(processText.trim(), sourceApp)
+            viewModel.requestModeSelection(processText.trim())
             return
         }
 
@@ -81,7 +85,7 @@ class PopupActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!text.isNullOrBlank()) {
-                viewModel.lookupWord(text.trim().split(" ").first())
+                viewModel.requestModeSelection(text.trim().split(" ").first())
                 return
             }
         }

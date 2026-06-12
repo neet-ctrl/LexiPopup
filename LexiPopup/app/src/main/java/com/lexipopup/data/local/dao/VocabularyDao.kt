@@ -10,41 +10,46 @@ interface VocabularyDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHistory(entry: VocabularyHistoryEntity)
 
-    @Query("SELECT * FROM vocabulary_history ORDER BY search_timestamp DESC LIMIT :limit")
-    fun getHistory(limit: Int): Flow<List<VocabularyHistoryEntity>>
+    @Query("SELECT * FROM vocabulary_history WHERE mode = :mode ORDER BY search_timestamp DESC LIMIT :limit")
+    fun getHistory(limit: Int, mode: String = "english"): Flow<List<VocabularyHistoryEntity>>
 
-    @Query("SELECT COUNT(*) FROM vocabulary_history WHERE search_timestamp >= :startOfDay")
-    fun getTodayCount(startOfDay: Long): Flow<Int>
+    @Query("SELECT COUNT(*) FROM vocabulary_history WHERE search_timestamp >= :startOfDay AND mode = :mode")
+    fun getTodayCount(startOfDay: Long, mode: String = "english"): Flow<Int>
 
     @Query("""
         SELECT word, COUNT(*) as count 
-        FROM vocabulary_history 
+        FROM vocabulary_history
+        WHERE mode = :mode
         GROUP BY word 
         ORDER BY count DESC 
         LIMIT :limit
     """)
-    fun getMostSearched(limit: Int): Flow<List<WordCount>>
+    fun getMostSearched(limit: Int, mode: String = "english"): Flow<List<WordCount>>
 
     @Query("""
         SELECT strftime('%w', datetime(search_timestamp/1000, 'unixepoch')) as day, COUNT(*) as count
         FROM vocabulary_history
-        WHERE search_timestamp >= :sevenDaysAgo
+        WHERE search_timestamp >= :sevenDaysAgo AND mode = :mode
         GROUP BY day
     """)
-    fun getWeeklyStats(sevenDaysAgo: Long): Flow<List<DayCount>>
+    fun getWeeklyStats(sevenDaysAgo: Long, mode: String = "english"): Flow<List<DayCount>>
 
     @Query("""
         SELECT strftime('%Y-%m-%d', datetime(search_timestamp/1000, 'unixepoch')) as date, 
                COUNT(*) as count
         FROM vocabulary_history
         WHERE search_timestamp >= (strftime('%s','now') - :days * 86400) * 1000
+          AND mode = :mode
         GROUP BY date
         ORDER BY date ASC
     """)
-    fun getActivityForDays(days: Int = 84): Flow<List<DateCount>>
+    fun getActivityForDays(days: Int = 84, mode: String = "english"): Flow<List<DateCount>>
+
+    @Query("DELETE FROM vocabulary_history WHERE mode = :mode")
+    suspend fun clearHistory(mode: String = "english")
 
     @Query("DELETE FROM vocabulary_history")
-    suspend fun clearHistory()
+    suspend fun clearAllHistory()
 }
 
 data class WordCount(val word: String, val count: Int)

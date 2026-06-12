@@ -112,37 +112,43 @@ private fun favDiffText(level: Int): ColorProvider {
 class FavoritesWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val words = fetchFavorites(context)
-        provideContent { FavoritesContent(words) }
+        val (words, mode) = fetchFavorites(context)
+        provideContent { FavoritesContent(words, mode) }
     }
 
-    private suspend fun fetchFavorites(context: Context): List<WordEntity> = try {
-        EntryPointAccessors
+    private suspend fun fetchFavorites(context: Context): Pair<List<WordEntity>, com.lexipopup.domain.models.AppMode> = try {
+        val ep = EntryPointAccessors
             .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-            .wordDao()
-            .getFavoritesList()
+        val currentMode = ep.modeManager().currentMode.value
+        Pair(ep.wordDao().getFavoritesList(currentMode.id), currentMode)
     } catch (_: Exception) {
-        emptyList()
+        Pair(emptyList(), com.lexipopup.domain.models.AppMode.ENGLISH)
     }
 }
 
 @Composable
-private fun FavoritesContent(words: List<WordEntity>) {
+private fun FavoritesContent(
+    words: List<WordEntity>,
+    mode: com.lexipopup.domain.models.AppMode = com.lexipopup.domain.models.AppMode.ENGLISH
+) {
     val ctx = LocalContext.current
+    val isBio = mode == com.lexipopup.domain.models.AppMode.BIOLOGY
+    val headerBg = if (isBio) Color(0xFF1B5E20) else FavHeaderBg
+    val modeLabel = if (isBio) "🧬 Bio Favourites" else "★ Favourites"
+    val modeToggleIcon = if (isBio) "📚" else "🧬"
+
     Column(modifier = GlanceModifier.fillMaxSize().background(favCardBg())) {
 
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
-                .background(FavHeaderBg)
+                .background(headerBg)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("★", style = TextStyle(color = ColorProvider(Color(0xFFFFD54F)), fontSize = 15.sp))
-            Spacer(GlanceModifier.width(8.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
-                    text = "Favourites",
+                    text = modeLabel,
                     style = TextStyle(color = FavHeaderText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 )
                 Text(
@@ -150,6 +156,13 @@ private fun FavoritesContent(words: List<WordEntity>) {
                     style = TextStyle(color = favHeaderSub(), fontSize = 10.sp)
                 )
             }
+            Text(
+                text = modeToggleIcon,
+                modifier = GlanceModifier
+                    .clickable(actionRunCallback<ToggleFavWidgetModeCallback>())
+                    .padding(horizontal = 6.dp),
+                style = TextStyle(color = FavHeaderText, fontSize = 16.sp)
+            )
             Text(
                 text = "⌕",
                 modifier = GlanceModifier
@@ -261,6 +274,24 @@ class RefreshFavoritesCallback : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
+        FavoritesWidget().update(context, glanceId)
+    }
+}
+
+class ToggleFavWidgetModeCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val ep = EntryPointAccessors
+            .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
+        val mm = ep.modeManager()
+        val newMode = if (mm.currentMode.value == com.lexipopup.domain.models.AppMode.ENGLISH)
+            com.lexipopup.domain.models.AppMode.BIOLOGY
+        else
+            com.lexipopup.domain.models.AppMode.ENGLISH
+        mm.setMode(newMode)
         FavoritesWidget().update(context, glanceId)
     }
 }

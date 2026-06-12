@@ -9,6 +9,7 @@ import com.lexipopup.data.local.entities.FavoriteWordEntity
 import com.lexipopup.data.local.entities.FlashcardEntity
 import com.lexipopup.data.local.entities.UserNoteEntity
 import com.lexipopup.data.local.entities.VocabularyHistoryEntity
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.Flashcard
 import com.lexipopup.domain.models.UserNote
 import com.lexipopup.domain.models.VocabularyHistory
@@ -34,14 +35,14 @@ class VocabularyRepositoryImpl @Inject constructor(
 
     // ─── History ──────────────────────────────────────────────────
 
-    override suspend fun recordSearch(word: String, sourceApp: String, timeSpentMs: Long) {
+    override suspend fun recordSearch(word: String, sourceApp: String, mode: AppMode, timeSpentMs: Long) {
         vocabularyDao.insertHistory(
-            VocabularyHistoryEntity(word = word, sourceApp = sourceApp, timeSpentMs = timeSpentMs)
+            VocabularyHistoryEntity(word = word, mode = mode.id, sourceApp = sourceApp, timeSpentMs = timeSpentMs)
         )
     }
 
-    override fun getHistory(limit: Int): Flow<List<VocabularyHistory>> =
-        vocabularyDao.getHistory(limit).map { list ->
+    override fun getHistory(limit: Int, mode: AppMode): Flow<List<VocabularyHistory>> =
+        vocabularyDao.getHistory(limit, mode.id).map { list ->
             list.map {
                 VocabularyHistory(
                     it.id, it.word,
@@ -51,25 +52,25 @@ class VocabularyRepositoryImpl @Inject constructor(
             }
         }
 
-    override fun getTodayCount(): Flow<Int> {
+    override fun getTodayCount(mode: AppMode): Flow<Int> {
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        return vocabularyDao.getTodayCount(startOfDay)
+        return vocabularyDao.getTodayCount(startOfDay, mode.id)
     }
 
-    override fun getWeeklyStats(): Flow<List<Pair<String, Int>>> {
+    override fun getWeeklyStats(mode: AppMode): Flow<List<Pair<String, Int>>> {
         val sevenDaysAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
-        return vocabularyDao.getWeeklyStats(sevenDaysAgo).map { list ->
+        return vocabularyDao.getWeeklyStats(sevenDaysAgo, mode.id).map { list ->
             list.map { Pair(it.day, it.count) }
         }
     }
 
-    override fun getMostSearchedWords(limit: Int): Flow<List<Pair<String, Int>>> =
-        vocabularyDao.getMostSearched(limit).map { list ->
+    override fun getMostSearchedWords(limit: Int, mode: AppMode): Flow<List<Pair<String, Int>>> =
+        vocabularyDao.getMostSearched(limit, mode.id).map { list ->
             list.map { Pair(it.word, it.count) }
         }
 
-    override fun getActivityHeatmap(days: Int): Flow<Map<LocalDate, Int>> =
-        vocabularyDao.getActivityForDays(days).map { list ->
+    override fun getActivityHeatmap(days: Int, mode: AppMode): Flow<Map<LocalDate, Int>> =
+        vocabularyDao.getActivityForDays(days, mode.id).map { list ->
             list.associate { row ->
                 try { LocalDate.parse(row.date) to row.count }
                 catch (_: Exception) { LocalDate.now() to 0 }
@@ -78,19 +79,19 @@ class VocabularyRepositoryImpl @Inject constructor(
 
     // ─── Favorites ────────────────────────────────────────────────
 
-    override suspend fun toggleFavorite(word: String) {
-        val nowFav = !favoriteWordDao.isFavorite(word)
-        if (nowFav) favoriteWordDao.addFavorite(FavoriteWordEntity(word = word))
-        else favoriteWordDao.removeFavorite(word)
-        // Keep dictionary_cache.is_favorite in sync so the dashboard flow updates instantly
-        wordDao.setFavorite(word, nowFav)
+    override suspend fun toggleFavorite(word: String, mode: AppMode) {
+        val nowFav = !favoriteWordDao.isFavorite(word, mode.id)
+        if (nowFav) favoriteWordDao.addFavorite(FavoriteWordEntity(word = word, mode = mode.id))
+        else favoriteWordDao.removeFavorite(word, mode.id)
+        wordDao.setFavorite(word, nowFav, mode.id)
     }
 
-    override suspend fun isFavorite(word: String): Boolean = favoriteWordDao.isFavorite(word)
+    override suspend fun isFavorite(word: String, mode: AppMode): Boolean =
+        favoriteWordDao.isFavorite(word, mode.id)
 
     // ─── Notes ────────────────────────────────────────────────────
 
-    override suspend fun saveNote(word: String, note: String) {
+    override suspend fun saveNote(word: String, note: String, mode: AppMode) {
         userNoteDao.insertNote(UserNoteEntity(word = word, note = note))
     }
 
@@ -114,15 +115,11 @@ class VocabularyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createFlashcard(word: String, front: String, back: String) {
-        flashcardDao.insertCard(
-            FlashcardEntity(word = word, frontText = front, backText = back)
-        )
+        flashcardDao.insertCard(FlashcardEntity(word = word, frontText = front, backText = back))
     }
 
     override suspend fun deleteFlashcard(id: Long) = flashcardDao.deleteById(id)
 }
-
-// ─── Extension helpers ────────────────────────────────────────────
 
 fun FlashcardEntity.toDomain() = Flashcard(
     id = id, word = word, frontText = frontText, backText = backText,

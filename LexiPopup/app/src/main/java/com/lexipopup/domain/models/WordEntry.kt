@@ -16,7 +16,11 @@ data class WordEntry(
     val frequencyRating: Int = 50,
     val source: String = "local",
     val isFavorite: Boolean = false,
-    val userNote: String = ""
+    val userNote: String = "",
+    /** Which mode produced this entry. "english" or "biology". */
+    val mode: String = AppMode.ENGLISH.id,
+    /** Biology extended data — JSON string (BiologyData). Empty for English mode. */
+    val bioExtData: String = "{}"
 ) {
     val difficultyLabel: String get() = when (difficultyLevel) {
         1 -> "Beginner"
@@ -35,6 +39,19 @@ data class WordEntry(
         "conjunction", "conj" -> 0xFF00695C
         "pronoun", "pron" -> 0xFFAD1457
         "interjection", "interj" -> 0xFF558B2F
+        // Biology categories
+        "organelle" -> 0xFF00838F
+        "hormone" -> 0xFF6A1B9A
+        "tissue" -> 0xFF558B2F
+        "organ" -> 0xFF1565C0
+        "process" -> 0xFFE65100
+        "molecule" -> 0xFF2E7D32
+        "cell" -> 0xFF00695C
+        "system" -> 0xFF37474F
+        "disease" -> 0xFFB71C1C
         else -> 0xFF546E7A
     }
+
+    fun biologyData(): BiologyData = BiologyData.fromJson(bioExtData)
+    fun isBiology(): Boolean = mode == AppMode.BIOLOGY.id
 }

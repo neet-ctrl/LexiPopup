@@ -34,7 +34,7 @@ import kotlinx.coroutines.CoroutineScope
         ChatSessionEntity::class,
         ChatMessageEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -48,21 +48,12 @@ abstract class LexiDatabase : RoomDatabase() {
     companion object {
         const val DATABASE_NAME = "lexi_dictionary.db"
 
-        /**
-         * Migration 2 → 3: wipe the old built-in seed words so the new
-         * 1 000-word set is inserted fresh by the onOpen re-seed guard.
-         * All user data (favourites, flashcards, notes, history) is untouched.
-         */
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DELETE FROM dictionary_cache WHERE source = 'seed'")
             }
         }
 
-        /**
-         * Migration 3 → 4: Add AI Chat tables (chat_sessions, chat_messages).
-         * Existing user data is untouched.
-         */
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -93,24 +84,104 @@ abstract class LexiDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 4 → 5: Biology mode support.
+         *
+         * Changes:
+         * - `dictionary_cache`: add `mode` TEXT (default 'english') and `bio_ext_data` TEXT (default '{}').
+         *   Unique index changes from (word) to (word, mode) — requires full table recreate in SQLite.
+         * - `favorite_words`: add `mode` TEXT; change PK from (word) to composite (word, mode) — recreate.
+         * - `vocabulary_history`: add `mode` TEXT column (ALTER TABLE is sufficient, no unique index change).
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+
+                // ── dictionary_cache: recreate with mode + bio_ext_data + new unique index ──
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `dictionary_cache_new` (
+                        `id`                 INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `word`               TEXT    NOT NULL,
+                        `mode`               TEXT    NOT NULL DEFAULT 'english',
+                        `pronunciation`      TEXT    NOT NULL DEFAULT '',
+                        `part_of_speech`     TEXT    NOT NULL DEFAULT '',
+                        `short_meaning`      TEXT    NOT NULL DEFAULT '',
+                        `detailed_meaning`   TEXT    NOT NULL DEFAULT '',
+                        `hindi_meaning`      TEXT    NOT NULL DEFAULT '',
+                        `hindi_pronunciation` TEXT   NOT NULL DEFAULT '',
+                        `example_sentence`   TEXT    NOT NULL DEFAULT '',
+                        `synonyms`           TEXT    NOT NULL DEFAULT '[]',
+                        `antonyms`           TEXT    NOT NULL DEFAULT '[]',
+                        `etymology`          TEXT    NOT NULL DEFAULT '',
+                        `difficulty_level`   INTEGER NOT NULL DEFAULT 1,
+                        `frequency_rating`   INTEGER NOT NULL DEFAULT 50,
+                        `source`             TEXT    NOT NULL DEFAULT 'local',
+                        `created_at`         INTEGER NOT NULL DEFAULT 0,
+                        `last_accessed`      INTEGER NOT NULL DEFAULT 0,
+                        `access_count`       INTEGER NOT NULL DEFAULT 0,
+                        `is_favorite`        INTEGER NOT NULL DEFAULT 0,
+                        `user_note`          TEXT    NOT NULL DEFAULT '',
+                        `last_reviewed`      INTEGER,
+                        `bio_ext_data`       TEXT    NOT NULL DEFAULT '{}'
+                    )
+                """.trimIndent())
+
+                db.execSQL("""
+                    INSERT INTO dictionary_cache_new
+                        (id, word, mode, pronunciation, part_of_speech, short_meaning, detailed_meaning,
+                         hindi_meaning, hindi_pronunciation, example_sentence, synonyms, antonyms,
+                         etymology, difficulty_level, frequency_rating, source, created_at,
+                         last_accessed, access_count, is_favorite, user_note, last_reviewed, bio_ext_data)
+                    SELECT id, word, 'english', pronunciation, part_of_speech, short_meaning, detailed_meaning,
+                           hindi_meaning, hindi_pronunciation, example_sentence, synonyms, antonyms,
+                           etymology, difficulty_level, frequency_rating, source, created_at,
+                           last_accessed, access_count, is_favorite, user_note, last_reviewed, '{}'
+                    FROM dictionary_cache
+                """.trimIndent())
+
+                db.execSQL("DROP TABLE IF EXISTS `dictionary_cache`")
+                db.execSQL("ALTER TABLE `dictionary_cache_new` RENAME TO `dictionary_cache`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_dictionary_cache_word_mode` ON `dictionary_cache` (`word`, `mode`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dictionary_cache_frequency_rating` ON `dictionary_cache` (`frequency_rating`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dictionary_cache_difficulty_level` ON `dictionary_cache` (`difficulty_level`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dictionary_cache_mode` ON `dictionary_cache` (`mode`)")
+
+                // ── favorite_words: recreate with composite PK (word, mode) ──────────────
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `favorite_words_new` (
+                        `word`     TEXT NOT NULL,
+                        `mode`     TEXT NOT NULL DEFAULT 'english',
+                        `added_at` INTEGER NOT NULL DEFAULT 0,
+                        `notes`    TEXT,
+                        PRIMARY KEY(`word`, `mode`)
+                    )
+                """.trimIndent())
+
+                db.execSQL("""
+                    INSERT INTO favorite_words_new (word, mode, added_at, notes)
+                    SELECT word, 'english', added_at, notes FROM favorite_words
+                """.trimIndent())
+
+                db.execSQL("DROP TABLE IF EXISTS `favorite_words`")
+                db.execSQL("ALTER TABLE `favorite_words_new` RENAME TO `favorite_words`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_favorite_words_word_mode` ON `favorite_words` (`word`, `mode`)")
+
+                // ── vocabulary_history: simple column addition ────────────────────────────
+                db.execSQL("ALTER TABLE `vocabulary_history` ADD COLUMN `mode` TEXT NOT NULL DEFAULT 'english'")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_vocabulary_history_mode` ON `vocabulary_history` (`mode`)")
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 LexiDatabase::class.java,
                 DATABASE_NAME
             )
-                // Let Room enable WAL + set synchronous = NORMAL itself, OUTSIDE any
-                // transaction. Setting PRAGMA synchronous inside a transaction (which is
-                // what Callback.onCreate receives) is illegal on Android 16 / SQLite 3.46+
-                // and causes the "Safety level may not be changed inside a transaction" crash.
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-                        // Seed runs synchronously inside Room's onCreate transaction.
-                        // DatabaseSeeder.seed() detects db.inTransaction() and skips its own
-                        // beginTransaction/endTransaction to avoid illegal nesting.
                         try {
                             DatabaseSeeder.seed(db)
                             Log.i("LexiDatabase", "Seed completed successfully")
@@ -121,21 +192,11 @@ abstract class LexiDatabase : RoomDatabase() {
 
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         super.onOpen(db)
-                        // These PRAGMAs are safe to set outside a transaction (onOpen is
-                        // called after Room's setup transaction closes).
-                        // Wrap in try/catch so an unexpected OEM restriction never crashes the app.
                         try {
                             db.execSQL("PRAGMA cache_size = -2000")
                             db.execSQL("PRAGMA mmap_size = 268435456")
-                        } catch (_: Exception) { /* non-fatal — defaults are fine */ }
+                        } catch (_: Exception) {}
 
-                        // ── Lazy re-seed guard ─────────────────────────────────────
-                        // onCreate only fires on a fresh install. Users who installed
-                        // before the seeder existed (or who had the DB recreated via
-                        // fallbackToDestructiveMigration without a fresh install) will
-                        // have 0 seed words. Detect and fix that here on every open.
-                        // DatabaseSeeder uses INSERT OR IGNORE so this is idempotent —
-                        // if words already exist nothing changes.
                         try {
                             val cursor = db.query(
                                 "SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed'",

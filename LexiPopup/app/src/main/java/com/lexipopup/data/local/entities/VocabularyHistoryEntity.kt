@@ -7,11 +7,12 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "vocabulary_history",
-    indices = [Index(value = ["search_timestamp"])]
+    indices = [Index(value = ["search_timestamp"]), Index(value = ["mode"])]
 )
 data class VocabularyHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "word") val word: String,
+    @ColumnInfo(name = "mode") val mode: String = "english",
     @ColumnInfo(name = "search_timestamp") val searchTimestamp: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "source_app") val sourceApp: String = "LexiPopup",
     @ColumnInfo(name = "time_spent_ms") val timeSpentMs: Long = 0

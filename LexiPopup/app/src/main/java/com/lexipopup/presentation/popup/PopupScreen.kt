@@ -76,12 +76,15 @@ fun PopupScreen(
     viewModel: PopupViewModel,
     onClose: () -> Unit
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
-    val settings       by viewModel.settings.collectAsState()
-    val suggestions    by viewModel.suggestions.collectAsState()
-    val searchQuery    by viewModel.searchQuery.collectAsState()
-    val isBubble       by viewModel.isBubbleMode.collectAsState()
-    val hybridAiResult by viewModel.hybridAiResult.collectAsState()
+    val uiState           by viewModel.uiState.collectAsState()
+    val settings          by viewModel.settings.collectAsState()
+    val suggestions       by viewModel.suggestions.collectAsState()
+    val searchQuery       by viewModel.searchQuery.collectAsState()
+    val isBubble          by viewModel.isBubbleMode.collectAsState()
+    val hybridAiResult    by viewModel.hybridAiResult.collectAsState()
+    val activeMode        by viewModel.activeMode.collectAsState()
+    val showModeSelection by viewModel.showModeSelection.collectAsState()
+    val pendingWord       by viewModel.pendingWord.collectAsState()
 
     val context       = LocalContext.current
     val haptic        = LocalHapticFeedback.current
@@ -597,9 +600,26 @@ fun PopupScreen(
                                         onManualSearch   = { viewModel.setManualSearchMode() }
                                     )
 
+                                    // ── Mode switcher (shown when both modes are enabled) ──
+                                    if (settings.englishModeEnabled && settings.biologyModeEnabled) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            PopupModeSwitcher(
+                                                activeMode = activeMode,
+                                                englishEnabled = settings.englishModeEnabled,
+                                                biologyEnabled = settings.biologyModeEnabled,
+                                                onModeChange = { viewModel.switchMode(it) }
+                                            )
+                                        }
+                                    }
+
                                     // ── Word info row (POS + frequency + difficulty) ──
                                     val successEntry = (uiState as? PopupUiState.Success)?.entry
-                                    if (successEntry != null) {
+                                    if (successEntry != null && !successEntry.isBiology()) {
                                         WordInfoRow(entry = successEntry, settings = settings)
                                     }
 
@@ -617,12 +637,29 @@ fun PopupScreen(
                                         ) { st ->
                                             when (st) {
                                                 is PopupUiState.Loading -> PopupSkeleton()
-                                                is PopupUiState.Success -> PopupContent(
-                                                    entry              = st.entry,
-                                                    settings           = settings,
-                                                    onWordChipClick    = { w -> viewModel.lookupWord(w) },
-                                                    onSourceBadgeClick = { viewModel.showLayerPicker() }
-                                                )
+                                                is PopupUiState.Success -> {
+                                                    if (st.entry.isBiology()) {
+                                                        val bioScroll = rememberScrollState()
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxSize()
+                                                                .verticalScroll(bioScroll)
+                                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                        ) {
+                                                            BiologyWordCard(
+                                                                entry = st.entry,
+                                                                settings = settings
+                                                            )
+                                                        }
+                                                    } else {
+                                                        PopupContent(
+                                                            entry              = st.entry,
+                                                            settings           = settings,
+                                                            onWordChipClick    = { w -> viewModel.lookupWord(w) },
+                                                            onSourceBadgeClick = { viewModel.showLayerPicker() }
+                                                        )
+                                                    }
+                                                }
                                                 is PopupUiState.Error -> PopupError(st.message)
                                                 is PopupUiState.ManualSearch,
                                                 is PopupUiState.Idle  -> ManualSearchContent(
@@ -742,6 +779,15 @@ fun PopupScreen(
                 }
             } // when
         } // AnimatedContent
+
+        // ── Mode selection sheet (triggered when opened from Moon+ Reader) ──────
+        if (showModeSelection) {
+            ModeSelectionSheet(
+                word           = pendingWord ?: "",
+                onModeSelected = { mode -> viewModel.confirmModeSelection(mode) },
+                onDismiss      = { viewModel.confirmModeSelection(activeMode) }
+            )
+        }
     } // root Box
 }
 

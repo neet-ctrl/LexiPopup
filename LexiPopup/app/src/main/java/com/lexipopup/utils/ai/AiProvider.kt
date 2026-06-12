@@ -3,6 +3,8 @@ package com.lexipopup.utils.ai
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.lexipopup.domain.models.AppMode
+import com.lexipopup.domain.models.BiologyData
 import com.lexipopup.domain.models.WordEntry
 
 // ── Provider selection ──────────────────────────────────────────────────────
@@ -46,13 +48,10 @@ data class OnDeviceModel(
     val sizeGb: Float,
     val ramRequiredGb: Float,
     val qualityPercent: Int,
-    val fileName: String,     // actual filename saved to disk (extension matters for MediaPipe)
+    val fileName: String,
     val downloadUrl: String
 ) {
     companion object {
-        // Public HuggingFace GGUF mirrors — no login required.
-        // MediaPipe 0.10.14+ natively loads GGUF files via setModelPath().
-        // Verified working 2026-06-12: both return HTTP 200 and serve bytes.
         val TINY = OnDeviceModel(
             id              = "gemma1.1-2b-it",
             displayName     = "Gemma 1.1 2B IT (1.5 GB)",
@@ -75,7 +74,7 @@ data class OnDeviceModel(
     }
 }
 
-// ── Shared JSON → WordEntry parser ──────────────────────────────────────────
+// ── Shared JSON → WordEntry parser (English) ────────────────────────────────
 
 private val listType = TypeToken.getParameterized(List::class.java, String::class.java).type
 
@@ -95,6 +94,72 @@ fun parseWordEntryFromJson(word: String, json: String, source: String, gson: Gso
         synonyms = runCatching { gson.fromJson<List<String>>(obj["synonyms"], listType) }.getOrDefault(emptyList()),
         antonyms = runCatching { gson.fromJson<List<String>>(obj["antonyms"], listType) }.getOrDefault(emptyList()),
         etymology = obj["etymology"]?.asString ?: "",
-        source = source
+        source = source,
+        mode = AppMode.ENGLISH.id
+    )
+} catch (_: Exception) { null }
+
+// ── JSON → WordEntry parser (Biology) ──────────────────────────────────────
+
+fun parseBiologyEntryFromJson(term: String, json: String, source: String, gson: Gson): WordEntry? = try {
+    val clean = json.trim()
+        .removePrefix("```json").removePrefix("```")
+        .removeSuffix("```")
+        .trim()
+    val obj = gson.fromJson(clean, JsonObject::class.java)
+    val definition = obj["definition"]?.asString?.takeIf { it.isNotBlank() } ?: return null
+
+    val classification = try {
+        val classObj = obj["scientific_classification"]?.asJsonObject
+        if (classObj != null) {
+            classObj.entrySet()
+                .filter { it.value.asString.isNotBlank() }
+                .associate { it.key to it.value.asString }
+        } else emptyMap()
+    } catch (_: Exception) { emptyMap() }
+
+    val functions = try { gson.fromJson<List<String>>(obj["functions"], listType) } catch (_: Exception) { emptyList() }
+    val structure = try { gson.fromJson<List<String>>(obj["structure"], listType) } catch (_: Exception) { emptyList() }
+    val diseases = try { gson.fromJson<List<String>>(obj["diseases"], listType) } catch (_: Exception) { emptyList() }
+    val relatedTerms = try { gson.fromJson<List<String>>(obj["related_terms"], listType) } catch (_: Exception) { emptyList() }
+    val synonyms = try { gson.fromJson<List<String>>(obj["synonyms"], listType) } catch (_: Exception) { emptyList() }
+    val difficultyLabel = obj["difficulty_label"]?.asString ?: ""
+    val difficultyPercent = try { obj["difficulty_percent"]?.asInt ?: 0 } catch (_: Exception) { 0 }
+    val frequencyPercent = try { obj["frequency_percent"]?.asInt ?: 50 } catch (_: Exception) { 50 }
+
+    val bioData = BiologyData(
+        scientificClassification = classification,
+        functions = functions,
+        structure = structure,
+        diseases = diseases,
+        relatedTerms = relatedTerms,
+        difficultyLabel = difficultyLabel,
+        difficultyPercent = difficultyPercent,
+        frequencyPercent = frequencyPercent
+    )
+
+    val diffLevel = when (difficultyLabel.lowercase()) {
+        "basic" -> 1
+        "intermediate" -> 2
+        "advanced" -> 3
+        else -> 2
+    }
+
+    WordEntry(
+        word = term,
+        pronunciation = obj["pronunciation"]?.asString ?: "",
+        partOfSpeech = obj["category"]?.asString ?: "",
+        shortMeaning = definition,
+        detailedMeaning = definition,
+        hindiMeaning = obj["hindi_name"]?.asString ?: "",
+        exampleSentence = obj["example_context"]?.asString ?: "",
+        synonyms = synonyms + relatedTerms.take(3),
+        antonyms = diseases.take(3),
+        etymology = obj["etymology"]?.asString ?: "",
+        difficultyLevel = diffLevel,
+        frequencyRating = frequencyPercent,
+        source = source,
+        mode = AppMode.BIOLOGY.id,
+        bioExtData = BiologyData.toJson(bioData)
     )
 } catch (_: Exception) { null }

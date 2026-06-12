@@ -7,11 +7,13 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.LAYER_CACHE
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.domain.usecases.LookupWordUseCase
+import com.lexipopup.utils.ModeManager
 import com.lexipopup.utils.NotificationHelper
 import com.lexipopup.utils.SettingsDataStore
 import com.lexipopup.utils.TtsHelper
@@ -44,7 +46,8 @@ class PopupViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val ttsHelper: TtsHelper,
     private val notificationHelper: NotificationHelper,
-    private val aiProviderManager: AiProviderManager
+    private val aiProviderManager: AiProviderManager,
+    val modeManager: ModeManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<PopupUiState>(PopupUiState.Idle)
@@ -53,6 +56,17 @@ class PopupViewModel @Inject constructor(
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions.asStateFlow()
 
+    // ── Mode selection sheet (Moon+ Reader flow) ───────────────────────────────
+    /** When set, popup should show mode selection sheet before looking up this word */
+    private val _pendingWord = MutableStateFlow<String?>(null)
+    val pendingWord: StateFlow<String?> = _pendingWord.asStateFlow()
+
+    private val _showModeSelection = MutableStateFlow(false)
+    val showModeSelection: StateFlow<Boolean> = _showModeSelection.asStateFlow()
+
+    /** Current active mode in popup (can differ from app-level mode during mode selection) */
+    val activeMode: StateFlow<AppMode> = modeManager.currentMode
+
     // ── Layer picker ──────────────────────────────────────────────────────────
     private val _showLayerPicker = MutableStateFlow(false)
     val showLayerPicker: StateFlow<Boolean> = _showLayerPicker.asStateFlow()
@@ -60,12 +74,10 @@ class PopupViewModel @Inject constructor(
     private val _forcingLayerId = MutableStateFlow<String?>(null)
     val forcingLayerId: StateFlow<String?> = _forcingLayerId.asStateFlow()
 
-    /** Active layers excluding the in-process LRU cache (can't force-select it meaningfully). */
     val activeLayers: StateFlow<List<String>> = settingsDataStore.layerSystemConfig
         .map { cfg -> cfg.activeLayers().filter { it != LAYER_CACHE } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Non-null only when provider is Hybrid and both AI calls returned results. */
     val hybridAiResult: StateFlow<HybridAiResult?> = aiProviderManager.lastHybridResult
 
     private val _searchQuery = MutableStateFlow("")
@@ -80,8 +92,8 @@ class PopupViewModel @Inject constructor(
     private var autoCloseJob: Job? = null
     private var searchJob: Job? = null
 
-    fun lookupWord(word: String, sourceApp: String = "LexiPopup") {
-        // Single-word extraction
+    fun lookupWord(word: String, sourceApp: String = "LexiPopup", mode: AppMode? = null) {
+        val effectiveMode = mode ?: modeManager.currentMode.value
         val clean = word.trim().lowercase()
             .replace(Regex("[^a-z'\\-]"), "")
             .trimStart('\'', '-').trimEnd('\'', '-')
@@ -92,14 +104,14 @@ class PopupViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = PopupUiState.Loading
-            val result = lookupWordUseCase(clean)
+            val result = lookupWordUseCase(clean, effectiveMode)
             result.fold(
                 onSuccess = { entry ->
                     _uiState.value = PopupUiState.Success(entry)
                     if (settings.value.saveSearchHistory) {
-                        vocabularyRepository.recordSearch(clean, sourceApp)
+                        vocabularyRepository.recordSearch(clean, sourceApp, effectiveMode)
                     }
-                    if (settings.value.autoGenerateFlashcards) {
+                    if (settings.value.autoGenerateFlashcards && effectiveMode == AppMode.ENGLISH) {
                         vocabularyRepository.createFlashcard(clean, clean, entry.shortMeaning.take(100))
                     }
                     scheduleAutoClose()
@@ -108,6 +120,50 @@ class PopupViewModel @Inject constructor(
                     _uiState.value = PopupUiState.Error("\"$clean\" not found. No offline data and no internet. Try another word.")
                 }
             )
+        }
+    }
+
+    /** Called from PopupActivity when PROCESS_TEXT arrives — shows mode selection sheet first. */
+    fun requestModeSelection(word: String) {
+        val settings = settings.value
+        val englishEnabled = settings.englishModeEnabled
+        val bioEnabled = settings.biologyModeEnabled
+        when {
+            !englishEnabled && bioEnabled -> {
+                // Only biology available — skip the sheet
+                lookupWord(word, mode = AppMode.BIOLOGY)
+            }
+            englishEnabled && !bioEnabled -> {
+                // Only English available — skip the sheet
+                lookupWord(word, mode = AppMode.ENGLISH)
+            }
+            else -> {
+                _pendingWord.value = word
+                _showModeSelection.value = true
+            }
+        }
+    }
+
+    fun confirmModeSelection(mode: AppMode) {
+        val word = _pendingWord.value ?: return
+        _showModeSelection.value = false
+        _pendingWord.value = null
+        modeManager.setMode(mode)
+        lookupWord(word, mode = mode)
+    }
+
+    fun dismissModeSelection() {
+        _showModeSelection.value = false
+        _pendingWord.value = null
+        _uiState.value = PopupUiState.ManualSearch
+    }
+
+    fun switchMode(mode: AppMode) {
+        modeManager.setMode(mode)
+        // Re-lookup current word in new mode if we have a result
+        val currentWord = (_uiState.value as? PopupUiState.Success)?.entry?.word
+        if (!currentWord.isNullOrBlank()) {
+            lookupWord(currentWord, mode = mode)
         }
     }
 
@@ -121,7 +177,7 @@ class PopupViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             delay(180)
             if (query.length >= 2) {
-                _suggestions.value = lookupWordUseCase.suggestions(query)
+                _suggestions.value = lookupWordUseCase.suggestions(query, modeManager.currentMode.value)
             } else {
                 _suggestions.value = emptyList()
             }
@@ -136,9 +192,9 @@ class PopupViewModel @Inject constructor(
         val state = _uiState.value
         if (state is PopupUiState.Success) {
             viewModelScope.launch {
-                vocabularyRepository.toggleFavorite(state.entry.word)
-                // Reload to reflect new favorite state
-                val refreshed = lookupWordUseCase(state.entry.word)
+                val mode = AppMode.fromId(state.entry.mode)
+                vocabularyRepository.toggleFavorite(state.entry.word, mode)
+                val refreshed = lookupWordUseCase(state.entry.word, mode)
                 refreshed.onSuccess { _uiState.value = PopupUiState.Success(it) }
             }
         }
@@ -148,7 +204,7 @@ class PopupViewModel @Inject constructor(
         val state = _uiState.value
         if (state is PopupUiState.Success && note.isNotBlank()) {
             viewModelScope.launch {
-                vocabularyRepository.saveNote(state.entry.word, note)
+                vocabularyRepository.saveNote(state.entry.word, note, AppMode.fromId(state.entry.mode))
             }
         }
     }
@@ -156,7 +212,6 @@ class PopupViewModel @Inject constructor(
     fun speakWord(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            // If TTS engine is not ready, send the user to TTS settings to install one.
             if (!ttsHelper.speak(state.entry.word)) ttsHelper.openTtsSettings()
         }
     }
@@ -179,19 +234,13 @@ class PopupViewModel @Inject constructor(
     fun openTranslate(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            // Translate the full meaning text (short + detailed if different), not just the word
             val meaningText = buildString {
                 append(state.entry.shortMeaning)
-                if (state.entry.detailedMeaning.isNotBlank() &&
-                    state.entry.detailedMeaning != state.entry.shortMeaning
-                ) {
-                    append(". ")
-                    append(state.entry.detailedMeaning)
+                if (state.entry.detailedMeaning.isNotBlank() && state.entry.detailedMeaning != state.entry.shortMeaning) {
+                    append(". "); append(state.entry.detailedMeaning)
                 }
             }.trim()
-            val uri = Uri.parse(
-                "https://translate.google.com/?text=${Uri.encode(meaningText)}&sl=en&tl=hi"
-            )
+            val uri = Uri.parse("https://translate.google.com/?text=${Uri.encode(meaningText)}&sl=en&tl=hi")
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
@@ -199,7 +248,8 @@ class PopupViewModel @Inject constructor(
     fun openSearchWeb(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(state.entry.word + " definition")}")
+            val query = if (state.entry.isBiology()) "${state.entry.word} biology" else "${state.entry.word} definition"
+            val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}")
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
@@ -207,7 +257,6 @@ class PopupViewModel @Inject constructor(
     fun openInBrowser(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            // Opens "<word> meaning" in browser — standard dictionary search suffix
             val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(state.entry.word + " meaning")}")
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
@@ -215,7 +264,7 @@ class PopupViewModel @Inject constructor(
 
     fun addFlashcard() {
         val state = _uiState.value
-        if (state is PopupUiState.Success) {
+        if (state is PopupUiState.Success && !state.entry.isBiology()) {
             viewModelScope.launch {
                 vocabularyRepository.createFlashcard(state.entry.word, state.entry.word, state.entry.shortMeaning.take(100))
             }
@@ -243,7 +292,13 @@ class PopupViewModel @Inject constructor(
     fun shareWord(context: Context) {
         val state = _uiState.value
         if (state is PopupUiState.Success) {
-            val text = buildString {
+            val text = if (state.entry.isBiology()) buildString {
+                append("🧬 ${state.entry.word}: ${state.entry.shortMeaning}")
+                if (state.entry.hindiMeaning.isNotBlank()) append("\nहिंदी: ${state.entry.hindiMeaning}")
+                val bioData = state.entry.biologyData()
+                if (bioData.functions.isNotEmpty()) append("\nFunctions: ${bioData.functions.take(2).joinToString("; ")}")
+                append("\n\n— via LexiPopup (Biology Mode)")
+            } else buildString {
                 append("${state.entry.word}: ${state.entry.shortMeaning}")
                 if (state.entry.hindiMeaning.isNotBlank()) append("\nहिंदी: ${state.entry.hindiMeaning}")
                 if (state.entry.exampleSentence.isNotBlank()) append("\nExample: \"${state.entry.exampleSentence}\"")
@@ -265,7 +320,8 @@ class PopupViewModel @Inject constructor(
         val word = (_uiState.value as? PopupUiState.Success)?.entry?.word ?: return
         viewModelScope.launch {
             _forcingLayerId.value = layerId
-            val result = lookupWordUseCase.invokeWithLayer(word, layerId)
+            val mode = modeManager.currentMode.value
+            val result = lookupWordUseCase.invokeWithLayer(word, layerId, mode)
             result.fold(
                 onSuccess = { entry ->
                     _uiState.value = PopupUiState.Success(entry)

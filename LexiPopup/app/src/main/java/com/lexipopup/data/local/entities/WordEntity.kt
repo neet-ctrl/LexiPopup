@@ -8,14 +8,16 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "dictionary_cache",
     indices = [
-        Index(value = ["word"], unique = true),
+        Index(value = ["word", "mode"], unique = true),
         Index(value = ["frequency_rating"]),
-        Index(value = ["difficulty_level"])
+        Index(value = ["difficulty_level"]),
+        Index(value = ["mode"])
     ]
 )
 data class WordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "word") val word: String,
+    @ColumnInfo(name = "mode") val mode: String = "english",
     @ColumnInfo(name = "pronunciation") val pronunciation: String = "",
     @ColumnInfo(name = "part_of_speech") val partOfSpeech: String = "",
     @ColumnInfo(name = "short_meaning") val shortMeaning: String = "",
@@ -34,5 +36,7 @@ data class WordEntity(
     @ColumnInfo(name = "access_count") val accessCount: Int = 0,
     @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
     @ColumnInfo(name = "user_note") val userNote: String = "",
-    @ColumnInfo(name = "last_reviewed") val lastReviewed: Long? = null
+    @ColumnInfo(name = "last_reviewed") val lastReviewed: Long? = null,
+    /** Biology-specific extended data stored as JSON (BiologyData). Empty for English mode. */
+    @ColumnInfo(name = "bio_ext_data") val bioExtData: String = "{}"
 )

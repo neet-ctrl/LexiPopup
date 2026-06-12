@@ -3,14 +3,15 @@ package com.lexipopup.data.local.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
-import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "favorite_words",
-    indices = [Index(value = ["word"], unique = true)]
+    primaryKeys = ["word", "mode"],
+    indices = [Index(value = ["word", "mode"], unique = true)]
 )
 data class FavoriteWordEntity(
-    @PrimaryKey val word: String,
+    @ColumnInfo(name = "word") val word: String,
+    @ColumnInfo(name = "mode") val mode: String = "english",
     @ColumnInfo(name = "added_at") val addedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "notes") val notes: String? = null
 )

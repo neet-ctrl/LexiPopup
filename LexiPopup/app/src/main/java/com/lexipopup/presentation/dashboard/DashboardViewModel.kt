@@ -4,24 +4,29 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
 import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.utils.ExportFormat
 import com.lexipopup.utils.ExportHelper
+import com.lexipopup.utils.ModeManager
 import com.lexipopup.utils.NotificationHelper
 import com.lexipopup.utils.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val dictionaryRepository: DictionaryRepository,
@@ -29,36 +34,54 @@ class DashboardViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val notificationHelper: NotificationHelper,
     private val exportHelper: ExportHelper,
-    private val gson: Gson
+    private val gson: Gson,
+    val modeManager: ModeManager
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    val todayCount: StateFlow<Int> = vocabularyRepository.getTodayCount()
+    val activeMode: StateFlow<AppMode> = modeManager.currentMode
+
+    // ── Mode-aware flows — automatically switch when mode changes ──────────────
+
+    val todayCount: StateFlow<Int> = modeManager.currentMode
+        .flatMapLatest { mode -> vocabularyRepository.getTodayCount(mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-    val totalWordCount: StateFlow<Int> = dictionaryRepository.getTotalWordCount()
+    val totalWordCount: StateFlow<Int> = modeManager.currentMode
+        .flatMapLatest { mode -> dictionaryRepository.getTotalWordCount(mode) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val recentWords: StateFlow<List<WordEntry>> = dictionaryRepository.getRecentWords(50)
+    val recentWords: StateFlow<List<WordEntry>> = modeManager.currentMode
+        .flatMapLatest { mode -> dictionaryRepository.getRecentWords(50, mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val favorites: StateFlow<List<WordEntry>> = dictionaryRepository.getFavorites()
+    val favorites: StateFlow<List<WordEntry>> = modeManager.currentMode
+        .flatMapLatest { mode -> dictionaryRepository.getFavorites(mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val mostSearched: StateFlow<List<Pair<String, Int>>> = vocabularyRepository.getMostSearchedWords(10)
+    val mostSearched: StateFlow<List<Pair<String, Int>>> = modeManager.currentMode
+        .flatMapLatest { mode -> vocabularyRepository.getMostSearchedWords(10, mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val weeklyStats: StateFlow<List<Pair<String, Int>>> = vocabularyRepository.getWeeklyStats()
+    val weeklyStats: StateFlow<List<Pair<String, Int>>> = modeManager.currentMode
+        .flatMapLatest { mode -> vocabularyRepository.getWeeklyStats(mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val activityHeatmapData: StateFlow<Map<LocalDate, Int>> = vocabularyRepository.getActivityHeatmap(84)
+    val activityHeatmapData: StateFlow<Map<LocalDate, Int>> = modeManager.currentMode
+        .flatMapLatest { mode -> vocabularyRepository.getActivityHeatmap(84, mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     val difficultyDistribution: StateFlow<Map<Int, Int>> = flow {
-        emit(dictionaryRepository.getDifficultyDistribution())
+        emit(dictionaryRepository.getDifficultyDistribution(modeManager.currentMode.value))
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
+
+    // ── Mode switching ────────────────────────────────────────────────────────
+
+    fun switchMode(mode: AppMode) = modeManager.setMode(mode)
+
+    // ── Settings mutations ────────────────────────────────────────────────────
 
     fun updateSetting(key: androidx.datastore.preferences.core.Preferences.Key<Boolean>, value: Boolean) {
         viewModelScope.launch {
@@ -75,7 +98,9 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun removeFavorite(word: String) {
-        viewModelScope.launch { vocabularyRepository.toggleFavorite(word) }
+        viewModelScope.launch {
+            vocabularyRepository.toggleFavorite(word, modeManager.currentMode.value)
+        }
     }
 
     fun updateApiKey(key: String) {
@@ -96,14 +121,12 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    /** Export all vocabulary directly to a SAF URI chosen by the user */
     fun exportVocabularyToUri(words: List<WordEntry>, format: ExportFormat, uri: Uri) {
         viewModelScope.launch {
             runCatching { exportHelper.exportWordsToUri(words, format, uri) }
         }
     }
 
-    /** Export current settings directly to a SAF URI chosen by the user */
     fun exportSettingsToUri(uri: Uri) {
         viewModelScope.launch {
             runCatching {
@@ -121,9 +144,9 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun toggleWotdWordFavorite(word: String) {
-        // Route through vocabularyRepository so both favorite_words and
-        // dictionary_cache.is_favorite stay in sync (favorites flow updates immediately)
-        viewModelScope.launch { vocabularyRepository.toggleFavorite(word) }
+        viewModelScope.launch {
+            vocabularyRepository.toggleFavorite(word, modeManager.currentMode.value)
+        }
     }
 
     fun updateWotdSettings(mode: String, level: Int, notifEnabled: Boolean, hour: Int) {

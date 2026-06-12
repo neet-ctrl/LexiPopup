@@ -6,6 +6,8 @@ import com.lexipopup.data.local.dao.WordDao
 import com.lexipopup.data.local.entities.WordEntity
 import com.lexipopup.data.remote.api.DictionaryApi
 import com.lexipopup.data.remote.dto.FreeDictionaryResponse
+import com.lexipopup.domain.models.AppMode
+import com.lexipopup.domain.models.BiologyData
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
 import kotlinx.coroutines.flow.Flow
@@ -20,13 +22,13 @@ class DictionaryRepositoryImpl @Inject constructor(
     private val gson: Gson
 ) : DictionaryRepository {
 
-    override suspend fun lookupWord(word: String): WordEntry? =
-        lookupLocal(word) ?: lookupOnline(word)
+    override suspend fun lookupWord(word: String, mode: AppMode): WordEntry? =
+        lookupLocal(word, mode) ?: if (mode == AppMode.ENGLISH) lookupOnline(word) else null
 
-    override suspend fun lookupLocal(word: String): WordEntry? {
-        val local = wordDao.findWord(word)
+    override suspend fun lookupLocal(word: String, mode: AppMode): WordEntry? {
+        val local = wordDao.findWord(word, mode.id)
         if (local != null) {
-            wordDao.updateAccess(word)
+            wordDao.updateAccess(word, mode.id)
             return local.toDomain(gson)
         }
         return null
@@ -34,12 +36,13 @@ class DictionaryRepositoryImpl @Inject constructor(
 
     override suspend fun lookupFromHistory(
         word: String,
+        mode: AppMode,
         minAccessCount: Int,
         includeAiSourced: Boolean
     ): WordEntry? {
-        val entity = wordDao.findHistoryWord(word, minAccessCount, includeAiSourced)
+        val entity = wordDao.findHistoryWord(word, mode.id, minAccessCount, includeAiSourced)
         if (entity != null) {
-            wordDao.updateAccess(word)
+            wordDao.updateAccess(word, mode.id)
             return entity.toDomain(gson)
         }
         return null
@@ -50,103 +53,99 @@ class DictionaryRepositoryImpl @Inject constructor(
             val remote = api.getDefinition(word)
             val entry = remote.firstOrNull()?.toWordEntry(word) ?: return null
             saveToCache(entry)
-            wordDao.updateAccess(word)
+            wordDao.updateAccess(word, AppMode.ENGLISH.id)
             entry
         } catch (e: Exception) {
             null
         }
     }
 
-    override suspend fun searchSuggestions(query: String, limit: Int): List<String> =
-        wordDao.getSuggestions(query, limit)
+    override suspend fun searchSuggestions(query: String, limit: Int, mode: AppMode): List<String> =
+        wordDao.getSuggestions(query, limit, mode.id)
 
-    override suspend fun searchWords(query: String, limit: Int): List<WordEntry> =
-        wordDao.searchWords(query, limit).map { it.toDomain(gson) }
+    override suspend fun searchWords(query: String, limit: Int, mode: AppMode): List<WordEntry> =
+        wordDao.searchWords(query, limit, mode.id).map { it.toDomain(gson) }
 
     override suspend fun saveToCache(entry: WordEntry) {
         wordDao.insertWord(entry.toEntity(gson))
     }
 
-    override suspend fun toggleFavorite(word: String) = wordDao.toggleFavorite(word)
+    override suspend fun toggleFavorite(word: String, mode: AppMode) =
+        wordDao.toggleFavorite(word, mode.id)
 
-    override suspend fun saveNote(word: String, note: String) = wordDao.updateNote(word, note)
+    override suspend fun saveNote(word: String, note: String, mode: AppMode) =
+        wordDao.updateNote(word, note, mode.id)
 
-    override fun getFavorites(): Flow<List<WordEntry>> =
-        wordDao.getFavorites().map { list -> list.map { it.toDomain(gson) } }
+    override fun getFavorites(mode: AppMode): Flow<List<WordEntry>> =
+        wordDao.getFavorites(mode.id).map { list -> list.map { it.toDomain(gson) } }
 
-    override fun getRecentWords(limit: Int): Flow<List<WordEntry>> =
-        wordDao.getRecentWords(limit).map { list -> list.map { it.toDomain(gson) } }
+    override fun getRecentWords(limit: Int, mode: AppMode): Flow<List<WordEntry>> =
+        wordDao.getRecentWords(limit, mode.id).map { list -> list.map { it.toDomain(gson) } }
 
-    override fun getTotalWordCount(): Flow<Int> = wordDao.getTotalCountFlow()
+    override fun getTotalWordCount(mode: AppMode): Flow<Int> =
+        wordDao.getTotalCountFlow(mode.id)
 
     override suspend fun getWordsByLetter(
-        letter: String,
-        limit: Int,
-        offset: Int,
-        sortBy: String,
-        pos: String
-    ): List<WordEntry> = wordDao.getWordsByLetter(letter, limit, offset, sortBy, pos)
-        .map { it.toDomain(gson) }
+        letter: String, limit: Int, offset: Int, sortBy: String, pos: String, mode: AppMode
+    ): List<WordEntry> =
+        wordDao.getWordsByLetter(letter, limit, offset, sortBy, pos, mode.id).map { it.toDomain(gson) }
 
-    override suspend fun countByLetter(letter: String): Int =
-        wordDao.countByLetter(letter)
+    override suspend fun countByLetter(letter: String, mode: AppMode): Int =
+        wordDao.countByLetter(letter, mode.id)
 
     override suspend fun getWordOfDay(mode: String, userLevel: Int): WordEntry? {
         val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
-
-        // Map mode/level → difficulty range
         val (minDiff, maxDiff) = when (mode) {
             "personalized" -> when (userLevel) {
-                1    -> 1 to 1   // Beginner only
-                2    -> 2 to 2   // Intermediate only
-                3    -> 3 to 3   // Advanced only
-                4    -> 3 to 4   // Advanced + Expert
+                1    -> 1 to 1
+                2    -> 2 to 2
+                3    -> 3 to 3
+                4    -> 3 to 4
                 else -> 2 to 3
             }
-            else -> 2 to 3       // global: Intermediate + Advanced
+            else -> 2 to 3
         }
-
-        // Random mode — fresh pick every call
         if (mode == "random") {
-            return wordDao.getRandomWordOfDayCandidate(30, 70, minDiff, maxDiff)?.toDomain(gson)
-                ?: wordDao.getRandomWord()?.toDomain(gson)
+            return wordDao.getRandomWordOfDayCandidate(30, 70, minDiff, maxDiff, AppMode.ENGLISH.id)?.toDomain(gson)
+                ?: wordDao.getRandomWord(AppMode.ENGLISH.id)?.toDomain(gson)
         }
-
-        // Global / Personalized — deterministic date-seed
-        val strictCount = wordDao.getWordOfDayCandidateCount(30, 70, minDiff, maxDiff)
+        val strictCount = wordDao.getWordOfDayCandidateCount(30, 70, minDiff, maxDiff, AppMode.ENGLISH.id)
         if (strictCount > 0) {
-            val offset = dayOfYear % strictCount
-            wordDao.getWordOfDayCandidateAt(offset, 30, 70, minDiff, maxDiff)?.toDomain(gson)
-                ?.let { return it }
+            wordDao.getWordOfDayCandidateAt(dayOfYear % strictCount, 30, 70, minDiff, maxDiff, AppMode.ENGLISH.id)
+                ?.toDomain(gson)?.let { return it }
         }
-
-        // Fallback 1: relax frequency filter (keep length + difficulty + content)
-        val relaxedCount = wordDao.getWordOfDayCandidateCount(0, 100, minDiff, maxDiff)
+        val relaxedCount = wordDao.getWordOfDayCandidateCount(0, 100, minDiff, maxDiff, AppMode.ENGLISH.id)
         if (relaxedCount > 0) {
-            val offset = dayOfYear % relaxedCount
-            wordDao.getWordOfDayCandidateAt(offset, 0, 100, minDiff, maxDiff)?.toDomain(gson)
-                ?.let { return it }
+            wordDao.getWordOfDayCandidateAt(dayOfYear % relaxedCount, 0, 100, minDiff, maxDiff, AppMode.ENGLISH.id)
+                ?.toDomain(gson)?.let { return it }
         }
-
-        // Fallback 2: any word at day-seeded offset
-        val total = wordDao.getTotalCount()
+        val total = wordDao.getTotalCount(AppMode.ENGLISH.id)
         if (total == 0) return null
-        return wordDao.getWordAtOffset(dayOfYear % total)?.toDomain(gson)
-            ?: wordDao.getRandomWord()?.toDomain(gson)
+        return wordDao.getWordAtOffset(dayOfYear % total, AppMode.ENGLISH.id)?.toDomain(gson)
+            ?: wordDao.getRandomWord(AppMode.ENGLISH.id)?.toDomain(gson)
     }
 
-    override suspend fun getDifficultyDistribution(): Map<Int, Int> =
-        wordDao.getDifficultyDistribution().associate { it.difficultyLevel to it.count }
+    override suspend fun getBiologyTermOfDay(): WordEntry? {
+        val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+        val total = wordDao.getBiologyTermCount()
+        if (total == 0) return null
+        return wordDao.getBiologyTermOfDayCandidateAt(dayOfYear % total)?.toDomain(gson)
+    }
+
+    override suspend fun getDifficultyDistribution(mode: AppMode): Map<Int, Int> =
+        wordDao.getDifficultyDistribution(mode.id).associate { it.difficultyLevel to it.count }
 
     override suspend fun deletePackWords(source: String) =
-        wordDao.deleteWordsBySource(source)
+        wordDao.deleteWordsBySource(source, AppMode.ENGLISH.id)
 
-    override fun getWordHistory(): Flow<List<WordEntry>> =
-        wordDao.getAllHistoryWords().map { list -> list.map { it.toDomain(gson) } }
+    override fun getWordHistory(mode: AppMode): Flow<List<WordEntry>> =
+        wordDao.getAllHistoryWords(mode.id).map { list -> list.map { it.toDomain(gson) } }
 
-    override fun getWordHistoryCount(): Flow<Int> = wordDao.getHistoryWordCountFlow()
+    override fun getWordHistoryCount(mode: AppMode): Flow<Int> =
+        wordDao.getHistoryWordCountFlow(mode.id)
 
-    override suspend fun markAccessed(word: String) = wordDao.updateAccess(word)
+    override suspend fun markAccessed(word: String, mode: AppMode) =
+        wordDao.updateAccess(word, mode.id)
 
     override suspend fun getSeedWords(query: String, limit: Int): List<WordEntry> =
         wordDao.getSeedWords(query, limit).map { it.toDomain(gson) }
@@ -173,12 +172,15 @@ fun WordEntity.toDomain(gson: Gson): WordEntry {
         frequencyRating = frequencyRating,
         source = source,
         isFavorite = isFavorite,
-        userNote = userNote
+        userNote = userNote,
+        mode = mode,
+        bioExtData = bioExtData
     )
 }
 
 fun WordEntry.toEntity(gson: Gson) = WordEntity(
     word = word,
+    mode = mode,
     pronunciation = pronunciation,
     partOfSpeech = partOfSpeech,
     shortMeaning = shortMeaning,
@@ -193,7 +195,8 @@ fun WordEntry.toEntity(gson: Gson) = WordEntity(
     frequencyRating = frequencyRating,
     source = source,
     isFavorite = isFavorite,
-    userNote = userNote
+    userNote = userNote,
+    bioExtData = bioExtData
 )
 
 fun FreeDictionaryResponse.toWordEntry(word: String): WordEntry {
@@ -204,7 +207,6 @@ fun FreeDictionaryResponse.toWordEntry(word: String): WordEntry {
     val allAntonyms = meanings.flatMap { it.antonyms } +
             meanings.flatMap { it.definitions.flatMap { d -> d.antonyms } }
     val ipa = phonetics.firstOrNull { it.text != null }?.text ?: phonetic ?: ""
-
     return WordEntry(
         word = word,
         pronunciation = ipa,
@@ -217,6 +219,7 @@ fun FreeDictionaryResponse.toWordEntry(word: String): WordEntry {
         synonyms = allSynonyms.distinct().take(8),
         antonyms = allAntonyms.distinct().take(8),
         etymology = etymology ?: "",
-        source = "online"
+        source = "online",
+        mode = AppMode.ENGLISH.id
     )
 }

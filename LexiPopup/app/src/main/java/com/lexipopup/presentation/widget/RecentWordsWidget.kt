@@ -102,39 +102,43 @@ private fun cardBg(index: Int): ColorProvider {
 class RecentWordsWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val words = fetchRecentWords(context)
-        provideContent { RecentContent(words) }
+        val (words, mode) = fetchRecentWords(context)
+        provideContent { RecentContent(words, mode) }
     }
 
-    private suspend fun fetchRecentWords(context: Context): List<WordEntity> = try {
-        EntryPointAccessors
+    private suspend fun fetchRecentWords(context: Context): Pair<List<WordEntity>, com.lexipopup.domain.models.AppMode> = try {
+        val ep = EntryPointAccessors
             .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-            .wordDao()
-            .getRecentWordsList(10)
+        val currentMode = ep.modeManager().currentMode.value
+        Pair(ep.wordDao().getRecentWordsList(10, currentMode.id), currentMode)
     } catch (_: Exception) {
-        emptyList()
+        Pair(emptyList(), com.lexipopup.domain.models.AppMode.ENGLISH)
     }
 }
 
 @Composable
-private fun RecentContent(words: List<WordEntity>) {
+private fun RecentContent(
+    words: List<WordEntity>,
+    mode: com.lexipopup.domain.models.AppMode = com.lexipopup.domain.models.AppMode.ENGLISH
+) {
     val ctx = LocalContext.current
     val indexed = words.mapIndexed { i, w -> i to w }
+    val isBio = mode == com.lexipopup.domain.models.AppMode.BIOLOGY
+    val modeLabel = if (isBio) "🧬 Recent Bio Terms" else "↺ Recent Words"
+    val modeToggleIcon = if (isBio) "📚" else "🧬"
 
     Column(modifier = GlanceModifier.fillMaxSize().background(recentCardBg())) {
 
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
-                .background(RecentHeaderBg)
+                .background(if (isBio) Color(0xFF1B5E20) else RecentHeaderBg)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("↺", style = TextStyle(color = RecentTealAccent, fontSize = 16.sp))
-            Spacer(GlanceModifier.width(8.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
-                    text = "Recent Words",
+                    text = modeLabel,
                     style = TextStyle(color = RecentHeaderText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 )
                 Text(
@@ -142,6 +146,13 @@ private fun RecentContent(words: List<WordEntity>) {
                     style = TextStyle(color = recentHeaderSub(), fontSize = 10.sp)
                 )
             }
+            Text(
+                text = modeToggleIcon,
+                modifier = GlanceModifier
+                    .clickable(actionRunCallback<ToggleRecentWidgetModeCallback>())
+                    .padding(horizontal = 6.dp),
+                style = TextStyle(color = RecentHeaderText, fontSize = 16.sp)
+            )
             Text(
                 text = "⌕",
                 modifier = GlanceModifier
@@ -262,6 +273,24 @@ class RefreshRecentCallback : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
+        RecentWordsWidget().update(context, glanceId)
+    }
+}
+
+class ToggleRecentWidgetModeCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val ep = EntryPointAccessors
+            .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
+        val mm = ep.modeManager()
+        val newMode = if (mm.currentMode.value == com.lexipopup.domain.models.AppMode.ENGLISH)
+            com.lexipopup.domain.models.AppMode.BIOLOGY
+        else
+            com.lexipopup.domain.models.AppMode.ENGLISH
+        mm.setMode(newMode)
         RecentWordsWidget().update(context, glanceId)
     }
 }

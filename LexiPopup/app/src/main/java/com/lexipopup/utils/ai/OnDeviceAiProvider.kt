@@ -275,6 +275,33 @@ class OnDeviceAiProvider(
         }
     }
 
+    suspend fun explainBiologyTerm(term: String): WordEntry? = withContext(Dispatchers.Default) {
+        if (!isModelReady()) return@withContext null
+        try {
+            _modelStatus.value = OnDeviceModelStatus.Loading
+            val options = com.google.mediapipe.tasks.genai.llminference.LlmInference
+                .LlmInferenceOptions.builder()
+                .setModelPath(modelFile().absolutePath)
+                .setMaxTokens(700)
+                .setTopK(40)
+                .setTemperature(0.15f)
+                .setRandomSeed(42)
+                .build()
+            val llm = com.google.mediapipe.tasks.genai.llminference.LlmInference
+                .createFromOptions(context, options)
+            val response = llm.generateResponse(buildBiologyPrompt(term))
+            llm.close()
+            _modelStatus.value = OnDeviceModelStatus.Ready
+            val start = response.indexOf('{')
+            val end   = response.lastIndexOf('}')
+            if (start < 0 || end < 0 || end <= start) return@withContext null
+            parseBiologyEntryFromJson(term, response.substring(start, end + 1), "on_device_bio", gson)
+        } catch (e: Exception) {
+            _modelStatus.value = OnDeviceModelStatus.Error(e.message ?: "Inference failed")
+            null
+        }
+    }
+
     fun deleteModel() {
         modelFile().delete()
         _downloadLogs.value = emptyList()
@@ -284,4 +311,8 @@ class OnDeviceAiProvider(
     private fun buildPrompt(word: String) =
         """Explain the English word "$word". Reply with ONLY this JSON object (no markdown):
 {"part_of_speech":"noun/verb/etc","meaning":"1-2 sentence definition","hindi_meaning":"Devanagari or empty string","example":"Natural example sentence","synonyms":["s1","s2"],"antonyms":["a1"],"etymology":"Brief origin or empty string"}"""
+
+    private fun buildBiologyPrompt(term: String) =
+        """You are a biology expert. For the biology term "$term", reply with ONLY this JSON (no markdown):
+{"category":"Organelle/Hormone/Tissue/Organ/Process/Molecule/Cell/System/Disease/other","pronunciation":"/phonetic/ or empty","definition":"1-2 sentence biology definition","hindi_name":"Hindi name in Devanagari or empty","example_context":"One biology context sentence","scientific_classification":{"Domain":"","Kingdom":"","Phylum":"","Class":"","Order":"","Family":"","Genus":"","Species":""},"functions":["function1","function2"],"structure":["component1"],"related_terms":["term1","term2"],"diseases":["disease1"],"etymology":"Brief origin or empty","synonyms":["synonym1"],"difficulty_label":"Basic/Intermediate/Advanced","difficulty_percent":60,"frequency_percent":50}"""
 }

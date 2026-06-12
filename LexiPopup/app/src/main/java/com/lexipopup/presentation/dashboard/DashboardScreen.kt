@@ -86,6 +86,7 @@ sealed class AppDestination {
     object SeedWordList : AppDestination()
     object LookupLayers : AppDestination()
     object AiChat : AppDestination()
+    object BioSettings : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +98,7 @@ fun DashboardScreen(
     startWord: String? = null
 ) {
     val settings by viewModel.settings.collectAsState()
+    val activeMode by viewModel.activeMode.collectAsState()
     val todayCount by viewModel.todayCount.collectAsState()
     val totalWordCount by viewModel.totalWordCount.collectAsState()
     val recentWords by viewModel.recentWords.collectAsState()
@@ -226,6 +228,12 @@ fun DashboardScreen(
             )
             return
         }
+        AppDestination.BioSettings -> {
+            com.lexipopup.presentation.biosettings.BioSettingsScreen(
+                onBack = { destination = AppDestination.Settings }
+            )
+            return
+        }
         else -> Unit
     }
 
@@ -242,18 +250,28 @@ fun DashboardScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        when (destination) {
-                            AppDestination.Home -> "LexiPopup"
-                            AppDestination.Dictionary -> "Dictionary"
-                            AppDestination.AiChat -> "AI Chat"
-                            AppDestination.Flashcards -> "Flashcards"
-                            AppDestination.Stats -> "Statistics"
-                            AppDestination.Settings -> "Settings"
-                            else -> "LexiPopup"
-                        },
-                        fontWeight = FontWeight.ExtraBold
-                    )
+                    if (destination == AppDestination.Home && settings.englishModeEnabled && settings.biologyModeEnabled) {
+                        // Centered dual-mode pill tab switcher
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            DashboardModeSwitcher(
+                                activeMode = activeMode,
+                                onModeChange = { viewModel.switchMode(it) }
+                            )
+                        }
+                    } else {
+                        Text(
+                            when (destination) {
+                                AppDestination.Home -> "LexiPopup"
+                                AppDestination.Dictionary -> "Dictionary"
+                                AppDestination.AiChat -> "AI Chat"
+                                AppDestination.Flashcards -> "Flashcards"
+                                AppDestination.Stats -> "Statistics"
+                                AppDestination.Settings -> "Settings"
+                                else -> "LexiPopup"
+                            },
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
                 },
                 actions = {
                     if (!hasOverlayPermission) {

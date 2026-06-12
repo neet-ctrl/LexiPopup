@@ -153,9 +153,13 @@ class MainActivity : ComponentActivity() {
         // Refresh states when returning from system Settings (SYSTEM_ALERT_WINDOW) or
         // after any permission change in another flow.
         refreshPermissionStates()
-        // If user returned from overlay Settings and all critical permissions are now
-        // granted, the Compose recomposition of PermissionSetupScreen will automatically
-        // enable the "Start Using LexiPopup" button — no manual navigation needed here.
+        // If the user returned from the overlay Settings page and all critical permissions
+        // are now satisfied, auto-advance straight to the dashboard without requiring an
+        // extra tap on "Start Using LexiPopup".
+        if (showPermissionSetup && hasOverlay && hasNotificationPerm) {
+            showPermissionSetup = false
+            startPopupService()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.lexipopup.presentation.dashboard.MainActivity
 import com.lexipopup.presentation.popup.PopupActivity
@@ -150,14 +151,18 @@ class NotificationHelper @Inject constructor(
     }
 
     /**
-     * Fires the daily Word of the Day notification. Tapping it opens MainActivity
-     * with the word detail pre-loaded.
+     * Fires the daily Word of the Day notification. Tapping it opens the same
+     * glassmorphism floating popup (PopupActivity) via the deep link URI so the
+     * UI is identical to looking up a word from Moon+ Reader or the persistent
+     * notification. A secondary action lets the user open the full dashboard.
      */
     fun showWotdNotification(word: String, shortMeaning: String, hindiMeaning: String, source: String = "") {
         if (!manager.areNotificationsEnabled()) return
 
-        val intent = Intent(context, MainActivity::class.java).apply {
-            putExtra("start_word", word)
+        // Open the same glassmorphism floating popup (PopupActivity) via deep link
+        val intent = Intent(context, PopupActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data   = Uri.parse("lexipopup://lookup?word=${Uri.encode(word)}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -183,11 +188,23 @@ class NotificationHelper @Inject constructor(
             if (sourceLabel.isNotBlank()) append(" [${sourceLabel}]")
         }
 
+        // Secondary action: open full dashboard (for users who want the complete view)
+        val fullAppIntent = Intent(context, MainActivity::class.java).apply {
+            putExtra("lookup_word", word)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val fullAppPendingIntent = PendingIntent.getActivity(
+            context, NOTIFICATION_WOTD_ID + 100, fullAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_WOTD_ID)
             .setContentTitle("\uD83D\uDCC5 Word of the Day: ${word.replaceFirstChar { it.uppercase() }}")
             .setContentText(bodyText)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(pendingIntent)
+            .addAction(android.R.drawable.ic_menu_search, "Quick Look", pendingIntent)
+            .addAction(android.R.drawable.ic_menu_info_details, "Full Details", fullAppPendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

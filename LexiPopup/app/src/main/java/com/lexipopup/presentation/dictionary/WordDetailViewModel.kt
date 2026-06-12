@@ -2,15 +2,19 @@ package com.lexipopup.presentation.dictionary
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
 import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.domain.usecases.LookupWordUseCase
 import com.lexipopup.utils.ModeManager
+import com.lexipopup.utils.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,6 +23,7 @@ class WordDetailViewModel @Inject constructor(
     private val lookupWord: LookupWordUseCase,
     private val repo: DictionaryRepository,
     private val vocabularyRepository: VocabularyRepository,
+    private val settingsDataStore: SettingsDataStore,
     private val modeManager: ModeManager
 ) : ViewModel() {
 
@@ -39,6 +44,9 @@ class WordDetailViewModel @Inject constructor(
 
     private val _snackMessage = MutableStateFlow<String?>(null)
     val snackMessage: StateFlow<String?> = _snackMessage.asStateFlow()
+
+    val appSettings: StateFlow<AppSettings> = settingsDataStore.settings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
 
     fun load(word: String) {
         if (_wordEntry.value?.word == word) return

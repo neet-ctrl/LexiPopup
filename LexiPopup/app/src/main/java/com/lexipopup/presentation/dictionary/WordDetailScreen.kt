@@ -29,7 +29,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lexipopup.domain.models.AppSettings
+import com.lexipopup.presentation.popup.BioCategoryBadge
+import com.lexipopup.presentation.popup.BiologyWordCard
 import java.util.Locale
+
+private val BioGreen      = Color(0xFF2E7D32)
+private val BioGreenLight = Color(0xFFE8F5E9)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +45,13 @@ fun WordDetailScreen(
     onBack: () -> Unit,
     onSynonymClick: (String) -> Unit = {}
 ) {
-    val entry by viewModel.wordEntry.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val entry          by viewModel.wordEntry.collectAsState()
+    val isLoading      by viewModel.isLoading.collectAsState()
     val showNoteDialog by viewModel.showNoteDialog.collectAsState()
-    val noteText by viewModel.noteText.collectAsState()
-    val snackMessage by viewModel.snackMessage.collectAsState()
-    val context = LocalContext.current
+    val noteText       by viewModel.noteText.collectAsState()
+    val snackMessage   by viewModel.snackMessage.collectAsState()
+    val appSettings    by viewModel.appSettings.collectAsState()
+    val context        = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(word) { viewModel.load(word) }
@@ -74,12 +81,8 @@ fun WordDetailScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             },
-            confirmButton = {
-                Button(onClick = viewModel::saveNote) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::closeNoteDialog) { Text("Cancel") }
-            }
+            confirmButton = { Button(onClick = viewModel::saveNote) { Text("Save") } },
+            dismissButton = { TextButton(onClick = viewModel::closeNoteDialog) { Text("Cancel") } }
         )
     }
 
@@ -96,9 +99,7 @@ fun WordDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
                 },
                 actions = {
                     entry?.let { e ->
@@ -114,20 +115,26 @@ fun WordDetailScreen(
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, "${e.word}\n${e.shortMeaning}\n— LexiPopup")
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share word"))
-                        }) {
-                            Icon(Icons.Default.Share, "Share")
-                        }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share"))
+                        }) { Icon(Icons.Default.Share, "Share") }
                     }
                 }
             )
         }
     ) { padding ->
+
         if (isLoading || entry == null) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 if (isLoading) CircularProgressIndicator()
-                else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.SearchOff, null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f))
+                else Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.SearchOff, null,
+                        modifier = Modifier.size(52.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f)
+                    )
                     Text("Word not found in local dictionary", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Try searching for a different word", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -135,8 +142,8 @@ fun WordDetailScreen(
             return@Scaffold
         }
 
-        val e = entry!!
-        val posColor = Color(e.partOfSpeechColor)
+        val e      = entry!!
+        val isBio  = e.isBiology()
         val scroll = rememberScrollState()
 
         Column(
@@ -147,175 +154,216 @@ fun WordDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // ── Biology mode badge ─────────────────────────────────────────────
-            if (e.isBiology()) {
+
+            // ── BIOLOGY LAYOUT ────────────────────────────────────────────────
+            if (isBio) {
+                // Green header bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF1B5E20).copy(alpha = 0.12f))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(BioGreen.copy(alpha = 0.10f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("🧬", fontSize = 14.sp)
+                    Text("🧬", fontSize = 18.sp)
                     Text(
                         "Biology Term",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2E7D32)
+                        color = BioGreen,
+                        modifier = Modifier.weight(1f)
                     )
-                }
-            }
-
-            // ── Pronunciation + Listen ─────────────────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    if (e.pronunciation.isNotBlank()) {
-                        Text(e.pronunciation, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = FontStyle.Italic)
-                    }
-                    SuggestionChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                e.partOfSpeech.ifBlank { "word" }.uppercase(),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            )
-                        },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = posColor.copy(alpha = 0.14f)),
-                        border = SuggestionChipDefaults.suggestionChipBorder(enabled = true, borderColor = posColor.copy(alpha = 0.4f))
-                    )
-                }
-                FilledTonalButton(
-                    onClick = {
-                        tts?.language = Locale.US
-                        tts?.speak(e.word, TextToSpeech.QUEUE_FLUSH, null, null)
-                    }
-                ) {
-                    Icon(Icons.Default.VolumeUp, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("LISTEN")
-                }
-            }
-
-            HorizontalDivider()
-
-            // ── Definition ────────────────────────────────────────────────────
-            if (e.shortMeaning.isNotBlank()) {
-                SectionCard(icon = "📖", title = "Definition") {
-                    Text(e.shortMeaning, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp)
-                }
-            }
-
-            // ── Detailed meaning ──────────────────────────────────────────────
-            if (e.detailedMeaning.isNotBlank() && e.detailedMeaning != e.shortMeaning) {
-                SectionCard(icon = "📝", title = "Detailed Meaning") {
-                    Text(e.detailedMeaning, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            // ── Hindi meaning ─────────────────────────────────────────────────
-            if (e.hindiMeaning.isNotBlank()) {
-                SectionCard(icon = "🇮🇳", title = "Hindi Meaning") {
-                    Text(e.hindiMeaning, style = MaterialTheme.typography.bodyLarge, lineHeight = 26.sp, color = MaterialTheme.colorScheme.primary)
-                    if (e.hindiPronunciation.isNotBlank()) {
-                        Text(e.hindiPronunciation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = FontStyle.Italic)
+                    if (e.partOfSpeech.isNotBlank()) {
+                        BioCategoryBadge(e.partOfSpeech)
                     }
                 }
-            }
 
-            // ── Example sentence ──────────────────────────────────────────────
-            if (e.exampleSentence.isNotBlank()) {
-                SectionCard(icon = "📌", title = "Example Sentence") {
-                    Text(
-                        "\"${e.exampleSentence}\"",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 22.sp
-                    )
-                }
-            }
-
-            // ── Synonyms & Antonyms row ───────────────────────────────────────
-            if (e.synonyms.isNotEmpty() || e.antonyms.isNotEmpty()) {
+                // Pronunciation + Listen row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (e.synonyms.isNotEmpty()) {
-                        SynAntCard(
-                            modifier = Modifier.weight(1f),
-                            icon = "🔗",
-                            title = "Synonyms",
-                            words = e.synonyms,
-                            chipColor = MaterialTheme.colorScheme.primaryContainer,
-                            onWordClick = onSynonymClick
+                    if (e.pronunciation.isNotBlank()) {
+                        Text(
+                            e.pronunciation,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontStyle = FontStyle.Italic
+                        )
+                    } else {
+                        Spacer(Modifier.width(1.dp))
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            tts?.language = Locale.US
+                            tts?.speak(e.word, TextToSpeech.QUEUE_FLUSH, null, null)
+                        },
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = BioGreenLight)
+                    ) {
+                        Icon(Icons.Default.VolumeUp, null, modifier = Modifier.size(18.dp), tint = BioGreen)
+                        Spacer(Modifier.width(6.dp))
+                        Text("LISTEN", color = BioGreen)
+                    }
+                }
+
+                HorizontalDivider(color = BioGreen.copy(alpha = 0.2f))
+
+                // Full biology card (all sections: classification, definition, hindi,
+                // example, functions, structure, related terms, diseases, etymology, difficulty, frequency)
+                BiologyWordCard(
+                    entry    = e,
+                    settings = appSettings,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+            } else {
+                // ── ENGLISH LAYOUT ────────────────────────────────────────────
+                val posColor = Color(e.partOfSpeechColor)
+
+                // Pronunciation + POS chip + Listen
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        if (e.pronunciation.isNotBlank()) {
+                            Text(
+                                e.pronunciation,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontStyle = FontStyle.Italic
+                            )
+                        }
+                        SuggestionChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    e.partOfSpeech.ifBlank { "word" }.uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = posColor.copy(alpha = 0.14f)
+                            ),
+                            border = SuggestionChipDefaults.suggestionChipBorder(
+                                enabled = true,
+                                borderColor = posColor.copy(alpha = 0.4f)
+                            )
                         )
                     }
-                    if (e.antonyms.isNotEmpty()) {
-                        SynAntCard(
-                            modifier = Modifier.weight(1f),
-                            icon = "↔️",
-                            title = "Antonyms",
-                            words = e.antonyms,
-                            chipColor = MaterialTheme.colorScheme.errorContainer,
-                            onWordClick = onSynonymClick
+                    FilledTonalButton(onClick = {
+                        tts?.language = Locale.US
+                        tts?.speak(e.word, TextToSpeech.QUEUE_FLUSH, null, null)
+                    }) {
+                        Icon(Icons.Default.VolumeUp, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("LISTEN")
+                    }
+                }
+
+                HorizontalDivider()
+
+                if (e.shortMeaning.isNotBlank()) {
+                    SectionCard(icon = "📖", title = "Definition") {
+                        Text(e.shortMeaning, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp)
+                    }
+                }
+                if (e.detailedMeaning.isNotBlank() && e.detailedMeaning != e.shortMeaning) {
+                    SectionCard(icon = "📝", title = "Detailed Meaning") {
+                        Text(e.detailedMeaning, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (e.hindiMeaning.isNotBlank()) {
+                    SectionCard(icon = "🇮🇳", title = "Hindi Meaning") {
+                        Text(e.hindiMeaning, style = MaterialTheme.typography.bodyLarge, lineHeight = 26.sp, color = MaterialTheme.colorScheme.primary)
+                        if (e.hindiPronunciation.isNotBlank()) {
+                            Text(e.hindiPronunciation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = FontStyle.Italic)
+                        }
+                    }
+                }
+                if (e.exampleSentence.isNotBlank()) {
+                    SectionCard(icon = "📌", title = "Example Sentence") {
+                        Text(
+                            "\"${e.exampleSentence}\"",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 22.sp
                         )
                     }
                 }
-            }
-
-            // ── Etymology ─────────────────────────────────────────────────────
-            if (e.etymology.isNotBlank()) {
-                SectionCard(icon = "🌱", title = "Word Origin") {
-                    Text(e.etymology, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 20.sp)
+                if (e.synonyms.isNotEmpty() || e.antonyms.isNotEmpty()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (e.synonyms.isNotEmpty()) {
+                            SynAntCard(
+                                modifier    = Modifier.weight(1f),
+                                icon        = "🔗",
+                                title       = "Synonyms",
+                                words       = e.synonyms,
+                                chipColor   = MaterialTheme.colorScheme.primaryContainer,
+                                onWordClick = onSynonymClick
+                            )
+                        }
+                        if (e.antonyms.isNotEmpty()) {
+                            SynAntCard(
+                                modifier    = Modifier.weight(1f),
+                                icon        = "↔️",
+                                title       = "Antonyms",
+                                words       = e.antonyms,
+                                chipColor   = MaterialTheme.colorScheme.errorContainer,
+                                onWordClick = onSynonymClick
+                            )
+                        }
+                    }
+                }
+                if (e.etymology.isNotBlank()) {
+                    SectionCard(icon = "🌱", title = "Word Origin") {
+                        Text(e.etymology, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 20.sp)
+                    }
+                }
+                SectionCard(icon = "📊", title = "Word Statistics") {
+                    StatBar(label = "Difficulty", value = e.difficultyLevel, max = 4, tag = e.difficultyLabel, color = difficultyColor(e.difficultyLevel))
+                    Spacer(Modifier.height(8.dp))
+                    StatBar(label = "Frequency", value = e.frequencyRating, max = 100, tag = frequencyTag(e.frequencyRating), color = MaterialTheme.colorScheme.tertiary)
                 }
             }
 
-            // ── Statistics ────────────────────────────────────────────────────
-            SectionCard(icon = "📊", title = "Word Statistics") {
-                StatBar(label = "Difficulty", value = e.difficultyLevel, max = 4, tag = e.difficultyLabel, color = difficultyColor(e.difficultyLevel))
-                Spacer(Modifier.height(8.dp))
-                StatBar(label = "Frequency", value = e.frequencyRating, max = 100, tag = frequencyTag(e.frequencyRating), color = MaterialTheme.colorScheme.tertiary)
-            }
-
-            // ── User note ─────────────────────────────────────────────────────
+            // ── Shared: User note ──────────────────────────────────────────────
             if (e.userNote.isNotBlank()) {
-                SectionCard(icon = "📎", title = "Your Note") {
+                SectionCard(
+                    icon  = "📎",
+                    title = "Your Note",
+                    tint  = if (isBio) BioGreen else MaterialTheme.colorScheme.primary
+                ) {
                     Text(e.userNote, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(color = if (isBio) BioGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outlineVariant)
 
-            // ── Action buttons ─────────────────────────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Copy
+            // ── Shared: Action buttons ─────────────────────────────────────────
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("word", "${e.word}: ${e.shortMeaning}"))
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = if (isBio) ButtonDefaults.outlinedButtonColors(contentColor = BioGreen) else ButtonDefaults.outlinedButtonColors()
                 ) {
                     Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Copy", maxLines = 1)
                 }
-
-                // Add Note
                 OutlinedButton(
                     onClick = viewModel::openNoteDialog,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = if (isBio) ButtonDefaults.outlinedButtonColors(contentColor = BioGreen) else ButtonDefaults.outlinedButtonColors()
                 ) {
                     Icon(Icons.Default.NoteAdd, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
@@ -328,14 +376,22 @@ fun WordDetailScreen(
     }
 }
 
+// ── Reusable components ───────────────────────────────────────────────────────
+
 @Composable
-private fun SectionCard(icon: String, title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SectionCard(
+    icon: String,
+    title: String,
+    tint: Color = Color.Unspecified,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val labelColor = if (tint == Color.Unspecified) MaterialTheme.colorScheme.primary else tint
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("$icon  $title", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("$icon  $title", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = labelColor)
             content()
         }
     }
@@ -378,7 +434,10 @@ private fun StatBar(label: String, value: Int, max: Int, tag: String, color: Col
         }
         LinearProgressIndicator(
             progress = { value.toFloat() / max },
-            modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(7.dp)
+                .clip(RoundedCornerShape(4.dp)),
             color = color,
             trackColor = color.copy(alpha = 0.15f)
         )
@@ -387,9 +446,9 @@ private fun StatBar(label: String, value: Int, max: Int, tag: String, color: Col
 
 @Composable
 private fun difficultyColor(level: Int): Color = when (level) {
-    1 -> Color(0xFF4CAF50)
-    2 -> Color(0xFF2196F3)
-    3 -> Color(0xFFFF9800)
+    1    -> Color(0xFF4CAF50)
+    2    -> Color(0xFF2196F3)
+    3    -> Color(0xFFFF9800)
     else -> Color(0xFFf44336)
 }
 
@@ -398,5 +457,5 @@ private fun frequencyTag(rating: Int): String = when {
     rating >= 60 -> "Common"
     rating >= 40 -> "Moderate"
     rating >= 20 -> "Rare"
-    else -> "Very Rare"
+    else         -> "Very Rare"
 }

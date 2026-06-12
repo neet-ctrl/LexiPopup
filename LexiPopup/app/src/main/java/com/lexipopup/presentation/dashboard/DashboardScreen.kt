@@ -6,6 +6,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +40,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.painterResource
+import com.lexipopup.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1194,7 +1200,204 @@ fun SettingsScreen(
                 Text("Reset to Defaults", color = MaterialTheme.colorScheme.error)
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
+        item { Spacer(Modifier.height(16.dp)) }
+        item { DeveloperCard() }
+        item { Spacer(Modifier.height(32.dp)) }
+    }
+}
+
+// ── Developer / owner card ────────────────────────────────────────────────────
+
+@Composable
+private fun DeveloperCard() {
+    val uriHandler = LocalUriHandler.current
+    val primary    = MaterialTheme.colorScheme.primary
+    val secondary  = MaterialTheme.colorScheme.secondary
+    val surface    = MaterialTheme.colorScheme.surface
+    val onSurface  = MaterialTheme.colorScheme.onSurface
+
+    val inf = rememberInfiniteTransition(label = "dev_card_inf")
+    val glowAlpha by inf.animateFloat(
+        initialValue = 0.25f, targetValue = 0.65f,
+        animationSpec = infiniteRepeatable(
+            tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse
+        ),
+        label = "dev_glow"
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = surface,
+        shadowElevation = 4.dp,
+        border = BorderStroke(
+            1.2.dp,
+            Brush.linearGradient(
+                listOf(
+                    primary.copy(alpha = glowAlpha),
+                    secondary.copy(alpha = glowAlpha * 0.6f),
+                    primary.copy(alpha = glowAlpha * 0.4f)
+                )
+            )
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            primary.copy(alpha = 0.07f),
+                            secondary.copy(alpha = 0.03f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // ── Header row ────────────────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // App icon in a glowing circle
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = primary.copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, primary.copy(alpha = 0.25f)),
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(R.mipmap.ic_launcher),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "LexiPopup",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = onSurface
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = primary.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            "AI Popup Dictionary",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
+                thickness = 0.6.dp
+            )
+
+            // ── Developer info ────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = secondary.copy(alpha = 0.12f),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            tint = secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        "Developer",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = onSurface.copy(alpha = 0.50f)
+                    )
+                    Text(
+                        "Shakti Kumar",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onSurface
+                    )
+                }
+            }
+
+            // ── GitHub link ───────────────────────────────────────────────
+            Surface(
+                onClick = { uriHandler.openUri("https://github.com/neet-ctrl/LexiPopup") },
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFF24292E).copy(alpha = 0.90f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Code,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            "GitHub Repository",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.60f)
+                        )
+                        Text(
+                            "github.com/neet-ctrl/LexiPopup",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(
+                        Icons.Default.OpenInNew,
+                        contentDescription = "Open",
+                        tint = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            // ── Version tag ───────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "Made with ❤️ in India",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onSurface.copy(alpha = 0.35f)
+                )
+            }
+        }
     }
 }
 

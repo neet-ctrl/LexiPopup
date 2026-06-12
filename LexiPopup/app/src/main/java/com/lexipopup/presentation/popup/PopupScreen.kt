@@ -97,6 +97,7 @@ fun PopupScreen(
     // ── Bubble position ───────────────────────────────────────────────────────
     val bubbleX = remember { Animatable(0f) }
     val bubbleY = remember { Animatable(100f) }
+    var edgeTabOffsetY by remember { mutableStateOf(0f) }
 
     fun snapBubbleToEdge() {
         scope.launch {
@@ -145,20 +146,41 @@ fun PopupScreen(
         else                                  -> PopupWindowState.FULL
     }
 
-    // ── Bug fix: pass touches through to underlying app in bubble/edge modes ─────
+    // ── Pass touches through to underlying app in bubble/edge modes ─────────────
     val activity = LocalContext.current as? androidx.activity.ComponentActivity
     SideEffect {
         val win = activity?.window ?: return@SideEffect
+        val lp = android.view.WindowManager.LayoutParams
         when (effectiveWindowState) {
-            PopupWindowState.BUBBLE,
             PopupWindowState.EDGE_LEFT,
             PopupWindowState.EDGE_RIGHT -> {
-                win.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
-                win.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                win.addFlags(lp.FLAG_NOT_TOUCH_MODAL)
+                win.addFlags(lp.FLAG_NOT_FOCUSABLE)
+                // Shrink window to just the tab so every touch outside the circle
+                // passes through to the app underneath.
+                win.setLayout(lp.WRAP_CONTENT, lp.WRAP_CONTENT)
+                val attrs = win.attributes
+                attrs.gravity = (if (effectiveWindowState == PopupWindowState.EDGE_LEFT)
+                    android.view.Gravity.START else android.view.Gravity.END) or
+                    android.view.Gravity.CENTER_VERTICAL
+                attrs.y = edgeTabOffsetY.toInt()
+                win.attributes = attrs
+            }
+            PopupWindowState.BUBBLE -> {
+                win.addFlags(lp.FLAG_NOT_TOUCH_MODAL)
+                win.addFlags(lp.FLAG_NOT_FOCUSABLE)
+                win.setLayout(lp.MATCH_PARENT, lp.MATCH_PARENT)
+                val attrs = win.attributes
+                attrs.gravity = android.view.Gravity.NO_GRAVITY
+                win.attributes = attrs
             }
             else -> {
-                win.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
-                win.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                win.clearFlags(lp.FLAG_NOT_TOUCH_MODAL)
+                win.clearFlags(lp.FLAG_NOT_FOCUSABLE)
+                win.setLayout(lp.MATCH_PARENT, lp.MATCH_PARENT)
+                val attrs = win.attributes
+                attrs.gravity = android.view.Gravity.NO_GRAVITY
+                win.attributes = attrs
             }
         }
     }
@@ -377,25 +399,29 @@ fun PopupScreen(
                 }
 
                 PopupWindowState.EDGE_LEFT -> {
-                    Box(Modifier.fillMaxSize()) {
-                        EdgeCollapsedTab(
-                            side = "left",
-                            word = (uiState as? PopupUiState.Success)?.entry?.word ?: "",
-                            onExpand = { windowMode = PopupWindowState.FULL },
-                            modifier = Modifier.align(Alignment.CenterStart)
-                        )
-                    }
+                    EdgeCollapsedTab(
+                        side = "left",
+                        word = (uiState as? PopupUiState.Success)?.entry?.word ?: "",
+                        onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
+                        modifier = Modifier.pointerInput(Unit) {
+                            detectDragGestures { _, dragAmount ->
+                                edgeTabOffsetY += dragAmount.y
+                            }
+                        }
+                    )
                 }
 
                 PopupWindowState.EDGE_RIGHT -> {
-                    Box(Modifier.fillMaxSize()) {
-                        EdgeCollapsedTab(
-                            side = "right",
-                            word = (uiState as? PopupUiState.Success)?.entry?.word ?: "",
-                            onExpand = { windowMode = PopupWindowState.FULL },
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                        )
-                    }
+                    EdgeCollapsedTab(
+                        side = "right",
+                        word = (uiState as? PopupUiState.Success)?.entry?.word ?: "",
+                        onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
+                        modifier = Modifier.pointerInput(Unit) {
+                            detectDragGestures { _, dragAmount ->
+                                edgeTabOffsetY += dragAmount.y
+                            }
+                        }
+                    )
                 }
 
                 // ── Full floating window ──────────────────────────────────────
@@ -408,6 +434,7 @@ fun PopupScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         val glassSurface = MaterialTheme.colorScheme.surface
                         val glassPrimary = MaterialTheme.colorScheme.primary
+                        val isSolid = settings.popupBgAlpha >= 1.0f
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth(cardW)
@@ -426,11 +453,26 @@ fun PopupScreen(
                                     rotationX = (parallax.y * 0.35f).coerceIn(-2f, 2f)
                                     rotationY = (-parallax.x * 0.35f).coerceIn(-2f, 2f)
                                     cameraDistance = 12f * density.density
-                                    alpha = alphaAnim
+                                    alpha = alphaAnim * settings.popupBgAlpha
                                 }
                                 .border(
-                                    width = 1.dp,
-                                    brush = Brush.linearGradient(
+                                    width = if (isSolid) 2.dp else 1.dp,
+                                    brush = if (isSolid) Brush.linearGradient(
+                                        colors = listOf(
+                                            glassPrimary,
+                                            MaterialTheme.colorScheme.tertiary,
+                                            MaterialTheme.colorScheme.secondary,
+                                            glassPrimary.copy(alpha = 0.6f)
+                                        ),
+                                        start = androidx.compose.ui.geometry.Offset(
+                                            x = (shimmerOffset + 1f) * 500f,
+                                            y = 0f
+                                        ),
+                                        end = androidx.compose.ui.geometry.Offset(
+                                            x = (shimmerOffset + 1f) * 500f + 800f,
+                                            y = 800f
+                                        )
+                                    ) else Brush.linearGradient(
                                         colors = listOf(
                                             Color.White.copy(alpha = 0.45f),
                                             glassPrimary.copy(alpha = 0.20f),
@@ -446,9 +488,9 @@ fun PopupScreen(
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                                    glassSurface.copy(alpha = 0.82f * settings.popupBgAlpha)
+                                    glassSurface.copy(alpha = if (isSolid) 1.0f else 0.82f)
                                 else
-                                    glassSurface.copy(alpha = 0.97f * settings.popupBgAlpha)
+                                    glassSurface.copy(alpha = if (isSolid) 1.0f else 0.97f)
                             ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 22.dp)
                         ) {

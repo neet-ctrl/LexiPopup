@@ -1015,87 +1015,16 @@ fun SettingsScreen(
             }
         }
         item {
-            // Transparency slider with live preview card
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "Popup transparency",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            "${((1f - settings.popupBgAlpha) * 100).toInt()}% transparent",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    // Live mini-preview card that shows the transparency effect
-                    Box(
-                        modifier = Modifier
-                            .size(width = 72.dp, height = 44.dp)
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.outlineVariant,
-                                RoundedCornerShape(10.dp)
-                            )
-                    ) {
-                        // Checkerboard pattern to show transparency
-                        Canvas(modifier = Modifier.matchParentSize()) {
-                            val cellSz = 8.dp.toPx()
-                            val cols = (size.width / cellSz).toInt() + 1
-                            val rows = (size.height / cellSz).toInt() + 1
-                            for (r in 0..rows) for (c in 0..cols) {
-                                drawRect(
-                                    color   = if ((r + c) % 2 == 0) Color.LightGray else Color.White,
-                                    topLeft = Offset(c * cellSz, r * cellSz),
-                                    size    = Size(cellSz, cellSz)
-                                )
-                            }
-                        }
-                        // Simulated popup card with live alpha
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    MaterialTheme.colorScheme.surface.copy(
-                                        alpha = settings.popupBgAlpha * 0.95f
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "📖",
-                                fontSize = 18.sp
-                            )
-                        }
-                    }
+            ToggleRow(
+                label = "Solid background (no transparency)",
+                checked = settings.popupBgAlpha >= 1.0f,
+                onCheckedChange = { solid ->
+                    viewModel.updateFloatSetting(
+                        SettingsDataStore.POPUP_BG_ALPHA,
+                        if (solid) 1.0f else 0.5f
+                    )
                 }
-                Slider(
-                    value = settings.popupBgAlpha,
-                    onValueChange = { viewModel.updateFloatSetting(SettingsDataStore.POPUP_BG_ALPHA, it) },
-                    valueRange = 0.25f..1.0f,
-                    steps = 14,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Very transparent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Fully opaque", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            )
         }
         item { ToggleRow("Auto-close after 5 seconds", settings.autoCloseSeconds > 0) { viewModel.updateSetting(SettingsDataStore.AUTO_CLOSE, it) } }
 

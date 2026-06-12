@@ -68,12 +68,47 @@ class DictionaryRepositoryImpl @Inject constructor(
     override suspend fun countByLetter(letter: String): Int =
         wordDao.countByLetter(letter)
 
-    override suspend fun getWordOfDay(): WordEntry? {
+    override suspend fun getWordOfDay(mode: String, userLevel: Int): WordEntry? {
         val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+
+        // Map mode/level → difficulty range
+        val (minDiff, maxDiff) = when (mode) {
+            "personalized" -> when (userLevel) {
+                1    -> 1 to 1   // Beginner only
+                2    -> 2 to 2   // Intermediate only
+                3    -> 3 to 3   // Advanced only
+                4    -> 3 to 4   // Advanced + Expert
+                else -> 2 to 3
+            }
+            else -> 2 to 3       // global: Intermediate + Advanced
+        }
+
+        // Random mode — fresh pick every call
+        if (mode == "random") {
+            return wordDao.getRandomWordOfDayCandidate(30, 70, minDiff, maxDiff)?.toDomain(gson)
+                ?: wordDao.getRandomWord()?.toDomain(gson)
+        }
+
+        // Global / Personalized — deterministic date-seed
+        val strictCount = wordDao.getWordOfDayCandidateCount(30, 70, minDiff, maxDiff)
+        if (strictCount > 0) {
+            val offset = dayOfYear % strictCount
+            wordDao.getWordOfDayCandidateAt(offset, 30, 70, minDiff, maxDiff)?.toDomain(gson)
+                ?.let { return it }
+        }
+
+        // Fallback 1: relax frequency filter (keep length + difficulty + content)
+        val relaxedCount = wordDao.getWordOfDayCandidateCount(0, 100, minDiff, maxDiff)
+        if (relaxedCount > 0) {
+            val offset = dayOfYear % relaxedCount
+            wordDao.getWordOfDayCandidateAt(offset, 0, 100, minDiff, maxDiff)?.toDomain(gson)
+                ?.let { return it }
+        }
+
+        // Fallback 2: any word at day-seeded offset
         val total = wordDao.getTotalCount()
         if (total == 0) return null
-        val offset = dayOfYear % total
-        return wordDao.getWordAtOffset(offset)?.toDomain(gson)
+        return wordDao.getWordAtOffset(dayOfYear % total)?.toDomain(gson)
             ?: wordDao.getRandomWord()?.toDomain(gson)
     }
 

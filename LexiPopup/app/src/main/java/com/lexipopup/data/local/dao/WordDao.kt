@@ -90,6 +90,51 @@ interface WordDao {
         ORDER BY difficulty_level ASC
     """)
     suspend fun getDifficultyDistribution(): List<DifficultyCountRow>
+
+    // ── Word of the Day queries ─────────────────────────────────────────────
+
+    @Query("""
+        SELECT COUNT(*) FROM dictionary_cache
+        WHERE frequency_rating BETWEEN :minFreq AND :maxFreq
+          AND difficulty_level BETWEEN :minDiff AND :maxDiff
+          AND LENGTH(word) BETWEEN 5 AND 12
+          AND hindi_meaning != ''
+          AND example_sentence != ''
+          AND pronunciation != ''
+    """)
+    suspend fun getWordOfDayCandidateCount(
+        minFreq: Int, maxFreq: Int, minDiff: Int, maxDiff: Int
+    ): Int
+
+    @Query("""
+        SELECT * FROM dictionary_cache
+        WHERE frequency_rating BETWEEN :minFreq AND :maxFreq
+          AND difficulty_level BETWEEN :minDiff AND :maxDiff
+          AND LENGTH(word) BETWEEN 5 AND 12
+          AND hindi_meaning != ''
+          AND example_sentence != ''
+          AND pronunciation != ''
+        ORDER BY word ASC
+        LIMIT 1 OFFSET :offset
+    """)
+    suspend fun getWordOfDayCandidateAt(
+        offset: Int, minFreq: Int, maxFreq: Int, minDiff: Int, maxDiff: Int
+    ): WordEntity?
+
+    @Query("""
+        SELECT * FROM dictionary_cache
+        WHERE frequency_rating BETWEEN :minFreq AND :maxFreq
+          AND difficulty_level BETWEEN :minDiff AND :maxDiff
+          AND LENGTH(word) BETWEEN 5 AND 12
+          AND hindi_meaning != ''
+          AND example_sentence != ''
+          AND pronunciation != ''
+        ORDER BY RANDOM()
+        LIMIT 1
+    """)
+    suspend fun getRandomWordOfDayCandidate(
+        minFreq: Int, maxFreq: Int, minDiff: Int, maxDiff: Int
+    ): WordEntity?
 }
 
 data class DifficultyCountRow(

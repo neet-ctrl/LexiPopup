@@ -113,4 +113,12 @@ class DashboardViewModel @Inject constructor(
     fun markHindiDisclaimerShown() {
         viewModelScope.launch { settingsDataStore.markHindiDisclaimerShown() }
     }
+
+    fun toggleWotdWordFavorite(word: String) {
+        viewModelScope.launch { dictionaryRepository.toggleFavorite(word) }
+    }
+
+    fun updateWotdSettings(mode: String, level: Int, notifEnabled: Boolean, hour: Int) {
+        viewModelScope.launch { settingsDataStore.updateWotdSettings(mode, level, notifEnabled, hour) }
+    }
 }

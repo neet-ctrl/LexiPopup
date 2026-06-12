@@ -45,6 +45,7 @@ import com.lexipopup.presentation.ai.AiSettingsViewModel
 import com.lexipopup.presentation.download.DownloadProgressScreen
 import com.lexipopup.utils.ExportFormat
 import com.lexipopup.utils.SettingsDataStore
+import com.lexipopup.workers.WotdNotificationWorker
 import java.time.LocalDate
 
 // ── Navigation destinations ──────────────────────────────────────────────────
@@ -83,6 +84,7 @@ fun DashboardScreen(
     val wordOfDay by browserVm.wordOfDay.collectAsState()
 
     var destination by remember { mutableStateOf<AppDestination>(AppDestination.Home) }
+    var showWotdDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Navigate to word detail when launched via "Full Details" from PopupActivity
@@ -226,7 +228,9 @@ fun DashboardScreen(
                     settings = settings,
                     onWordSelected = onWordSelected,
                     onNavigateToDictionary = { destination = AppDestination.Dictionary },
-                    onSearchVoice = { query -> onWordSelected(query) }
+                    onSearchVoice = { query -> onWordSelected(query) },
+                    onToggleWotdFavorite = { word -> viewModel.toggleWotdWordFavorite(word) },
+                    onOpenWotdSettings = { showWotdDialog = true }
                 )
                 AppDestination.Dictionary -> DictionaryBrowserScreen(
                     viewModel = browserVm,
@@ -256,6 +260,22 @@ fun DashboardScreen(
             }
         }
     }
+
+    if (showWotdDialog) {
+        WotdSettingsDialog(
+            currentMode = settings.wotdMode,
+            currentLevel = settings.wotdUserLevel,
+            notifEnabled = settings.wotdNotificationEnabled,
+            notifHour = settings.wotdNotificationHour,
+            onDismiss = { showWotdDialog = false },
+            onSave = { mode, level, notifEnabled, hour ->
+                viewModel.updateWotdSettings(mode, level, notifEnabled, hour)
+                if (notifEnabled) WotdNotificationWorker.reschedule(context, hour)
+                else WotdNotificationWorker.cancel(context)
+                showWotdDialog = false
+            }
+        )
+    }
 }
 
 // ── HOME SCREEN ──────────────────────────────────────────────────────────────
@@ -270,7 +290,9 @@ fun HomeScreen(
     settings: AppSettings,
     onWordSelected: (String) -> Unit,
     onNavigateToDictionary: () -> Unit,
-    onSearchVoice: (String) -> Unit
+    onSearchVoice: (String) -> Unit,
+    onToggleWotdFavorite: (String) -> Unit = {},
+    onOpenWotdSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val speechLauncher = rememberLauncherForActivityResult(
@@ -369,7 +391,12 @@ fun HomeScreen(
         // ── 📖 Word of the Day card ─────────────────────────────────────────
         if (wordOfDay != null) {
             item {
-                WotDHomeCard(entry = wordOfDay!!, onClick = { onWordSelected(wordOfDay!!.word) })
+                WotDHomeCard(
+                    entry = wordOfDay!!,
+                    onClick = { onWordSelected(wordOfDay!!.word) },
+                    onAddToFavorites = { onToggleWotdFavorite(wordOfDay!!.word) },
+                    onOpenSettings = onOpenWotdSettings
+                )
             }
         }
 
@@ -455,32 +482,261 @@ private fun StatMiniCard(modifier: Modifier, label: String, value: String, icon:
 }
 
 @Composable
-private fun WotDHomeCard(entry: WordEntry, onClick: () -> Unit) {
+private fun WotDHomeCard(
+    entry: WordEntry,
+    onClick: () -> Unit,
+    onAddToFavorites: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
+) {
     val primary = MaterialTheme.colorScheme.primary
+    val dateStr = remember {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy")
+        java.time.LocalDate.now().format(fmt)
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = primary.copy(0.08f)),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = primary.copy(0.07f)),
         border = CardDefaults.outlinedCardBorder()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+            // ── Header row ────────────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
-                    Text("WORD OF THE DAY", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.ExtraBold, color = primary)
+                    Column {
+                        Text(
+                            "WORD OF THE DAY",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = primary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(dateStr, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                Icon(Icons.Default.ArrowForward, null, tint = primary, modifier = Modifier.size(16.dp))
+                IconButton(onClick = onOpenSettings, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "WOTD Settings",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.55f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
-            Text(entry.word.uppercase(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+
+            HorizontalDivider(color = primary.copy(0.15f))
+
+            // ── Word ──────────────────────────────────────────────────────────
+            Text(
+                entry.word.uppercase(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // ── POS chip + IPA ────────────────────────────────────────────────
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (entry.partOfSpeech.isNotBlank()) Text(entry.partOfSpeech, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (entry.pronunciation.isNotBlank()) Text(entry.pronunciation, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                if (entry.partOfSpeech.isNotBlank()) {
+                    Surface(shape = RoundedCornerShape(6.dp), color = Color(entry.partOfSpeechColor).copy(0.15f)) {
+                        Text(
+                            entry.partOfSpeech,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(entry.partOfSpeechColor),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                if (entry.pronunciation.isNotBlank()) {
+                    Text(
+                        entry.pronunciation,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            Text(entry.shortMeaning.take(120), style = MaterialTheme.typography.bodyMedium)
+
+            // ── Short meaning ─────────────────────────────────────────────────
+            if (entry.shortMeaning.isNotBlank()) {
+                Text(
+                    "\"${entry.shortMeaning.take(120)}\"",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                )
+            }
+
+            // ── Hindi meaning ─────────────────────────────────────────────────
             if (entry.hindiMeaning.isNotBlank()) {
-                Text(entry.hindiMeaning.take(60), style = MaterialTheme.typography.bodySmall, color = primary.copy(0.8f))
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("\uD83C\uDDEE\uD83C\uDDF3", style = MaterialTheme.typography.bodySmall)
+                    Column {
+                        Text(entry.hindiMeaning.take(60), style = MaterialTheme.typography.bodySmall, color = primary.copy(0.85f), fontWeight = FontWeight.SemiBold)
+                        if (entry.hindiPronunciation.isNotBlank()) {
+                            Text("(${entry.hindiPronunciation.take(40)})", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            // ── Example sentence ──────────────────────────────────────────────
+            if (entry.exampleSentence.isNotBlank()) {
+                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(0.5f)) {
+                    Text(
+                        "\"${entry.exampleSentence.take(160)}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // ── "Why this word?" meta line ────────────────────────────────────
+            Text(
+                buildString {
+                    append("Why this word? ")
+                    if (entry.frequencyRating in 30..70) append("Frequency ${entry.frequencyRating}%")
+                    else append("Freq ${entry.frequencyRating}%")
+                    if (entry.difficultyLevel in 1..4) append(" · ${entry.difficultyLabel}")
+                    append(" · ${entry.word.length} letters")
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.65f)
+            )
+
+            // ── Action buttons ────────────────────────────────────────────────
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onClick,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Learn More", style = MaterialTheme.typography.labelMedium)
+                }
+                OutlinedButton(
+                    onClick = onAddToFavorites,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        if (entry.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (entry.isFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        if (entry.isFavorite) "Favorited" else "Favorite",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }
+}
+
+// ── WOTD SETTINGS DIALOG ─────────────────────────────────────────────────────
+@Composable
+private fun WotdSettingsDialog(
+    currentMode: String,
+    currentLevel: Int,
+    notifEnabled: Boolean,
+    notifHour: Int,
+    onDismiss: () -> Unit,
+    onSave: (mode: String, level: Int, notifEnabled: Boolean, hour: Int) -> Unit
+) {
+    var mode by remember { mutableStateOf(currentMode) }
+    var level by remember { mutableIntStateOf(currentLevel) }
+    var enabled by remember { mutableStateOf(notifEnabled) }
+    var hour by remember { mutableIntStateOf(notifHour) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("\uD83D\uDCC5 Word of the Day Settings") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Mode", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                listOf(
+                    "global"       to "Global (same word for everyone)",
+                    "personalized" to "Personalized (by my level)",
+                    "random"       to "Random (new on each refresh)"
+                ).forEach { (m, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { mode = m }
+                    ) {
+                        RadioButton(selected = mode == m, onClick = { mode = m })
+                        Text(label, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                AnimatedVisibility(visible = mode == "personalized") {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("My Level", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        listOf(1 to "Beginner", 2 to "Intermediate", 3 to "Advanced", 4 to "Expert").forEach { (l, label) ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().clickable { level = l }
+                            ) {
+                                RadioButton(selected = level == l, onClick = { level = l })
+                                Text(label, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Daily notification", style = MaterialTheme.typography.bodyMedium)
+                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                }
+
+                AnimatedVisibility(visible = enabled) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("At", style = MaterialTheme.typography.bodyMedium)
+                        IconButton(onClick = { if (hour > 0) hour-- }) {
+                            Icon(Icons.Default.Remove, "Decrease hour")
+                        }
+                        Text(
+                            "${hour.toString().padStart(2, '0')}:00",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { if (hour < 23) hour++ }) {
+                            Icon(Icons.Default.Add, "Increase hour")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(mode, level, enabled, hour) }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 // ── STATS SCREEN (full page, replaces old StatsTab) ──────────────────────────

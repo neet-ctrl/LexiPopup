@@ -3,6 +3,8 @@ package com.lexipopup
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.lexipopup.workers.FlashcardReminderWorker
+import com.lexipopup.workers.WotdNotificationWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -16,4 +18,10 @@ class LexiPopupApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun onCreate() {
+        super.onCreate()
+        FlashcardReminderWorker.schedule(this)
+        WotdNotificationWorker.schedule(this)
+    }
 }

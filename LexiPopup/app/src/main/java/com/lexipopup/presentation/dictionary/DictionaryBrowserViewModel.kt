@@ -4,18 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
+import com.lexipopup.utils.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class DictionaryBrowserViewModel @Inject constructor(
-    private val repo: DictionaryRepository
+    private val repo: DictionaryRepository,
+    private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -51,7 +54,10 @@ class DictionaryBrowserViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
-        viewModelScope.launch { _wordOfDay.value = repo.getWordOfDay() }
+        viewModelScope.launch {
+            val s = settingsDataStore.settings.first()
+            _wordOfDay.value = repo.getWordOfDay(s.wotdMode, s.wotdUserLevel)
+        }
         loadLetter("A")
     }
 
@@ -106,6 +112,9 @@ class DictionaryBrowserViewModel @Inject constructor(
     }
 
     fun refreshWordOfDay() {
-        viewModelScope.launch { _wordOfDay.value = repo.getWordOfDay() }
+        viewModelScope.launch {
+            val s = settingsDataStore.settings.first()
+            _wordOfDay.value = repo.getWordOfDay(s.wotdMode, s.wotdUserLevel)
+        }
     }
 }

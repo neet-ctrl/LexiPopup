@@ -19,9 +19,11 @@ class NotificationHelper @Inject constructor(
         const val CHANNEL_ID           = "lexipopup_quick_search"
         const val CHANNEL_FLASHCARD_ID = "lexipopup_flashcard_review"
         const val CHANNEL_SERVICE_ID   = "lexipopup_service"
+        const val CHANNEL_WOTD_ID      = "lexipopup_wotd"
         const val NOTIFICATION_ID           = 1001
         const val NOTIFICATION_FLASHCARD_ID = 1002
         const val SERVICE_NOTIFICATION_ID   = 1003
+        const val NOTIFICATION_WOTD_ID      = 1004
     }
 
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -50,9 +52,17 @@ class NotificationHelper @Inject constructor(
             setSound(null, null)
         }
 
+        val wotdChannel = NotificationChannel(
+            CHANNEL_WOTD_ID, "Word of the Day", NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Daily word to expand your vocabulary"
+            setShowBadge(true)
+        }
+
         manager.createNotificationChannel(searchChannel)
         manager.createNotificationChannel(flashcardChannel)
         manager.createNotificationChannel(serviceChannel)
+        manager.createNotificationChannel(wotdChannel)
     }
 
     fun buildServiceNotification(): android.app.Notification {
@@ -137,5 +147,44 @@ class NotificationHelper @Inject constructor(
 
     fun cancelFlashcardReminder() {
         manager.cancel(NOTIFICATION_FLASHCARD_ID)
+    }
+
+    /**
+     * Fires the daily Word of the Day notification. Tapping it opens MainActivity
+     * with the word detail pre-loaded.
+     */
+    fun showWotdNotification(word: String, shortMeaning: String, hindiMeaning: String) {
+        if (!manager.areNotificationsEnabled()) return
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra("start_word", word)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, NOTIFICATION_WOTD_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val bodyText = buildString {
+            append(shortMeaning.take(80))
+            if (hindiMeaning.isNotBlank()) append(" • ${hindiMeaning.take(30)}")
+        }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_WOTD_ID)
+            .setContentTitle("\uD83D\uDCC5 Word of the Day: ${word.replaceFirstChar { it.uppercase() }}")
+            .setContentText(bodyText)
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
+            .build()
+
+        manager.notify(NOTIFICATION_WOTD_ID, notification)
+    }
+
+    fun cancelWotdNotification() {
+        manager.cancel(NOTIFICATION_WOTD_ID)
     }
 }

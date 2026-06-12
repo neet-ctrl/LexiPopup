@@ -50,5 +50,11 @@ data class AppSettings(
     val aiProviderName: String = "groq",       // "groq" | "openai" | "on_device" | "hybrid"
     val hybridAutoSelectBest: Boolean = true,
     val hybridShowComparison: Boolean = true,
-    val onDeviceModelId: String = "gemma-2b-tiny"
+    val onDeviceModelId: String = "gemma-2b-tiny",
+
+    // Word of the Day
+    val wotdMode: String = "global",           // "global" | "personalized" | "random"
+    val wotdUserLevel: Int = 2,               // 1=Beginner 2=Intermediate 3=Advanced 4=Expert
+    val wotdNotificationEnabled: Boolean = true,
+    val wotdNotificationHour: Int = 9
 )

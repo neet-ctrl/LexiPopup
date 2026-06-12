@@ -59,6 +59,12 @@ class SettingsDataStore @Inject constructor(
         val HYBRID_SHOW_COMPARISON = booleanPreferencesKey("hybrid_show_comparison")
         val ON_DEVICE_MODEL_ID = stringPreferencesKey("on_device_model_id")
         val HINDI_DISCLAIMER_SHOWN = booleanPreferencesKey("hindi_disclaimer_shown")
+
+        // Word of the Day
+        val WOTD_MODE = stringPreferencesKey("wotd_mode")
+        val WOTD_USER_LEVEL = intPreferencesKey("wotd_user_level")
+        val WOTD_NOTIFICATION_ENABLED = booleanPreferencesKey("wotd_notification_enabled")
+        val WOTD_NOTIFICATION_HOUR = intPreferencesKey("wotd_notification_hour")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -96,8 +102,21 @@ class SettingsDataStore @Inject constructor(
             aiProviderName = prefs[AI_PROVIDER] ?: "groq",
             hybridAutoSelectBest = prefs[HYBRID_AUTO_SELECT] ?: true,
             hybridShowComparison = prefs[HYBRID_SHOW_COMPARISON] ?: true,
-            onDeviceModelId = prefs[ON_DEVICE_MODEL_ID] ?: "gemma-2b-tiny"
+            onDeviceModelId = prefs[ON_DEVICE_MODEL_ID] ?: "gemma-2b-tiny",
+            wotdMode = prefs[WOTD_MODE] ?: "global",
+            wotdUserLevel = prefs[WOTD_USER_LEVEL] ?: 2,
+            wotdNotificationEnabled = prefs[WOTD_NOTIFICATION_ENABLED] ?: true,
+            wotdNotificationHour = prefs[WOTD_NOTIFICATION_HOUR] ?: 9
         )
+    }
+
+    suspend fun updateWotdSettings(mode: String, level: Int, notifEnabled: Boolean, hour: Int) {
+        dataStore.edit { prefs ->
+            prefs[WOTD_MODE] = mode
+            prefs[WOTD_USER_LEVEL] = level
+            prefs[WOTD_NOTIFICATION_ENABLED] = notifEnabled
+            prefs[WOTD_NOTIFICATION_HOUR] = hour
+        }
     }
 
     suspend fun update(block: suspend (MutablePreferences) -> Unit) {

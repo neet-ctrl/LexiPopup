@@ -20,6 +20,6 @@ interface DictionaryRepository {
         pos: String = ""
     ): List<WordEntry>
     suspend fun countByLetter(letter: String): Int
-    suspend fun getWordOfDay(): WordEntry?
+    suspend fun getWordOfDay(mode: String = "global", userLevel: Int = 2): WordEntry?
     suspend fun getDifficultyDistribution(): Map<Int, Int>
 }

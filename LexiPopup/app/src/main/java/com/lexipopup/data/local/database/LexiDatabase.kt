@@ -60,7 +60,7 @@ abstract class LexiDatabase : RoomDatabase() {
                         // journal_mode returns a result row, so it must be run
                         // via query() not execSQL() to avoid the
                         // "Queries can be performed using query/rawQuery only" crash.
-                        db.query("PRAGMA journal_mode = WAL", null).close()
+                        db.query("PRAGMA journal_mode = WAL", emptyArray<Any?>()).close()
                         db.execSQL("PRAGMA synchronous = NORMAL")
                         db.execSQL("PRAGMA cache_size = -2000")
                         db.execSQL("PRAGMA mmap_size = 268435456")

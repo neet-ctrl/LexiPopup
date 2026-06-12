@@ -151,6 +151,13 @@ private fun FavoritesContent(words: List<WordEntity>) {
                 )
             }
             Text(
+                text = "⌕",
+                modifier = GlanceModifier
+                    .clickable(actionStartActivity(manualSearchIntent(ctx)))
+                    .padding(horizontal = 6.dp),
+                style = TextStyle(color = FavHeaderText, fontSize = 18.sp)
+            )
+            Text(
                 text = "↻",
                 modifier = GlanceModifier.clickable(actionRunCallback<RefreshFavoritesCallback>()),
                 style = TextStyle(color = FavHeaderText, fontSize = 18.sp)
@@ -233,11 +240,18 @@ private fun FavWordCard(word: WordEntity, ctx: Context) {
     }
 }
 
+// Uses "lookup_word" extra instead of ACTION_SEND + MIME type so the word survives
+// Glance's PendingIntent wrapping — Android can strip the MIME type from PendingIntents,
+// causing processIntent to fall through to manual-search mode.
 private fun wordIntent(context: Context, word: String): Intent =
     Intent(context, PopupActivity::class.java).apply {
-        action = Intent.ACTION_SEND
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, word)
+        putExtra("lookup_word", word)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
+
+private fun manualSearchIntent(context: Context): Intent =
+    Intent(context, PopupActivity::class.java).apply {
+        putExtra("mode", "manual_search")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
 

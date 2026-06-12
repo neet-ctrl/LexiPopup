@@ -21,12 +21,17 @@ object DatabaseSeeder {
 
     private const val TAG = "DatabaseSeeder"
 
+    // created_at / last_accessed are NOT NULL with no SQLite DEFAULT (Room can't express
+    // System.currentTimeMillis() as a static literal).  Omitting them causes INSERT OR IGNORE
+    // to silently swallow the NOT-NULL constraint violation — nothing is inserted but the
+    // counter still ticks.  Always include every NOT-NULL non-auto column in the INSERT.
     private val INSERT_SQL = """
         INSERT OR IGNORE INTO dictionary_cache
         (word, pronunciation, part_of_speech, short_meaning, detailed_meaning,
          hindi_meaning, hindi_pronunciation, example_sentence, synonyms, antonyms,
-         etymology, difficulty_level, frequency_rating, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         etymology, difficulty_level, frequency_rating, source,
+         created_at, last_accessed, access_count, is_favorite, user_note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '')
     """.trimIndent()
 
     /**
@@ -57,6 +62,7 @@ object DatabaseSeeder {
         val needsTransaction = !db.inTransaction()
         if (needsTransaction) db.beginTransaction()
         try {
+            val now = System.currentTimeMillis()
             for (w in words) {
                 try {
                     db.execSQL(
@@ -65,10 +71,17 @@ object DatabaseSeeder {
                             w.word, w.pronunciation, w.pos, w.shortMeaning, w.detailed,
                             w.hindi, w.hindiPron, w.example,
                             JSONArray(w.synonyms).toString(), JSONArray(w.antonyms).toString(),
-                            w.etymology, w.difficulty, w.frequency, "seed"
+                            w.etymology, w.difficulty, w.frequency, "seed",
+                            now, now   // created_at, last_accessed — required NOT NULL columns
                         )
                     )
-                    inserted++
+                    // Use SELECT changes() to detect whether INSERT OR IGNORE actually wrote a row
+                    // (vs. silently skipping a duplicate).  This avoids the misleading count
+                    // where inserted++ fires even for silently-ignored rows.
+                    val cur = db.query("SELECT changes()", emptyArray())
+                    val changed = if (cur.moveToFirst()) cur.getInt(0) else 0
+                    cur.close()
+                    if (changed > 0) inserted++
                 } catch (e: Exception) {
                     failed++
                     val msg = "[${w.word}] ${e.javaClass.simpleName}: ${e.message}"

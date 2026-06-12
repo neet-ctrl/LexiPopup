@@ -60,6 +60,15 @@ class PopupActivity : ComponentActivity() {
             return
         }
 
+        // Direct word lookup from widgets — most reliable channel because PendingIntents from
+        // Glance widgets can strip the MIME type, causing ACTION_SEND to fall through to manual
+        // search mode.  Check this before any MIME-dependent path.
+        val directWord = intent.getStringExtra("lookup_word")
+        if (!directWord.isNullOrBlank()) {
+            viewModel.lookupWord(directWord.trim())
+            return
+        }
+
         // PROCESS_TEXT from Moon+ Reader / any app
         val processText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
         if (!processText.isNullOrBlank()) {

@@ -17,6 +17,8 @@ import java.io.File
  * lookup performance meets the <50ms target, and that when
  * the full pack is downloaded it fits within the 300MB budget
  * (Full pack is Wiktionary + WordNet + Hindi WordNet, up to ~200MB on-disk).
+ *
+ * NOTE: This is an instrumented test — run with `./gradlew connectedAndroidTest`.
  */
 @RunWith(AndroidJUnit4::class)
 class DatabaseSizeAndWordTest {
@@ -105,35 +107,41 @@ class DatabaseSizeAndWordTest {
         assertTrue("Suggestions must arrive under 50ms", elapsed < 50)
     }
 
-    // ─── Database size test (production only — skipped in CI) ──────
+    // ─── Database size test (production only — skipped if DB not present) ──────
 
     @Test
-    fun testProductionDatabaseSizeUnder120MB() {
-        val dbFile = File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir,
-            "lexi_database.db")
+    fun testProductionDatabaseSizeUnder300MB() {
+        val dbFile = File(
+            ApplicationProvider.getApplicationContext<android.content.Context>().filesDir,
+            "lexi_database.db"
+        )
         if (!dbFile.exists()) {
             // Full pack not downloaded in test environment — skip gracefully
             return
         }
-        val sizeMb = dbFile.length() / (1024 * 1024)
+        val sizeMb = dbFile.length() / (1024L * 1024L)
         assertTrue("Production DB must be under 300MB but is ${sizeMb}MB", sizeMb < 300)
     }
 
     @Test
     fun testSeedDatabaseHasMinimum1000Words() = runTest {
-        val count = db.wordDao().getWordCount()
+        val count = db.wordDao().getTotalCount()
         assertTrue("Seed DB must have at least 1000 words but has $count", count >= 1000)
     }
 
     // ─── SQLite optimization verification ─────────────────────────
 
     @Test
-    fun testWalModeEnabled() = runTest {
-        val mode = db.openHelper.readableDatabase
-            .query("PRAGMA journal_mode", null)
-            .use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else ""
+    fun testWalModeEnabled() {
+        val cursor = db.openHelper.readableDatabase.query("PRAGMA journal_mode", null)
+        cursor.use {
+            if (it.moveToFirst()) {
+                val mode = it.getString(0)
+                assertTrue(
+                    "WAL mode must be enabled for performance",
+                    mode.equals("wal", ignoreCase = true)
+                )
             }
-        assertTrue("WAL mode must be enabled for performance", mode.equals("wal", ignoreCase = true))
+        }
     }
 }

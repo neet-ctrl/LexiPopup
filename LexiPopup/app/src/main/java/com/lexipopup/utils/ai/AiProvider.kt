@@ -54,13 +54,13 @@ data class OnDeviceModel(
         // MediaPipe 0.10.14+ natively loads GGUF files via setModelPath().
         // Verified working 2026-06-12: both return HTTP 200 and serve bytes.
         val TINY = OnDeviceModel(
-            id              = "gemma2-2b-it",
-            displayName     = "Gemma 2-2B IT (1.6 GB)",
-            sizeGb          = 1.6f,
+            id              = "gemma1.1-2b-it",
+            displayName     = "Gemma 1.1 2B IT (1.5 GB)",
+            sizeGb          = 1.5f,
             ramRequiredGb   = 3f,
             qualityPercent  = 75,
-            fileName        = "gemma-2-2b-it-Q4_K_M.gguf",
-            downloadUrl     = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf"
+            fileName        = "gemma-1.1-2b-it-Q4_K_M.gguf",
+            downloadUrl     = "https://huggingface.co/bartowski/gemma-1.1-2b-it-GGUF/resolve/main/gemma-1.1-2b-it-Q4_K_M.gguf"
         )
         val STANDARD = OnDeviceModel(
             id              = "phi2-standard",

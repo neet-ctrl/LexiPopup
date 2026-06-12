@@ -1,0 +1,129 @@
+But as u corrected biology then u malfunctioned all thing in english mode meansnow built in dictionary of english mode is not loading ny but it working in biology mode and evebn earlier flashcard were made automtically from all new history in word history in english mode but u correxted at one place then u destroyed other so fixed at all plaxes please all things ok so fix all remianing if there any ok
+
+
+
+
+Stil in biology mode l why in bio database tb screen  there is card showing built in dictionary when i tap on it still showibg english seed word not biology term  yaar correct it ok  and does term history storing all word  in same field information it must all have deatial ok save it ok ┌─────────────────────────────────────────────────────────────┐
+│ ☰  [🧬 Biology ▼]  MITOCHONDRIA                ⭐  ✕    │
+│ /ˌmaɪtəˈkɒndriə/                              [Organelle]  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  🔬 SCIENTIFIC CLASSIFICATION                              │
+│  Kingdom: Animalia | Phylum: Chordata | Class: Mammalia    │
+│                                                             │
+│  🖼️ [DIAGRAM OF MITOCHONDRIA - 180dp height]              │
+│     (tappable to open full size)                           │
+│                                                             │
+│  📖 DEFINITION                                              │
+│  Membrane-bound organelle that produces ATP through        │
+│  cellular respiration.                                     │
+│                                                             │
+│  🇮🇳 HINDI                                                  │
+│  माइटोकॉन्ड्रिया (Māiṭokonḍriyā)                           │
+│                                                             │
+│  ⚡ FUNCTION                                                │
+│  • ATP synthesis (cellular respiration)                    │
+│  • Calcium storage                                         │
+│  • Apoptosis regulation                                    │
+│  • Heat production (thermogenesis)                         │
+│                                                             │
+│  🧬 STRUCTURE                                               │
+│  • Outer membrane (porin proteins)                         │
+│  • Inner membrane (cristae)                                │
+│  • Matrix (contains mtDNA, ribosomes)                      │
+│  • Intermembrane space                                     │
+│                                                             │
+│  🔗 RELATED TERMS                                           │
+│  [chloroplast] [ribosome] [nucleus] [ATP]                  │
+│                                                             │
+│  🩺 DISEASES                                                │
+│  • Mitochondrial disease                                   │
+│  • MELAS syndrome                                          │
+│  • Leigh syndrome                                          │
+│                                                             │
+│  🌱 ETYMOLOGY                                               │
+│  From Greek: mitos (thread) + chondrion (granule)          │
+│                                                             │
+│  📊 DIFFICULTY                                              │
+│  ████████░░ Advanced                                       │
+│                                                             │
+│  📈 FREQUENCY                                               │
+│  ██████░░░░ 65% (Common in biology literature)            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+
+
+
+Check your biology seed data does it have ll informattion acc to this so it could load all things ┌─────────────────────────────────────────────────────────────┐
+│ ☰ [🧬 Biology ▼] MITOCHONDRIA ⭐ ✕ │
+│ /ˌmaɪtəˈkɒndriə/ [Organelle] │
+├─────────────────────────────────────────────────────────────┤
+│ │
+│ 🔬 SCIENTIFIC CLASSIFICATION │
+│ Kingdom: Animalia | Phylum: Chordata | Class: Mammalia │
+│ │
+│ 🖼️ [DIAGRAM OF MITOCHONDRIA - 180dp height] │
+│ (tappable to open full size) │
+│ │
+│ 📖 DEFINITION │
+│ Membrane-bound organelle that produces ATP through │
+│ cellular respiration. │
+│ │
+│ 🇮🇳 HINDI │
+│ माइटोकॉन्ड्रिया (Māiṭokonḍriyā) │
+│ │
+│ ⚡ FUNCTION │
+│ • ATP synthesis (cellular respiration) │
+│ • Calcium storage │
+│ • Apoptosis regulation │
+│ • Heat production (thermogenesis) │
+│ │
+│ 🧬 STRUCTURE │
+│ • Outer membrane (porin proteins) │
+│ • Inner membrane (cristae) │
+│ • Matrix (contains mtDNA, ribosomes) │
+│ • Intermembrane space │
+│ │
+│ 🔗 RELATED TERMS │
+│ [chloroplast] [ribosome] [nucleus] [ATP] │
+│ │
+│ 🩺 DISEASES │
+│ • Mitochondrial disease │
+│ • MELAS syndrome │
+│ • Leigh syndrome │
+│ │
+│ 🌱 ETYMOLOGY │
+│ From Greek: mitos (thread) + chondrion (granule) │
+│ │
+│ 📊 DIFFICULTY │
+│ ████████░░ Advanced │
+│ │
+│ 📈 FREQUENCY │
+│ ██████░░░░ 65% (Common in biology literature) │
+│ │
+└─────────────────────────────────────────────────────────────┘ and see why still
+
+24 minutes ago
+Let me read the biology seeder right now to audit every field.
+
+The BioTerm struct is missing all bio-extended fields. Let me read the rest of the seeder to see the SQL insert structure, then fix everything.
+
+Found the critical bug. The seeder inserts bio_ext_data = '{}' (empty JSON) for every single term — so scientificClassification, functions, structure, diseases, relatedTerms are ALL empty, which is why those sections never appear. Let me first get all the term names, then completely rewrite the seeder with full data.
+
+Optimized Agent memory
+Now I have the complete picture. The root problem: BioTerm data class has no fields for functions, structure, diseases, relatedTerms, scientificClassification — so every term gets bio_ext_data = '{}'. That means hasFunctions, hasStructure, hasClassification are all false → those sections never render.
+
+I need to completely rewrite the seeder with:
+
+Extended BioTerm data class with all bio fields
+bioJson() helper to build proper JSON
+Real data for all 55 terms
+UPDATE after INSERT to fix existing rows already in the DB
+Now I have the full picture. Every term has bio_ext_data = '{}' — empty JSON. The BiologyData fields (scientificClassification, functions, structure, diseases, relatedTerms) are all empty for every term. I need to completely rewrite the seeder with full bio data AND add UPDATE statements to fix already-seeded rows.
+
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+You're out of credits
+
+

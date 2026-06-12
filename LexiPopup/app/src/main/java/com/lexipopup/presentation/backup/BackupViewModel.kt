@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.reflect.TypeToken
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
 import com.lexipopup.domain.repositories.VocabularyRepository
@@ -90,14 +92,47 @@ class BackupViewModel @Inject constructor(
                     ?.bufferedReader()?.readText()
                     ?: throw Exception("Could not read file")
 
-                val backup = gson.fromJson(json, BackupData::class.java)
+                // ── Type-safe parsing ───────────────────────────────────────
+                // gson.fromJson(json, BackupData::class.java) causes a ClassCastException
+                // in release builds because Gson cannot recover the List<WordEntry> type
+                // parameter at runtime (type erasure). Gson creates LinkedTreeMap objects
+                // instead of WordEntry instances, which then crash on cast.
+                //
+                // Fix: parse as JsonObject first, then extract each field with an explicit
+                // TypeToken.getParameterized() so Gson has the full type info it needs.
+                val root = gson.fromJson(json, JsonObject::class.java)
 
+                val wordEntryListType =
+                    TypeToken.getParameterized(List::class.java, WordEntry::class.java).type
+                val stringListType =
+                    TypeToken.getParameterized(List::class.java, String::class.java).type
+
+                val historyEntries: List<WordEntry> = root["historyEntries"]?.let {
+                    runCatching { gson.fromJson<List<WordEntry>>(it, wordEntryListType) }
+                        .getOrDefault(emptyList())
+                } ?: emptyList()
+
+                val favoriteWords: List<String> = root["favoriteWords"]?.let {
+                    runCatching { gson.fromJson<List<String>>(it, stringListType) }
+                        .getOrDefault(emptyList())
+                } ?: emptyList()
+
+                val legacyFavorites: List<String> = root["favorites"]?.let {
+                    runCatching { gson.fromJson<List<String>>(it, stringListType) }
+                        .getOrDefault(emptyList())
+                } ?: emptyList()
+
+                val flashcardWords: List<String> = root["flashcardWords"]?.let {
+                    runCatching { gson.fromJson<List<String>>(it, stringListType) }
+                        .getOrDefault(emptyList())
+                } ?: emptyList()
+
+                // ── Restore ─────────────────────────────────────────────────
                 var wordsRestored = 0
                 var favoritesRestored = 0
                 var flashcardsRestored = 0
 
-                val entriesToRestore = backup.historyEntries.ifEmpty { emptyList() }
-                entriesToRestore.forEach { entry ->
+                historyEntries.forEach { entry ->
                     runCatching {
                         dictionaryRepository.saveToCache(entry)
                         dictionaryRepository.markAccessed(entry.word)
@@ -105,18 +140,18 @@ class BackupViewModel @Inject constructor(
                     }
                 }
 
-                val favWords = backup.favoriteWords.ifEmpty { backup.favorites }
-                favWords.forEach { word ->
+                val allFavWords = favoriteWords.ifEmpty { legacyFavorites }
+                allFavWords.forEach { word ->
                     runCatching {
-                        val entry = dictionaryRepository.lookupWord(word)
-                        if (entry != null && !entry.isFavorite) {
+                        val existing = dictionaryRepository.lookupWord(word)
+                        if (existing != null && !existing.isFavorite) {
                             dictionaryRepository.toggleFavorite(word)
                             favoritesRestored++
                         }
                     }
                 }
 
-                backup.flashcardWords.forEach { word ->
+                flashcardWords.forEach { word ->
                     runCatching {
                         vocabularyRepository.createFlashcard(word, word, "")
                         flashcardsRestored++

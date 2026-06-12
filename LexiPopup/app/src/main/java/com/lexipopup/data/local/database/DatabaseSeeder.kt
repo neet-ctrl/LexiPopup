@@ -2339,7 +2339,7 @@ object DatabaseSeeder {
             "किसी की अत्यधिक प्रशंसात्मक जीवनी", "Kisi Ki Atyadhik Prashanmsaatmak Jeevani",
             "\"The official biography was hagiography — it mentioned no failures and sanitised every controversy.\"",
             listOf("idealised biography", "hero worship", "puff piece", "sanitised account"),
-            listOf("balanced biography", "critical account", "expose"],
+            listOf("balanced biography", "critical account", "expose"),
             "From Greek hagios 'holy' + graphia 'writing'; originally writings about saints' lives", 3, 21),
 
         SeedWord("synchronicity", "/ˌsɪŋ.krəˈnɪs.ɪ.ti/", "noun",

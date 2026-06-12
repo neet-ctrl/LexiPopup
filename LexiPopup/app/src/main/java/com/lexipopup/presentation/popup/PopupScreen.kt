@@ -55,10 +55,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import com.lexipopup.R
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.utils.ParallaxOffset
 import com.lexipopup.utils.SensorHelper
+import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -99,27 +101,21 @@ fun PopupScreen(
     val bubbleY = remember { Animatable(100f) }
     var edgeTabOffsetY by remember { mutableStateOf(0f) }
 
+    // Snap the bubble/collapsed handle to the nearest screen edge (left or right).
+    // This sets windowMode to EDGE_* so the window shrinks to WRAP_CONTENT and
+    // touches outside the handle pass through to the underlying app.
     fun snapBubbleToEdge() {
-        scope.launch {
-            val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
-            val snapX = if (bubbleX.value >= 0f)
-                screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() }
-            else
-                -(screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() })
-            val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
-            val maxY = screenH / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 24.dp.toPx() }
-            val snapY = bubbleY.value.coerceIn(-maxY, maxY)
-            launch { bubbleX.animateTo(snapX, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) }
-            launch { bubbleY.animateTo(snapY, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) }
-        }
+        val side = if (bubbleX.value >= 0f) PopupWindowState.EDGE_RIGHT else PopupWindowState.EDGE_LEFT
+        windowMode = side
+        scope.launch { if (isBubble) viewModel.toggleBubble() }
     }
 
+    // If isBubble is ever set programmatically, immediately redirect to an edge
+    // collapse so we never leave a MATCH_PARENT transparent window blocking touches.
     LaunchedEffect(isBubble) {
         if (isBubble) {
-            val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
-            val snapX = screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() }
-            bubbleX.animateTo(snapX, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-            bubbleY.animateTo(100f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+            windowMode = PopupWindowState.EDGE_RIGHT
+            viewModel.toggleBubble()
         }
     }
 
@@ -139,10 +135,11 @@ fun PopupScreen(
 
     // ── Window collapse mode ──────────────────────────────────────────────────
     var windowMode by remember { mutableStateOf(PopupWindowState.FULL) }
+    // EDGE states take priority over BUBBLE to prevent full-screen touch blocking
     val effectiveWindowState = when {
-        isBubble                              -> PopupWindowState.BUBBLE
         windowMode == PopupWindowState.EDGE_LEFT  -> PopupWindowState.EDGE_LEFT
         windowMode == PopupWindowState.EDGE_RIGHT -> PopupWindowState.EDGE_RIGHT
+        isBubble                              -> PopupWindowState.BUBBLE
         else                                  -> PopupWindowState.FULL
     }
 
@@ -170,11 +167,14 @@ fun PopupScreen(
                 win.attributes = attrs
             }
             PopupWindowState.BUBBLE -> {
+                // Treat BUBBLE same as EDGE_RIGHT: WRAP_CONTENT so window only
+                // covers the handle — touches outside pass through freely.
                 win.addFlags(flagNotTouchModal)
                 win.addFlags(flagNotFocusable)
-                win.setLayout(matchParent, matchParent)
+                win.setLayout(wrapContent, wrapContent)
                 val attrs = win.attributes
-                attrs.gravity = android.view.Gravity.NO_GRAVITY
+                attrs.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+                attrs.y = 0
                 win.attributes = attrs
             }
             else -> {
@@ -258,8 +258,10 @@ fun PopupScreen(
     }
 
     fun collapseButtonTapped() {
+        // Always collapse to the nearest screen edge — never use BUBBLE mode which
+        // would leave a MATCH_PARENT window blocking all touches underneath.
         val side = if (animX.value >= 0f) PopupWindowState.EDGE_RIGHT else PopupWindowState.EDGE_LEFT
-        if (settings.enableEdgeCollapse) collapseToEdge(side) else viewModel.toggleBubble()
+        collapseToEdge(side)
     }
 
     fun handleDragEnd() {
@@ -362,54 +364,17 @@ fun PopupScreen(
             when (state) {
 
                 PopupWindowState.BUBBLE -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        BubbleMode(
-                            uiState  = uiState,
-                            modifier = Modifier
-                                .offset { IntOffset(bubbleX.value.toInt(), bubbleY.value.toInt()) }
-                                .pointerInput(Unit) {
-                                    // Unified tap-to-expand + drag-to-move in one gesture block.
-                                    // Fixes conflict between clickable() on child and separate drag detector.
-                                    awaitEachGesture {
-                                        val down = awaitFirstDown(requireUnconsumed = false)
-                                        down.consume()
-                                        var totalDrag = Offset.Zero
-                                        var dragging = false
-                                        while (true) {
-                                            val event = awaitPointerEvent()
-                                            val change = event.changes.firstOrNull() ?: break
-                                            if (!change.pressed) {
-                                                if (!dragging) {
-                                                    // Tap — expand bubble back to full popup
-                                                    viewModel.toggleBubble()
-                                                } else {
-                                                    snapBubbleToEdge()
-                                                }
-                                                break
-                                            }
-                                            val delta = change.positionChange()
-                                            totalDrag += delta
-                                            if (!dragging && totalDrag.getDistance() > viewConfiguration.touchSlop) {
-                                                dragging = true
-                                            }
-                                            if (dragging) {
-                                                change.consume()
-                                                scope.launch {
-                                                    bubbleX.snapTo(bubbleX.value + delta.x)
-                                                    bubbleY.snapTo(bubbleY.value + delta.y)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                        )
-                    }
+                    // BUBBLE state is immediately redirected to EDGE in LaunchedEffect(isBubble).
+                    // This fallback just shows the edge handle so there's no blank frame.
+                    CollapsedEdgeHandle(
+                        side = "right",
+                        onExpand = { windowMode = PopupWindowState.FULL }
+                    )
                 }
 
                 PopupWindowState.EDGE_LEFT -> {
-                    EdgeCollapsedTab(
+                    CollapsedEdgeHandle(
                         side = "left",
-                        word = (uiState as? PopupUiState.Success)?.entry?.word ?: "",
                         onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
                         modifier = Modifier.pointerInput(Unit) {
                             detectDragGestures { _, dragAmount ->
@@ -420,9 +385,8 @@ fun PopupScreen(
                 }
 
                 PopupWindowState.EDGE_RIGHT -> {
-                    EdgeCollapsedTab(
+                    CollapsedEdgeHandle(
                         side = "right",
-                        word = (uiState as? PopupUiState.Success)?.entry?.word ?: "",
                         onExpand = { windowMode = PopupWindowState.FULL; edgeTabOffsetY = 0f },
                         modifier = Modifier.pointerInput(Unit) {
                             detectDragGestures { _, dragAmount ->
@@ -782,8 +746,8 @@ fun PopupHeader(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) {
-                    if (settings.enableCollapseTooBubble || settings.enableEdgeCollapse) onCollapse()
-                    else onManualSearch()
+                    // Always allow collapsing to edge — onCollapse now always snaps to edge.
+                    onCollapse()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -1864,7 +1828,83 @@ fun GridActionButton(
     }
 }
 
-// ── Edge-collapsed tab ────────────────────────────────────────────────────────
+// ── Collapsed edge handle — small vertical rounded rectangle with app icon ─────
+// Snaps to left or right screen edge (window uses WRAP_CONTENT + gravity, so
+// only this rectangle covers the screen — everything else is fully touchable).
+
+@Composable
+fun CollapsedEdgeHandle(
+    side: String,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isLeft = side == "left"
+    val primary   = MaterialTheme.colorScheme.primary
+    val container = MaterialTheme.colorScheme.primaryContainer
+
+    val inf = rememberInfiniteTransition(label = "handle_inf")
+    val glowAlpha by inf.animateFloat(
+        initialValue = 0.30f, targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "handle_glow"
+    )
+
+    // Rounded rect: left side has full rounded right corners; right side has full rounded left corners
+    val shape = if (isLeft)
+        RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp, topStart = 6.dp, bottomStart = 6.dp)
+    else
+        RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 6.dp, bottomEnd = 6.dp)
+
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val sc by animateFloatAsState(if (pressed) 0.93f else 1f, label = "handle_sc")
+
+    Box(
+        modifier = modifier
+            .scale(sc)
+            .width(44.dp)
+            .height(84.dp)
+            .shadow(
+                elevation = 14.dp,
+                shape = shape,
+                spotColor = primary.copy(alpha = 0.45f),
+                ambientColor = primary.copy(alpha = 0.20f)
+            )
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        container.copy(alpha = 0.96f),
+                        primary.copy(alpha = 0.88f)
+                    )
+                )
+            )
+            .border(
+                width = 1.2.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = glowAlpha),
+                        primary.copy(alpha = glowAlpha * 0.5f),
+                        Color.White.copy(alpha = glowAlpha * 0.7f)
+                    )
+                ),
+                shape = shape
+            )
+            .clickable(interactionSource = src, indication = null) { onExpand() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(R.mipmap.ic_launcher),
+            contentDescription = "Expand LexiPopup",
+            tint = Color.Unspecified,
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+        )
+    }
+}
+
+// ── Kept for backward-compat call sites ──────────────────────────────────────
 
 @Composable
 fun EdgeCollapsedTab(
@@ -1872,61 +1912,7 @@ fun EdgeCollapsedTab(
     word: String,
     onExpand: () -> Unit,
     modifier: Modifier = Modifier
-) {
-    val inf = rememberInfiniteTransition(label = "tab_inf")
-    val pulse by inf.animateFloat(
-        initialValue = 0.95f, targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "tab_pulse"
-    )
-    val glowAlpha by inf.animateFloat(
-        initialValue = 0.35f, targetValue = 0.90f,
-        animationSpec = infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "tab_glow"
-    )
-    val primary = MaterialTheme.colorScheme.primary
-    val container = MaterialTheme.colorScheme.primaryContainer
-
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .scale(pulse)
-            .shadow(elevation = 10.dp, shape = CircleShape,
-                spotColor = primary.copy(alpha = 0.35f),
-                ambientColor = primary.copy(alpha = 0.18f))
-            .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        container.copy(alpha = 0.94f),
-                        primary.copy(alpha = 0.82f)
-                    )
-                )
-            )
-            .border(
-                width = 1.5.dp,
-                brush = Brush.sweepGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = glowAlpha),
-                        primary.copy(alpha = 0.30f),
-                        Color.White.copy(alpha = glowAlpha * 0.5f),
-                        Color.White.copy(alpha = glowAlpha)
-                    )
-                ),
-                shape = CircleShape
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onExpand() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "📖",
-            fontSize = 22.sp
-        )
-    }
-}
+) = CollapsedEdgeHandle(side = side, onExpand = onExpand, modifier = modifier)
 
 // ── Particle burst ────────────────────────────────────────────────────────────
 
@@ -1949,59 +1935,13 @@ fun ParticleBurst(modifier: Modifier, onFinish: () -> Unit) {
     }
 }
 
-// ── Bubble mode ───────────────────────────────────────────────────────────────
+// ── Bubble mode (legacy — redirected to edge on appearance) ───────────────────
 
 @Composable
 fun BubbleMode(uiState: PopupUiState, modifier: Modifier) {
-    val inf = rememberInfiniteTransition(label = "bubble_inf")
-    val pulse by inf.animateFloat(
-        initialValue = 0.95f, targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "bubble_scale"
-    )
-    val glowAlpha by inf.animateFloat(
-        initialValue = 0.35f, targetValue = 0.90f,
-        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "glow_alpha"
-    )
-    val primary = MaterialTheme.colorScheme.primary
-    val container = MaterialTheme.colorScheme.primaryContainer
-
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .scale(pulse)
-            .shadow(elevation = 10.dp, shape = CircleShape,
-                spotColor = primary.copy(alpha = 0.35f),
-                ambientColor = primary.copy(alpha = 0.18f))
-            .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        container.copy(alpha = 0.94f),
-                        primary.copy(alpha = 0.82f)
-                    )
-                )
-            )
-            .border(
-                width = 1.5.dp,
-                brush = Brush.sweepGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = glowAlpha),
-                        primary.copy(alpha = 0.30f),
-                        Color.White.copy(alpha = glowAlpha * 0.5f),
-                        Color.White.copy(alpha = glowAlpha)
-                    )
-                ),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "📖",
-            fontSize = 22.sp
-        )
-    }
+    // BubbleMode is no longer shown to users; CollapsedEdgeHandle replaced it.
+    // This stub exists only for backward-compat compilation.
+    CollapsedEdgeHandle(side = "right", onExpand = {}, modifier = modifier)
 }
 
 // ── Manual search — full glassmorphic redesign ────────────────────────────────

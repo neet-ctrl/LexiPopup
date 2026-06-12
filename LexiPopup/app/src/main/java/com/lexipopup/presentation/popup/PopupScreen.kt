@@ -77,9 +77,40 @@ fun PopupScreen(
     val scope         = rememberCoroutineScope()
     val isLandscape   = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    // ── Drag / position state ────────────────────────────────────────────────
+    // ── Main window drag / position state ────────────────────────────────────
     val animX = remember { Animatable(0f) }
     val animY = remember { Animatable(0f) }
+
+    // ── Bubble independent position (completely separate from main window) ────
+    val bubbleX = remember { Animatable(0f) }
+    val bubbleY = remember { Animatable(100f) }  // slightly below center by default
+
+    fun snapBubbleToEdge() {
+        scope.launch {
+            val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
+            // Snap to left or right based on current X position
+            val snapX = if (bubbleX.value >= 0f)
+                screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() }
+            else
+                -(screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() })
+            // Clamp Y so bubble stays within screen bounds
+            val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
+            val maxY = screenH / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 24.dp.toPx() }
+            val snapY = bubbleY.value.coerceIn(-maxY, maxY)
+            launch { bubbleX.animateTo(snapX, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) }
+            launch { bubbleY.animateTo(snapY, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) }
+        }
+    }
+
+    // Reset bubble to a nice default when entering bubble mode
+    LaunchedEffect(isBubble) {
+        if (isBubble) {
+            val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
+            val snapX = screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() }
+            bubbleX.animateTo(snapX, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+            bubbleY.animateTo(100f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+        }
+    }
 
     // Restore saved position once settings arrive
     var positionRestored by remember { mutableStateOf(false) }
@@ -276,15 +307,24 @@ fun PopupScreen(
         ) { state ->
             when (state) {
 
-                // ── Bubble mode (legacy) ─────────────────────────────────────
+                // ── Bubble mode — own drag state, snaps to screen edge ────────
                 PopupWindowState.BUBBLE -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         BubbleMode(
-                            uiState = uiState,
+                            uiState  = uiState,
                             onExpand = { viewModel.toggleBubble() },
-                            modifier = Modifier.offset {
-                                IntOffset(animX.value.toInt(), animY.value.toInt())
-                            }
+                            modifier = Modifier
+                                .offset { IntOffset(bubbleX.value.toInt(), bubbleY.value.toInt()) }
+                                .pointerInput(Unit) {
+                                    detectDragGestures(
+                                        onDragEnd = { snapBubbleToEdge() }
+                                    ) { _, drag ->
+                                        scope.launch {
+                                            bubbleX.snapTo(bubbleX.value + drag.x)
+                                            bubbleY.snapTo(bubbleY.value + drag.y)
+                                        }
+                                    }
+                                }
                         )
                     }
                 }
@@ -983,16 +1023,24 @@ fun ActionButton(
 fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) {
     val word = (uiState as? PopupUiState.Success)?.entry?.word ?: ""
     val pulse by rememberInfiniteTransition(label = "bubble_pulse").animateFloat(
-        initialValue = 0.95f, targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "bubble_scale"
+        initialValue = 0.93f, targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "bubble_scale"
     )
+    // 44dp — smaller, less intrusive
     Surface(
-        onClick = onExpand, modifier = modifier.size(60.dp).scale(pulse),
-        shape = CircleShape, color = MaterialTheme.colorScheme.primary, shadowElevation = 14.dp
+        onClick = onExpand,
+        modifier = modifier.size(44.dp).scale(pulse),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        shadowElevation = 12.dp
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(word.firstOrNull()?.uppercase() ?: "L",
-                style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(
+                text = word.firstOrNull()?.uppercase() ?: "L",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
     }
 }

@@ -12,6 +12,7 @@ interface DictionaryRepository {
     suspend fun saveNote(word: String, note: String)
     fun getFavorites(): Flow<List<WordEntry>>
     fun getRecentWords(limit: Int = 20): Flow<List<WordEntry>>
+    fun getTotalWordCount(): Flow<Int>
     suspend fun getWordsByLetter(
         letter: String,
         limit: Int = 60,

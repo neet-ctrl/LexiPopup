@@ -39,6 +39,9 @@ class DashboardViewModel @Inject constructor(
     val todayCount: StateFlow<Int> = vocabularyRepository.getTodayCount()
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
+    val totalWordCount: StateFlow<Int> = dictionaryRepository.getTotalWordCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
     val recentWords: StateFlow<List<WordEntry>> = dictionaryRepository.getRecentWords(50)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 

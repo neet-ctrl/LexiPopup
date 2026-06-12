@@ -37,6 +37,9 @@ interface WordDao {
     @Query("SELECT COUNT(*) FROM dictionary_cache")
     suspend fun getTotalCount(): Int
 
+    @Query("SELECT COUNT(*) FROM dictionary_cache")
+    fun getTotalCountFlow(): kotlinx.coroutines.flow.Flow<Int>
+
     @Query("DELETE FROM dictionary_cache WHERE source = 'local' AND word = :word")
     suspend fun deleteWord(word: String)
 

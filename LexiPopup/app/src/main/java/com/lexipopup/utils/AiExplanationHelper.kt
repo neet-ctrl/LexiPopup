@@ -20,7 +20,7 @@ class AiExplanationHelper @Inject constructor(
     private val gson: Gson
 ) {
     private val endpoint = "https://api.openai.com/v1/chat/completions"
-    private val listType = object : TypeToken<List<String>>() {}.type
+    private val listType = TypeToken.getParameterized(List::class.java, String::class.java).type
 
     private val aiClient: OkHttpClient = okHttpClient.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)

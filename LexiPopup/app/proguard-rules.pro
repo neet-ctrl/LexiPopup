@@ -12,6 +12,12 @@
 }
 -keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
 
+# ── Gson TypeToken — MUST keep or R8 strips generic signatures and crashes
+# with "TypeToken must be created with a type argument" at runtime.
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepclassmembers class com.google.gson.internal.$Gson$Types { *; }
+
 # ── Annotation-processor shaded classes (compile-time only, not present at runtime) ──
 # javax.lang.model is part of the Java compiler API used by AutoValue, Hilt, and KSP
 # processors. These classes are never shipped on Android; suppress R8 warnings.

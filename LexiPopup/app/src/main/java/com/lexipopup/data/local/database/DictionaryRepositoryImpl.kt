@@ -56,6 +56,8 @@ class DictionaryRepositoryImpl @Inject constructor(
     override fun getRecentWords(limit: Int): Flow<List<WordEntry>> =
         wordDao.getRecentWords(limit).map { list -> list.map { it.toDomain(gson) } }
 
+    override fun getTotalWordCount(): Flow<Int> = wordDao.getTotalCountFlow()
+
     override suspend fun getWordsByLetter(
         letter: String,
         limit: Int,
@@ -116,8 +118,9 @@ class DictionaryRepositoryImpl @Inject constructor(
         wordDao.getDifficultyDistribution().associate { it.difficultyLevel to it.count }
 }
 
+private val STRING_LIST_TYPE = TypeToken.getParameterized(List::class.java, String::class.java).type
+
 fun WordEntity.toDomain(gson: Gson): WordEntry {
-    val listType = object : TypeToken<List<String>>() {}.type
     return WordEntry(
         word = word,
         pronunciation = pronunciation,
@@ -127,8 +130,8 @@ fun WordEntity.toDomain(gson: Gson): WordEntry {
         hindiMeaning = hindiMeaning,
         hindiPronunciation = hindiPronunciation,
         exampleSentence = exampleSentence,
-        synonyms = runCatching { gson.fromJson<List<String>>(synonyms, listType) }.getOrDefault(emptyList()),
-        antonyms = runCatching { gson.fromJson<List<String>>(antonyms, listType) }.getOrDefault(emptyList()),
+        synonyms = runCatching { gson.fromJson<List<String>>(synonyms, STRING_LIST_TYPE) }.getOrDefault(emptyList()),
+        antonyms = runCatching { gson.fromJson<List<String>>(antonyms, STRING_LIST_TYPE) }.getOrDefault(emptyList()),
         etymology = etymology,
         difficultyLevel = difficultyLevel,
         frequencyRating = frequencyRating,

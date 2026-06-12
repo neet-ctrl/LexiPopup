@@ -71,7 +71,7 @@ data class OnDeviceModel(
 
 // ── Shared JSON → WordEntry parser ──────────────────────────────────────────
 
-private val listType = object : TypeToken<List<String>>() {}.type
+private val listType = TypeToken.getParameterized(List::class.java, String::class.java).type
 
 fun parseWordEntryFromJson(word: String, json: String, source: String, gson: Gson): WordEntry? = try {
     val clean = json.trim()

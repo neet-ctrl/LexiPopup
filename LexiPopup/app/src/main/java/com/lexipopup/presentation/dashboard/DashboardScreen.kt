@@ -72,6 +72,7 @@ fun DashboardScreen(
 ) {
     val settings by viewModel.settings.collectAsState()
     val todayCount by viewModel.todayCount.collectAsState()
+    val totalWordCount by viewModel.totalWordCount.collectAsState()
     val recentWords by viewModel.recentWords.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
     val mostSearched by viewModel.mostSearched.collectAsState()
@@ -221,6 +222,7 @@ fun DashboardScreen(
             when (destination) {
                 AppDestination.Home -> HomeScreen(
                     todayCount = todayCount,
+                    totalWordCount = totalWordCount,
                     recentWords = recentWords,
                     favorites = favorites,
                     weeklyStats = weeklyStats,
@@ -283,6 +285,7 @@ fun DashboardScreen(
 @Composable
 fun HomeScreen(
     todayCount: Int,
+    totalWordCount: Int,
     recentWords: List<WordEntry>,
     favorites: List<WordEntry>,
     weeklyStats: List<Pair<String, Int>>,
@@ -352,7 +355,17 @@ fun HomeScreen(
             ) {
                 StatMiniCard(modifier = Modifier.weight(1f), label = "Today", value = "$todayCount", icon = Icons.Default.Today, color = MaterialTheme.colorScheme.primary)
                 StatMiniCard(modifier = Modifier.weight(1f), label = "Favorites", value = "${favorites.size}", icon = Icons.Default.Star, color = Color(0xFFFFC107))
-                StatMiniCard(modifier = Modifier.weight(1f), label = "Total", value = "${recentWords.size}", icon = Icons.Default.LibraryBooks, color = MaterialTheme.colorScheme.tertiary)
+                StatMiniCard(
+                    modifier = Modifier.weight(1f),
+                    label = "In DB",
+                    value = when {
+                        totalWordCount >= 1_000_000 -> "%.1fM".format(totalWordCount / 1_000_000.0)
+                        totalWordCount >= 1_000     -> "%.1fK".format(totalWordCount / 1_000.0)
+                        else                        -> "$totalWordCount"
+                    },
+                    icon = Icons.Default.LibraryBooks,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
             }
         }
 

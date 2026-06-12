@@ -150,15 +150,18 @@ fun PopupScreen(
     val activity = LocalContext.current as? androidx.activity.ComponentActivity
     SideEffect {
         val win = activity?.window ?: return@SideEffect
-        val lp = android.view.WindowManager.LayoutParams
+        val flagNotTouchModal = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        val flagNotFocusable  = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        val wrapContent       = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        val matchParent       = android.view.ViewGroup.LayoutParams.MATCH_PARENT
         when (effectiveWindowState) {
             PopupWindowState.EDGE_LEFT,
             PopupWindowState.EDGE_RIGHT -> {
-                win.addFlags(lp.FLAG_NOT_TOUCH_MODAL)
-                win.addFlags(lp.FLAG_NOT_FOCUSABLE)
+                win.addFlags(flagNotTouchModal)
+                win.addFlags(flagNotFocusable)
                 // Shrink window to just the tab so every touch outside the circle
                 // passes through to the app underneath.
-                win.setLayout(lp.WRAP_CONTENT, lp.WRAP_CONTENT)
+                win.setLayout(wrapContent, wrapContent)
                 val attrs = win.attributes
                 attrs.gravity = (if (effectiveWindowState == PopupWindowState.EDGE_LEFT)
                     android.view.Gravity.START else android.view.Gravity.END) or
@@ -167,17 +170,17 @@ fun PopupScreen(
                 win.attributes = attrs
             }
             PopupWindowState.BUBBLE -> {
-                win.addFlags(lp.FLAG_NOT_TOUCH_MODAL)
-                win.addFlags(lp.FLAG_NOT_FOCUSABLE)
-                win.setLayout(lp.MATCH_PARENT, lp.MATCH_PARENT)
+                win.addFlags(flagNotTouchModal)
+                win.addFlags(flagNotFocusable)
+                win.setLayout(matchParent, matchParent)
                 val attrs = win.attributes
                 attrs.gravity = android.view.Gravity.NO_GRAVITY
                 win.attributes = attrs
             }
             else -> {
-                win.clearFlags(lp.FLAG_NOT_TOUCH_MODAL)
-                win.clearFlags(lp.FLAG_NOT_FOCUSABLE)
-                win.setLayout(lp.MATCH_PARENT, lp.MATCH_PARENT)
+                win.clearFlags(flagNotTouchModal)
+                win.clearFlags(flagNotFocusable)
+                win.setLayout(matchParent, matchParent)
                 val attrs = win.attributes
                 attrs.gravity = android.view.Gravity.NO_GRAVITY
                 win.attributes = attrs
@@ -1427,11 +1430,11 @@ private fun LayerPickerPanel(
                     )
                 }
             }
-            androidx.compose.foundation.lazy.LazyRow(
+            LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = PaddingValues(bottom = 4.dp)
             ) {
-                androidx.compose.foundation.lazy.items(activeLayers) { layerId ->
+                items(activeLayers) { layerId ->
                     val (emoji, name) = LAYER_PICKER_META[layerId] ?: ("⚙️" to layerId)
                     val isLoading = layerId == forcingLayerId
                     FilterChip(

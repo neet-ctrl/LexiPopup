@@ -1875,7 +1875,7 @@ fun ManualSearchContent(
                         Color.Transparent
                     ))
                 )
-                .padding(horizontal = 20.dp, top = 18.dp, bottom = 14.dp)
+                .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 14.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 

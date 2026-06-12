@@ -87,7 +87,7 @@ abstract class LexiDatabase : RoomDatabase() {
                         try {
                             val cursor = db.query(
                                 "SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed'",
-                                null
+                                emptyArray<Any?>()
                             )
                             val seedCount = if (cursor.moveToFirst()) cursor.getInt(0) else 0
                             cursor.close()

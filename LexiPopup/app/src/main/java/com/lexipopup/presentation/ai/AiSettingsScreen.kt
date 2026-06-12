@@ -4,9 +4,14 @@ package com.lexipopup.presentation.ai
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,7 +22,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -33,11 +42,21 @@ fun AiSettingsScreen(
     viewModel: AiSettingsViewModel,
     onBack: () -> Unit
 ) {
-    val settings by viewModel.settings.collectAsState()
+    val settings       by viewModel.settings.collectAsState()
     val onDeviceStatus by viewModel.onDeviceStatus.collectAsState()
-    val context = LocalContext.current
+    val downloadLogs   by viewModel.downloadLogs.collectAsState()
+    val context        = LocalContext.current
 
     val selectedProvider = AiProviderType.fromId(settings.aiProviderName)
+
+    // SAF file picker — user selects the model .bin/.task from local storage
+    val safLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.importModelFromUri(it, viewModel.aiProviderManager.onDeviceProvider.selectedModel)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -101,11 +120,10 @@ fun AiSettingsScreen(
             // ── Groq settings ────────────────────────────────────────────
             AnimatedVisibility(
                 visible = selectedProvider == AiProviderType.GROQ || selectedProvider == AiProviderType.HYBRID,
-                enter = expandVertically(),
-                exit  = shrinkVertically()
+                enter = expandVertically(), exit = shrinkVertically()
             ) {
                 GroqSettingsCard(
-                    apiKey = settings.groqApiKey,
+                    apiKey      = settings.groqApiKey,
                     onKeyChange = viewModel::updateGroqKey,
                     onOpenSignup = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com")))
@@ -116,11 +134,10 @@ fun AiSettingsScreen(
             // ── OpenAI settings ───────────────────────────────────────────
             AnimatedVisibility(
                 visible = selectedProvider == AiProviderType.OPENAI,
-                enter = expandVertically(),
-                exit  = shrinkVertically()
+                enter = expandVertically(), exit = shrinkVertically()
             ) {
                 OpenAiSettingsCard(
-                    apiKey = settings.openAiApiKey,
+                    apiKey      = settings.openAiApiKey,
                     onKeyChange = viewModel::updateOpenAiKey,
                     onOpenSignup = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://platform.openai.com/api-keys")))
@@ -131,16 +148,18 @@ fun AiSettingsScreen(
             // ── On-Device settings ────────────────────────────────────────
             AnimatedVisibility(
                 visible = selectedProvider == AiProviderType.ON_DEVICE || selectedProvider == AiProviderType.HYBRID,
-                enter = expandVertically(),
-                exit  = shrinkVertically()
+                enter = expandVertically(), exit = shrinkVertically()
             ) {
                 OnDeviceSettingsCard(
-                    status        = onDeviceStatus,
-                    selectedModel = viewModel.aiProviderManager.onDeviceProvider.selectedModel,
-                    onSelectModel = viewModel::selectOnDeviceModel,
-                    onDownload    = { viewModel.downloadModel() },
-                    onDelete      = viewModel::deleteModel,
-                    onOpenModelPage = {
+                    status           = onDeviceStatus,
+                    selectedModel    = viewModel.aiProviderManager.onDeviceProvider.selectedModel,
+                    downloadLogs     = downloadLogs,
+                    onSelectModel    = viewModel::selectOnDeviceModel,
+                    onDownload       = { viewModel.downloadModel() },
+                    onCancel         = { viewModel.cancelDownload() },
+                    onDelete         = viewModel::deleteModel,
+                    onPickFromStorage = { safLauncher.launch(arrayOf("*/*")) },
+                    onOpenModelPage  = {
                         context.startActivity(Intent(Intent.ACTION_VIEW,
                             Uri.parse("https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android")))
                     }
@@ -150,13 +169,12 @@ fun AiSettingsScreen(
             // ── Hybrid settings ───────────────────────────────────────────
             AnimatedVisibility(
                 visible = selectedProvider == AiProviderType.HYBRID,
-                enter = expandVertically(),
-                exit  = shrinkVertically()
+                enter = expandVertically(), exit = shrinkVertically()
             ) {
                 HybridSettingsCard(
-                    autoSelectBest     = settings.hybridAutoSelectBest,
-                    showComparison     = settings.hybridShowComparison,
-                    onAutoSelectChange = viewModel::setHybridAutoSelect,
+                    autoSelectBest        = settings.hybridAutoSelectBest,
+                    showComparison        = settings.hybridShowComparison,
+                    onAutoSelectChange    = viewModel::setHybridAutoSelect,
                     onShowComparisonChange = viewModel::setHybridShowComparison
                 )
             }
@@ -194,21 +212,126 @@ private fun SetupStep(number: Int, text: String) {
             modifier = Modifier.size(22.dp)
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Text(
-                    number.toString(),
+                Text(number.toString(),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimary,
-                    fontSize = 11.sp
-                )
+                    fontSize = 11.sp)
             }
         }
-        Text(
-            text,
+        Text(text,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
+            modifier = Modifier.weight(1f))
+    }
+}
+
+// ── Download log panel ────────────────────────────────────────────────────────
+
+@Composable
+private fun DownloadLogPanel(logs: List<String>) {
+    if (logs.isEmpty()) return
+    val clipboard = LocalClipboardManager.current
+    val scrollState = rememberScrollState()
+
+    // Auto-scroll to bottom when new logs arrive
+    LaunchedEffect(logs.size) { scrollState.animateScrollTo(scrollState.maxValue) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Download log",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            IconButton(
+                onClick = { clipboard.setText(AnnotatedString(logs.joinToString("\n"))) },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(Icons.Default.ContentCopy, "Copy log",
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 60.dp, max = 140.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                .padding(8.dp)
+                .verticalScroll(scrollState)
+        ) {
+            Text(
+                text = logs.joinToString("\n"),
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 16.sp,
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+// ── URL copy row ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun UrlCopyRow(label: String, url: String) {
+    val clipboard = LocalClipboardManager.current
+    val context   = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                url,
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                maxLines = 1
+            )
+            IconButton(
+                onClick = { clipboard.setText(AnnotatedString(url)) },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(Icons.Default.ContentCopy, "Copy URL",
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(
+                onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(Icons.Default.OpenInNew, "Open in browser",
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 }
 
@@ -240,7 +363,6 @@ private fun GroqSettingsCard(
                         fontWeight = FontWeight.Medium)
                 }
             } else {
-                // Step-by-step setup guide
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("How to get your free Groq API key:",
@@ -261,8 +383,7 @@ private fun GroqSettingsCard(
             }
 
             OutlinedTextField(
-                value = apiKey,
-                onValueChange = onKeyChange,
+                value = apiKey, onValueChange = onKeyChange,
                 label = { Text("Groq API Key") },
                 placeholder = { Text("gsk_…") },
                 modifier = Modifier.fillMaxWidth(),
@@ -270,10 +391,8 @@ private fun GroqSettingsCard(
                 visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { keyVisible = !keyVisible }) {
-                        Icon(
-                            if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            if (keyVisible) "Hide" else "Show"
-                        )
+                        Icon(if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            if (keyVisible) "Hide" else "Show")
                     }
                 }
             )
@@ -329,20 +448,15 @@ private fun OpenAiSettingsCard(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
+                            Row(Modifier.padding(10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                                verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Info, null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                Text(
-                                    "OpenAI requires a paid account (~\$5 minimum credit). " +
-                                    "Consider Groq instead — it's free.",
+                                Text("OpenAI requires a paid account (~\$5 minimum credit). Consider Groq instead — it's free.",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer)
                             }
                         }
                         Button(onClick = onOpenSignup, modifier = Modifier.fillMaxWidth()) {
@@ -355,8 +469,7 @@ private fun OpenAiSettingsCard(
             }
 
             OutlinedTextField(
-                value = apiKey,
-                onValueChange = onKeyChange,
+                value = apiKey, onValueChange = onKeyChange,
                 label = { Text("OpenAI API Key") },
                 placeholder = { Text("sk-…") },
                 modifier = Modifier.fillMaxWidth(),
@@ -364,18 +477,14 @@ private fun OpenAiSettingsCard(
                 visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { keyVisible = !keyVisible }) {
-                        Icon(
-                            if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            if (keyVisible) "Hide" else "Show"
-                        )
+                        Icon(if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            if (keyVisible) "Hide" else "Show")
                     }
                 }
             )
-            Text(
-                "Uses GPT-4o-mini · ~\$0.0002 per word lookup · requires credits at platform.openai.com",
+            Text("Uses GPT-4o-mini · ~\$0.0002 per word lookup · requires credits at platform.openai.com",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -386,14 +495,63 @@ private fun OpenAiSettingsCard(
 private fun OnDeviceSettingsCard(
     status: OnDeviceModelStatus,
     selectedModel: OnDeviceModel,
+    downloadLogs: List<String>,
     onSelectModel: (OnDeviceModel) -> Unit,
     onDownload: () -> Unit,
+    onCancel: () -> Unit,
     onDelete: () -> Unit,
+    onPickFromStorage: () -> Unit,
     onOpenModelPage: () -> Unit
 ) {
     var modelMenuExpanded by remember { mutableStateOf(false) }
+    var showDownloadConfirmDialog by remember { mutableStateOf(false) }
+
+    // Download confirmation dialog
+    if (showDownloadConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDownloadConfirmDialog = false },
+            title = { Text("Download AI Model?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("You're about to download ${selectedModel.displayName}.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(2.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text("Download size: ${selectedModel.sizeGb} GB", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Memory, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text("RAM required: ${selectedModel.ramRequiredGb} GB", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Wifi, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
+                        Text("Use Wi-Fi to avoid mobile data charges.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary)
+                    }
+                    Text("Once downloaded, the model works fully offline forever.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showDownloadConfirmDialog = false; onDownload() }) {
+                    Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Download (${selectedModel.sizeGb} GB)")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDownloadConfirmDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
@@ -427,11 +585,9 @@ private fun OnDeviceSettingsCard(
                             text = {
                                 Column {
                                     Text(model.displayName, fontWeight = FontWeight.Medium)
-                                    Text(
-                                        "RAM: ${model.ramRequiredGb} GB · Quality: ${model.qualityPercent}%",
+                                    Text("RAM: ${model.ramRequiredGb} GB · Quality: ${model.qualityPercent}%",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             },
                             onClick = { onSelectModel(model); modelMenuExpanded = false }
@@ -440,71 +596,29 @@ private fun OnDeviceSettingsCard(
                 }
             }
 
-            // Download confirmation dialog
-            var showDownloadConfirmDialog by remember { mutableStateOf(false) }
-            if (showDownloadConfirmDialog) {
-                AlertDialog(
-                    onDismissRequest = { showDownloadConfirmDialog = false },
-                    title = { Text("Download AI Model?") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("You're about to download ${selectedModel.displayName}.",
-                                style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(2.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.Download, null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary)
-                                Text("Download size: ${selectedModel.sizeGb} GB",
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.Memory, null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary)
-                                Text("RAM required: ${selectedModel.ramRequiredGb} GB",
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.Wifi, null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.tertiary)
-                                Text("Use Wi-Fi to avoid mobile data charges.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.tertiary)
-                            }
-                            Text("Once downloaded the model works fully offline, forever.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
-                    confirmButton = {
-                        Button(onClick = { showDownloadConfirmDialog = false; onDownload() }) {
-                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Download (${selectedModel.sizeGb} GB)")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showDownloadConfirmDialog = false }) { Text("Cancel") }
-                    }
-                )
-            }
-
             // ── Status area ────────────────────────────────────────────────
             when (status) {
+
+                // ── Not downloaded ─────────────────────────────────────────
                 is OnDeviceModelStatus.NotDownloaded -> {
                     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("How on-device AI works:",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold)
-                            SetupStep(1, "Choose a model above (Gemma 2B = smaller, Phi-2 = smarter)")
-                            SetupStep(2, "Tap Download — the model comes from Google's servers (no account needed)")
-                            SetupStep(3, "Wait for the ${selectedModel.sizeGb} GB download to finish")
+                            SetupStep(1, "Choose a model above (Gemma 2B = smaller & faster, Phi-2 = smarter)")
+                            SetupStep(2, "Tap Download — comes from Google's servers, no account needed")
+                            SetupStep(3, "Wait for the ${selectedModel.sizeGb} GB download to finish (keep screen on, Wi-Fi recommended)")
                             SetupStep(4, "Done — AI works fully offline forever after this")
                         }
                     }
+
+                    // Direct download URL for manual browser download
+                    UrlCopyRow(
+                        label = "📎 Direct download link (copy → paste in Chrome/browser if in-app download fails):",
+                        url   = selectedModel.downloadUrl
+                    )
+
                     Button(
                         onClick = { showDownloadConfirmDialog = true },
                         modifier = Modifier.fillMaxWidth()
@@ -513,6 +627,17 @@ private fun OnDeviceSettingsCard(
                         Spacer(Modifier.width(6.dp))
                         Text("Download ${selectedModel.displayName}")
                     }
+
+                    // SAF pick from storage
+                    OutlinedButton(
+                        onClick = onPickFromStorage,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Pick from Storage (already downloaded?)")
+                    }
+
                     Text(
                         "Requires ${selectedModel.ramRequiredGb} GB RAM · ${selectedModel.sizeGb} GB download · Wi-Fi recommended",
                         style = MaterialTheme.typography.labelSmall,
@@ -520,32 +645,66 @@ private fun OnDeviceSettingsCard(
                     )
                 }
 
+                // ── Downloading ────────────────────────────────────────────
                 is OnDeviceModelStatus.Downloading -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Downloading…",
+                            Text(
+                                if (status.totalBytes < 0L) "Importing from storage…" else "Downloading…",
                                 style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium)
-                            Text("${(status.progress * 100).toInt()}%",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary)
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (status.totalBytes >= 0L && status.progress > 0f) {
+                                Text("${(status.progress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
                         }
-                        LinearProgressIndicator(
-                            progress = { status.progress },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        val mb    = status.bytesReceived / (1024 * 1024)
-                        val total = if (status.totalBytes > 0) status.totalBytes / (1024 * 1024) else "?"
-                        Text("${mb} MB / $total MB",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                        if (status.totalBytes > 0L) {
+                            LinearProgressIndicator(
+                                progress = { status.progress },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            val mb    = status.bytesReceived / (1024 * 1024)
+                            val total = status.totalBytes / (1024 * 1024)
+                            Text("${mb} MB / $total MB",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            // Unknown total (SAF import)
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            val mb = status.bytesReceived / (1024 * 1024)
+                            Text("${mb} MB copied…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        // Cancel button (only for URL download, not SAF import)
+                        if (status.totalBytes >= 0L) {
+                            OutlinedButton(
+                                onClick = onCancel,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(Icons.Default.Stop, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Pause Download (can resume later)")
+                            }
+                        }
+
+                        // Live log panel
+                        DownloadLogPanel(downloadLogs)
                     }
                 }
 
+                // ── Downloaded / Ready ─────────────────────────────────────
                 is OnDeviceModelStatus.Downloaded,
                 is OnDeviceModelStatus.Ready -> {
                     Row(verticalAlignment = Alignment.CenterVertically,
@@ -575,27 +734,29 @@ private fun OnDeviceSettingsCard(
                     }
                 }
 
+                // ── Loading (inference) ────────────────────────────────────
                 is OnDeviceModelStatus.Loading -> {
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Loading model into memory…",
-                            style = MaterialTheme.typography.labelMedium)
+                        Text("Loading model into memory…", style = MaterialTheme.typography.labelMedium)
                     }
                 }
 
+                // ── Error ──────────────────────────────────────────────────
                 is OnDeviceModelStatus.Error -> {
-                    // No raw error codes — show a calm, actionable guide instead
                     OutlinedCard(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.outlinedCardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+                            // Error header
                             Row(verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.WifiOff, null,
+                                Icon(Icons.Default.ErrorOutline, null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.error)
                                 Text("Download didn't complete",
@@ -604,39 +765,59 @@ private fun OnDeviceSettingsCard(
                                     color = MaterialTheme.colorScheme.error)
                             }
 
+                            // Friendly error message (no raw exception codes)
+                            val friendlyMsg = status.message.let { msg ->
+                                when {
+                                    msg.startsWith("HTTP 4") -> msg
+                                    msg.contains("paused") || msg.contains("resume") -> msg
+                                    msg.contains("timeout", ignoreCase = true) -> msg
+                                    msg.contains("cancel", ignoreCase = true) -> msg
+                                    else -> "The download stopped unexpectedly. See log below for details."
+                                }
+                            }
+                            Text(friendlyMsg,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface)
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            // Troubleshoot tips
                             Text("Things to check:",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Medium)
-
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                TroubleshootRow(
-                                    icon = Icons.Default.Wifi,
-                                    text = "Make sure Wi-Fi or mobile data is active"
-                                )
-                                TroubleshootRow(
-                                    icon = Icons.Default.BatteryFull,
-                                    text = "Disable battery optimisation for LexiPopup in phone Settings → Apps → LexiPopup → Battery → Unrestricted"
-                                )
-                                TroubleshootRow(
-                                    icon = Icons.Default.Refresh,
-                                    text = "Tap Retry below — the download will resume from where it stopped"
-                                )
-                                TroubleshootRow(
-                                    icon = Icons.Default.OpenInNew,
-                                    text = "Still failing? Download the model manually from Google's AI Edge page and place it in the app"
-                                )
+                            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                TroubleshootRow(Icons.Default.Wifi,
+                                    "Make sure Wi-Fi or mobile data is active and stable")
+                                TroubleshootRow(Icons.Default.BatteryFull,
+                                    "Settings → Apps → LexiPopup → Battery → set to Unrestricted (prevents Android killing the download)")
+                                TroubleshootRow(Icons.Default.Refresh,
+                                    "Tap Retry — download resumes from where it stopped (${
+                                        if (status.message.contains("MB")) status.message.substringAfter("at ").substringBefore(" —").trim() else "saved progress"
+                                    })")
                             }
 
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            // Download URL — copy to paste in browser as manual fallback
+                            UrlCopyRow(
+                                label = "📎 Manual download link (paste in Chrome → download → use 'Pick from Storage' below):",
+                                url   = selectedModel.downloadUrl
+                            )
+
+                            // Log panel (if any logs)
+                            DownloadLogPanel(downloadLogs)
+
+                            // Action buttons
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = onDownload, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("Retry Download")
+                                    Text("Retry / Resume")
                                 }
-                                OutlinedButton(onClick = onOpenModelPage) {
-                                    Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(16.dp))
+                                OutlinedButton(onClick = onPickFromStorage, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("Manual")
+                                    Text("Pick from Storage")
                                 }
                             }
                         }
@@ -687,17 +868,13 @@ private fun HybridSettingsCard(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold)
             }
-            Text(
-                "Hybrid fires Groq and On-Device AI simultaneously and shows you both results.",
+            Text("Hybrid fires Groq and On-Device AI simultaneously and shows you both results.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
+            Row(modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Auto-select best explanation", style = MaterialTheme.typography.bodyMedium)
                     Text("Use Groq result if available, On-Device as fallback",
@@ -706,11 +883,9 @@ private fun HybridSettingsCard(
                 }
                 Switch(checked = autoSelectBest, onCheckedChange = onAutoSelectChange)
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
+            Row(modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Show comparison tabs in popup", style = MaterialTheme.typography.bodyMedium)
                     Text("View Groq and On-Device answers side by side",

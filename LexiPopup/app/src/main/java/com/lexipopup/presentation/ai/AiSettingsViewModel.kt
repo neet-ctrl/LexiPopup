@@ -1,5 +1,6 @@
 package com.lexipopup.presentation.ai
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lexipopup.domain.models.AppSettings
@@ -10,6 +11,7 @@ import com.lexipopup.utils.ai.HybridAiResult
 import com.lexipopup.utils.ai.OnDeviceModel
 import com.lexipopup.utils.ai.OnDeviceModelStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -28,7 +30,12 @@ class AiSettingsViewModel @Inject constructor(
     val onDeviceStatus: StateFlow<OnDeviceModelStatus> =
         aiProviderManager.onDeviceProvider.modelStatus
 
+    val downloadLogs: StateFlow<List<String>> =
+        aiProviderManager.onDeviceProvider.downloadLogs
+
     val hybridResult: StateFlow<HybridAiResult?> = aiProviderManager.lastHybridResult
+
+    private var currentDownloadJob: Job? = null
 
     // ── Provider selection ──────────────────────────────────────────────────
 
@@ -76,8 +83,22 @@ class AiSettingsViewModel @Inject constructor(
     }
 
     fun downloadModel(model: OnDeviceModel = aiProviderManager.onDeviceProvider.selectedModel) {
-        viewModelScope.launch {
+        currentDownloadJob?.cancel()
+        currentDownloadJob = viewModelScope.launch {
             aiProviderManager.onDeviceProvider.downloadModel(model)
+        }
+    }
+
+    /** Cancels an in-progress download. The partial file is kept for resumption. */
+    fun cancelDownload() {
+        currentDownloadJob?.cancel()
+        currentDownloadJob = null
+    }
+
+    /** Imports a model file the user picked via the system file picker (SAF). */
+    fun importModelFromUri(uri: Uri, model: OnDeviceModel = aiProviderManager.onDeviceProvider.selectedModel) {
+        viewModelScope.launch {
+            aiProviderManager.onDeviceProvider.importFromUri(uri, model)
         }
     }
 

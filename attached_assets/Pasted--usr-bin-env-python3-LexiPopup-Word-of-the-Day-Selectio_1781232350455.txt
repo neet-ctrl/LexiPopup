@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+"""
+LexiPopup - Word of the Day Selection Algorithm
+Shows exactly HOW and on WHAT BASIS the word is chosen.
+
+Run this in Replit to see the logic in action.
+"""
+
+import random
+import datetime
+from typing import List, Dict, Tuple
+
+# ============================================================
+# SAMPLE DATABASE (Words with their properties)
+# ============================================================
+
+WORDS_DATABASE = [
+    # word, meaning, frequency(1-100), difficulty(1-4), length, daily_use_score(1-10)
+    ("happy", "Feeling or showing pleasure", 85, 1, 5, 9),
+    ("sad", "Feeling sorrow", 80, 1, 3, 8),
+    ("big", "Large in size", 90, 1, 3, 9),
+    ("run", "Move quickly using legs", 88, 1, 3, 9),
+    ("good", "To be desired or approved", 95, 1, 4, 10),
+    ("belittle", "To make someone feel unimportant", 45, 2, 8, 7),
+    ("ephemeral", "Lasting for a very short time", 35, 3, 9, 6),
+    ("serendipity", "Fortunate discovery by accident", 40, 2, 11, 7),
+    ("meticulous", "Showing great attention to detail", 55, 2, 10, 8),
+    ("tenacious", "Tending to keep a firm hold", 38, 3, 9, 7),
+    ("succinct", "Briefly and clearly expressed", 32, 3, 8, 8),
+    ("candid", "Truthful and straightforward", 48, 2, 6, 8),
+    ("eloquent", "Fluent or persuasive speaking", 42, 2, 8, 7),
+    ("profound", "Very great or intense", 58, 2, 8, 7),
+    ("ubiquitous", "Present everywhere", 36, 3, 10, 6),
+    ("altruistic", "Selfless concern for others", 34, 3, 10, 5),
+    ("capricious", "Given to sudden changes", 30, 3, 10, 6),
+    ("diligent", "Hardworking and careful", 52, 2, 8, 8),
+    ("enigmatic", "Difficult to interpret", 28, 3, 9, 5),
+    ("benevolent", "Well-meaning and kind", 39, 2, 10, 7),
+    ("audacious", "Willing to take bold risks", 35, 3, 9, 6),
+    ("stoic", "Enduring pain without complaint", 33, 3, 5, 6),
+    ("verbose", "Using more words than needed", 28, 3, 7, 4),
+    ("plethora", "An excess or abundance", 41, 2, 8, 7),
+    ("equanimity", "Mental calmness under stress", 25, 4, 10, 5),
+    ("quixotic", "Exceedingly idealistic", 20, 4, 8, 4),
+    ("defenestration", "Throwing someone out window", 8, 4, 15, 2),
+]
+
+# ============================================================
+# SELECTION CRITERIA (Based on your requirements)
+# ============================================================
+
+class WordOfTheDaySelector:
+    """
+    Selects Word of the Day based on MULTIPLE criteria:
+    1. Frequency: 30-70% (not too common, not too rare)
+    2. Difficulty: Intermediate or Advanced (not Beginner, not Expert)
+    3. Length: 5-12 letters (perfect size)
+    4. Daily use potential: Medium to High
+    5. Surprise/Value factor: Words people should know but don't
+    """
+    
+    def __init__(self, words_db: List[Tuple]):
+        self.words_db = words_db
+    
+    def calculate_word_score(self, word_data: Tuple) -> int:
+        """
+        Calculate a score for each word based on ALL criteria.
+        Higher score = better Word of the Day candidate.
+        """
+        word, meaning, frequency, difficulty, length, daily_use = word_data
+        
+        score = 0
+        
+        # CRITERION 1: Frequency (30-70% is ideal)
+        # Perfect score at 45% frequency
+        if 30 <= frequency <= 70:
+            # Closer to 45% = higher score
+            freq_score = 100 - abs(frequency - 45) * 2
+            score += freq_score
+        else:
+            score += 10  # Very low score if outside range
+        
+        # CRITERION 2: Difficulty (2=Intermediate, 3=Advanced)
+        if difficulty in [2, 3]:
+            score += 100 if difficulty == 2 else 80
+        else:
+            score += 20  # Beginner (1) or Expert (4) not preferred
+        
+        # CRITERION 3: Length (5-12 letters is ideal)
+        if 5 <= length <= 12:
+            # Perfect length around 7-9 letters
+            if 7 <= length <= 9:
+                score += 100
+            else:
+                score += 70
+        else:
+            score += 20
+        
+        # CRITERION 4: Daily use potential (7+ is good)
+        score += daily_use * 10
+        
+        # CRITERION 5: Bonus - Words ending with specific patterns
+        # (belittle, ephemeral type patterns)
+        if word.endswith("le") or word.endswith("al") or word.endswith("ty"):
+            score += 15
+        
+        # CRITERION 6: Penalty for very long or very short words
+        if length > 14 or length < 4:
+            score -= 50
+        
+        return score
+    
+    def get_candidate_words(self) -> List[Tuple]:
+        """Filter and score all words, return sorted candidates."""
+        candidates = []
+        
+        for word_data in self.words_db:
+            score = self.calculate_word_score(word_data)
+            candidates.append((word_data, score))
+        
+        # Sort by score (highest first)
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates
+    
+    def get_word_of_day(self, date: datetime.date) -> Dict:
+        """
+        Select Word of the Day based on date.
+        Same date = same word for ALL users (Global mode).
+        """
+        # Get all candidates sorted by score
+        candidates = self.get_candidate_words()
+        
+        # Use date as seed for deterministic selection
+        # This ensures same word for everyone on same day
+        day_of_year = date.timetuple().tm_yday  # 1 to 365
+        random.seed(day_of_year)
+        
+        # Pick from top 20 candidates (the very best ones)
+        # So word is always high quality, but varies by day
+        top_candidates = candidates[:20]
+        
+        # Add some randomness based on date
+        selected_index = day_of_year % len(top_candidates)
+        selected_word_data, score = top_candidates[selected_index]
+        
+        word, meaning, frequency, difficulty, length, daily_use = selected_word_data
+        
+        # Map difficulty number to name
+        difficulty_map = {1: "Beginner", 2: "Intermediate", 3: "Advanced", 4: "Expert"}
+        
+        # Map frequency to description
+        if frequency < 30:
+            freq_desc = "Rare"
+        elif frequency < 50:
+            freq_desc = "Less Common"
+        elif frequency < 70:
+            freq_desc = "Moderate"
+        else:
+            freq_desc = "Common"
+        
+        return {
+            "word": word,
+            "meaning": meaning,
+            "frequency": frequency,
+            "frequency_desc": freq_desc,
+            "difficulty": difficulty_map[difficulty],
+            "length": length,
+            "daily_use_score": daily_use,
+            "selection_score": score,
+            "date": date.isoformat(),
+            "reason": self._get_reason(frequency, difficulty, length)
+        }
+    
+    def _get_reason(self, frequency: int, difficulty: int, length: int) -> str:
+        """Generate human-readable reason why this word was chosen."""
+        reasons = []
+        
+        if 30 <= frequency <= 70:
+            reasons.append(f"frequency is {frequency}% (perfect - not too common, not too rare)")
+        else:
+            reasons.append(f"frequency is {frequency}%")
+        
+        if difficulty in [2, 3]:
+            reasons.append("difficulty is perfect (Intermediate/Advanced level)")
+        
+        if 5 <= length <= 12:
+            reasons.append(f"length is {length} letters (ideal for learning)")
+        
+        return " | ".join(reasons)
+
+
+# ============================================================
+# DISPLAY FUNCTIONS
+# ============================================================
+
+def print_word_of_day(word_info: Dict):
+    """Print beautiful Word of the Day display."""
+    print("\n" + "=" * 65)
+    print(f"📅 WORD OF THE DAY — {word_info['date']}")
+    print("=" * 65)
+    print()
+    print(f"   🌟  {word_info['word'].upper()}  🌟")
+    print()
+    print(f"   📖 Meaning: {word_info['meaning']}")
+    print()
+    print(f"   📊 Stats:")
+    print(f"      • Frequency: {word_info['frequency']}% ({word_info['frequency_desc']})")
+    print(f"      • Difficulty: {word_info['difficulty']}")
+    print(f"      • Length: {word_info['length']} letters")
+    print(f"      • Daily Use Score: {word_info['daily_use_score']}/10")
+    print(f"      • Selection Score: {word_info['selection_score']}")
+    print()
+    print(f"   ✅ Why this word?: {word_info['reason']}")
+    print()
+    print("=" * 65)
+
+
+def print_candidates_ranking(selector: WordOfTheDaySelector):
+    """Show top candidates with their scores."""
+    print("\n" + "=" * 65)
+    print("🏆 TOP CANDIDATES FOR WORD OF THE DAY")
+    print("(Based on: Frequency 30-70%, Difficulty 2-3, Length 5-12)")
+    print("=" * 65)
+    print()
+    print(f"{'Rank':<6} {'Word':<15} {'Score':<8} {'Freq':<6} {'Diff':<12} {'Len':<6} {'Daily Use':<10}")
+    print("-" * 65)
+    
+    candidates = selector.get_candidate_words()
+    for i, (word_data, score) in enumerate(candidates[:15], 1):
+        word, meaning, freq, diff, length, daily = word_data
+        diff_name = {1: "Beginner", 2: "Intermediate", 3: "Advanced", 4: "Expert"}[diff]
+        print(f"{i:<6} {word:<15} {score:<8} {freq:<6} {diff_name:<12} {length:<6} {daily}/10")
+    
+    print("\n" + "=" * 65)
+    print("✅ Words with score > 200 are PERFECT Word of Day candidates!")
+    print("   Examples: belittle, ephemeral, serendipity, tenacious")
+    print("=" * 65)
+
+
+# ============================================================
+# MAIN FUNCTION
+# ============================================================
+
+def main():
+    print("\n" + "🔍" * 33)
+    print("   LEXIPOPUP - WORD OF THE DAY SELECTION ALGORITHM")
+    print("   Showing HOW and on WHAT BASIS the word is chosen")
+    print("🔍" * 33)
+    
+    # Create selector
+    selector = WordOfTheDaySelector(WORDS_DATABASE)
+    
+    # Show ranking of all candidate words
+    print_candidates_ranking(selector)
+    
+    # Show Word of the Day for today
+    today = datetime.date.today()
+    word_info = selector.get_word_of_day(today)
+    print_word_of_day(word_info)
+    
+    # Show preview for next 7 days
+    print("\n" + "=" * 65)
+    print("📅 PREVIEW: Word of the Day for Next 7 Days")
+    print("(Same word for ALL users on that day)")
+    print("=" * 65)
+    print()
+    print(f"{'Date':<15} {'Word':<15} {'Meaning':<35} {'Why Selected':<30}")
+    print("-" * 95)
+    
+    for i in range(7):
+        future_date = today + datetime.timedelta(days=i)
+        info = selector.get_word_of_day(future_date)
+        # Truncate meaning if too long
+        meaning_short = info['meaning'][:32] + "..." if len(info['meaning']) > 32 else info['meaning']
+        print(f"{future_date.isoformat():<15} {info['word']:<15} {meaning_short:<35} {info['reason'][:28]:<30}")
+    
+    print("\n" + "=" * 65)
+    print("🎯 SUMMARY: SELECTION CRITERIA")
+    print("=" * 65)
+    print("""
+    1. Frequency: 30-70% (not too common like 'happy', not too rare like 'defenestration')
+    2. Difficulty: Intermediate or Advanced (challenging but learnable)
+    3. Length: 5-12 letters (perfect size for daily word)
+    4. Daily Use: Can be used in real conversations
+    5. Surprise Factor: Words people SHOULD know but don't
+    
+    PERFECT EXAMPLES: belittle, ephemeral, serendipity, tenacious, succinct
+    """)
+
+
+if __name__ == "__main__":
+    main()

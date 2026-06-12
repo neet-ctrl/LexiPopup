@@ -2,6 +2,7 @@ package com.lexipopup.presentation.popup
 
 import android.content.res.Configuration
 import android.os.Build
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalConfiguration
@@ -208,7 +209,7 @@ fun PopupScreen(
                         // Subtle 3D tilt from parallax
                         rotationX = (parallax.y * 0.4f).coerceIn(-2f, 2f)
                         rotationY = (-parallax.x * 0.4f).coerceIn(-2f, 2f)
-                        cameraDistance = 12f * density
+                        cameraDistance = 12f * density.density
                         alpha = alphaAnim
                     }
                     .clickable(

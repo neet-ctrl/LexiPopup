@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.lexipopup.presentation.dashboard.MainActivity
 import com.lexipopup.presentation.popup.PopupActivity
 import javax.inject.Inject
 import javax.inject.Singleton

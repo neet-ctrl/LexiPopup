@@ -4,7 +4,7 @@ LexiPopup Dictionary Pack Generator v2
 =======================================
 Pack      Target Size   Target Words    Contents
 Minimal   ~15 MB        ~10,000         Top WordNet words + Hindi (OMW + fallback)
-Standard  ~80 MB        ~155,000        All WordNet (single+multi-word) + Hindi
+Standard  ~80 MB        ~146,000        All WordNet (single+multi-word) + Hindi
 Full      ~200 MB       ~700K–1M+       Wiktionary English + WordNet + Hindi WordNet (OMW)
 
 Data sources (all free / open):

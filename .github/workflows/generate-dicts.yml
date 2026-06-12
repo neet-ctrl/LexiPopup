@@ -21,9 +21,10 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+          cache-dependency-path: 'LexiPopup/scripts/requirements.txt'
 
       - name: Install Python dependencies
-        run: pip install nltk tqdm requests
+        run: pip install -r LexiPopup/scripts/requirements.txt
 
       - name: Download NLTK data
         run: |

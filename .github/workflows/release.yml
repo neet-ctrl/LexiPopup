@@ -1,13 +1,13 @@
 name: Release APK → GitHub Release
 
-# Triggers ONLY when you push a version tag, e.g.:
-#   git tag v1.0.0 && git push origin v1.0.0
+# Currently: manual trigger only.
+# To make automatic, uncomment the push block below:
+#   push:
+#     branches:
+#       - main
+#     tags:
+#       - 'v*'
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:

@@ -12,9 +12,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,6 +111,9 @@ fun DashboardScreen(
     var showWotdDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    val dictionaryListState = rememberLazyListState()
+    val seedListState = rememberLazyListState()
+
     // Navigate to word detail when launched via "Full Details" from PopupActivity
     LaunchedEffect(startWord) {
         if (!startWord.isNullOrBlank()) destination = AppDestination.WordDetail(startWord)
@@ -158,6 +164,10 @@ fun DashboardScreen(
         }
     }
 
+    BackHandler(enabled = destination != AppDestination.Home) {
+        onBack()
+    }
+
     // Overlays that cover full screen
     when (val d = destination) {
         is AppDestination.WordDetail -> {
@@ -199,6 +209,7 @@ fun DashboardScreen(
             val seedVm: SeedWordListViewModel = hiltViewModel()
             SeedWordListScreen(
                 viewModel = seedVm,
+                listState = seedListState,
                 onWordSelected = { word -> destination = AppDestination.WordDetail(word) },
                 onBack = { destination = AppDestination.Dictionary }
             )
@@ -285,6 +296,7 @@ fun DashboardScreen(
                 )
                 AppDestination.Dictionary -> DictionaryBrowserScreen(
                     viewModel = browserVm,
+                    listState = dictionaryListState,
                     onWordSelected = onWordSelected,
                     onOpenSeedList = { destination = AppDestination.SeedWordList }
                 )

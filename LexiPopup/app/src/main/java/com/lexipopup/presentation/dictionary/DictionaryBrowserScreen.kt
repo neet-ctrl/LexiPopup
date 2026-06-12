@@ -42,6 +42,7 @@ private val SORT_OPTIONS = listOf("alpha" to "A–Z", "frequency" to "Frequency"
 @Composable
 fun DictionaryBrowserScreen(
     viewModel: DictionaryBrowserViewModel = hiltViewModel(),
+    listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
     onWordSelected: (String) -> Unit,
     onOpenSeedList: () -> Unit = {}
 ) {
@@ -59,7 +60,6 @@ fun DictionaryBrowserScreen(
     val isSearching = searchQuery.isNotBlank()
     val focusRequester = remember { FocusRequester() }
     var showSortMenu by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
 
     val speechLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()

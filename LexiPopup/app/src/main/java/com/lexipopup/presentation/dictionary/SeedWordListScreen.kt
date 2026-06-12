@@ -42,6 +42,7 @@ private val DIFFICULTY_COLORS = mapOf(
 @Composable
 fun SeedWordListScreen(
     viewModel: SeedWordListViewModel = hiltViewModel(),
+    listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
     onWordSelected: (String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -49,7 +50,6 @@ fun SeedWordListScreen(
     val words by viewModel.words.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
     val isFiltered = searchQuery.isNotBlank()

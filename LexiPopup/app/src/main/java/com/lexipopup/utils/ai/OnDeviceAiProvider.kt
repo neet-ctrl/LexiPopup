@@ -12,14 +12,18 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 /**
  * On-device AI provider using MediaPipe LLM Inference Task.
  *
- * Supported model formats: .task files (Gemma 2B, Phi-2).
- * Model download is managed here via OkHttp; no Play Store dependency.
+ * Model files are downloaded from Google's official public MediaPipe model bucket
+ * (storage.googleapis.com/mediapipe-models) — no auth or account required.
  *
- * Inference requires 3–6 GB RAM depending on model; uses CPU backend.
+ * IMPORTANT: A dedicated OkHttpClient with long timeouts is used for model downloads.
+ * The shared app OkHttpClient has a 5s read timeout which would kill any large download.
+ *
+ * Supported model formats: .bin (flat TFLite) and .task (MediaPipe bundle).
  * Works fully offline once the model is downloaded.
  */
 class OnDeviceAiProvider(
@@ -34,6 +38,16 @@ class OnDeviceAiProvider(
 
     var selectedModel: OnDeviceModel = OnDeviceModel.TINY
         private set
+
+    // Dedicated download client — long timeouts for 900MB–1.6GB model files.
+    // connectTimeout: 30s to handle cold-start server delays.
+    // readTimeout:    0  = no timeout; Google Storage streams steadily so we never
+    //                     want to cut the connection just because a chunk was slow.
+    private val downloadClient: OkHttpClient = okHttpClient.newBuilder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .build()
 
     init {
         refreshStatus()
@@ -53,7 +67,9 @@ class OnDeviceAiProvider(
         }
     }
 
-    fun modelFile(model: OnDeviceModel = selectedModel) = File(modelsDir, "${model.id}.task")
+    /** Returns the file where the model is stored on disk.
+     *  Uses model.fileName (which preserves the correct extension for MediaPipe). */
+    fun modelFile(model: OnDeviceModel = selectedModel) = File(modelsDir, model.fileName)
 
     fun isModelReady(): Boolean {
         val f = modelFile()
@@ -67,23 +83,55 @@ class OnDeviceAiProvider(
         selectedModel = model
         val dest = modelFile(model)
         _modelStatus.value = OnDeviceModelStatus.Downloading(0f, 0L, 0L)
+
+        // Resume support — Range header if a partial file already exists
+        val existingBytes = if (dest.exists()) dest.length() else 0L
+        val requestBuilder = Request.Builder().url(model.downloadUrl)
+        if (existingBytes > 0) {
+            requestBuilder.header("Range", "bytes=$existingBytes-")
+        }
+
         try {
-            val response = okHttpClient.newCall(
-                Request.Builder().url(model.downloadUrl).build()
-            ).execute()
-            if (!response.isSuccessful) {
-                _modelStatus.value = OnDeviceModelStatus.Error("HTTP ${response.code}")
-                return@withContext
+            val response = downloadClient.newCall(requestBuilder.build()).execute()
+
+            when (response.code) {
+                200, 206 -> { /* OK or Partial Content — proceed */ }
+                401, 403 -> {
+                    _modelStatus.value = OnDeviceModelStatus.Error(
+                        "HTTP ${response.code} — model requires authentication. " +
+                        "Visit ai.google.dev/edge to download manually."
+                    )
+                    response.close()
+                    return@withContext
+                }
+                404 -> {
+                    _modelStatus.value = OnDeviceModelStatus.Error(
+                        "HTTP 404 — model file not found at this URL. " +
+                        "Update the app to get the correct download link."
+                    )
+                    response.close()
+                    return@withContext
+                }
+                else -> {
+                    _modelStatus.value = OnDeviceModelStatus.Error("HTTP ${response.code} — download failed")
+                    response.close()
+                    return@withContext
+                }
             }
+
             val body = response.body ?: run {
                 _modelStatus.value = OnDeviceModelStatus.Error("Empty response body")
                 return@withContext
             }
-            val total = body.contentLength()
-            var received = 0L
-            FileOutputStream(dest).use { out ->
+
+            val appendMode   = response.code == 206 && existingBytes > 0
+            var received     = if (appendMode) existingBytes else 0L
+            val serverLength = body.contentLength()
+            val total        = if (appendMode) existingBytes + serverLength else serverLength
+
+            FileOutputStream(dest, appendMode).use { out ->
                 body.byteStream().use { inp ->
-                    val buf = ByteArray(8_192)
+                    val buf = ByteArray(64 * 1024)   // 64 KB chunks
                     var n: Int
                     while (inp.read(buf).also { n = it } != -1) {
                         out.write(buf, 0, n)
@@ -97,7 +145,15 @@ class OnDeviceAiProvider(
             _modelStatus.value = OnDeviceModelStatus.Downloaded
         } catch (e: Exception) {
             dest.delete()
-            _modelStatus.value = OnDeviceModelStatus.Error(e.message ?: "Download failed")
+            _modelStatus.value = OnDeviceModelStatus.Error(
+                when {
+                    e.message?.contains("timeout", ignoreCase = true) == true ->
+                        "Connection timed out. Check your internet connection and retry."
+                    e.message?.contains("ECONNREFUSED") == true ->
+                        "Connection refused. Check your internet connection."
+                    else -> e.message ?: "Download failed"
+                }
+            )
         }
     }
 
@@ -122,7 +178,6 @@ class OnDeviceAiProvider(
             val response = llm.generateResponse(buildPrompt(word))
             llm.close()
             _modelStatus.value = OnDeviceModelStatus.Ready
-            // Extract the JSON object from possible preamble text
             val start = response.indexOf('{')
             val end = response.lastIndexOf('}')
             if (start < 0 || end < 0 || end <= start) return@withContext null

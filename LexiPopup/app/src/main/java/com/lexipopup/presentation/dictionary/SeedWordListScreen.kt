@@ -273,22 +273,25 @@ fun SeedWordListScreen(
                 val showScrollTop by remember {
                     derivedStateOf { listState.firstVisibleItemIndex > 5 }
                 }
-                AnimatedVisibility(
-                    visible = showScrollTop,
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp),
-                    enter = fadeIn(),
-                    exit = fadeOut()
+                        .padding(16.dp)
                 ) {
-                    SmallFloatingActionButton(
-                        onClick = {
-                            coroutineScope.launch { listState.animateScrollToItem(0) }
-                        },
-                        containerColor = primaryColor,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showScrollTop,
+                        enter = fadeIn(),
+                        exit = fadeOut()
                     ) {
-                        Icon(Icons.Default.KeyboardArrowUp, "Scroll to top", modifier = Modifier.size(20.dp))
+                        SmallFloatingActionButton(
+                            onClick = {
+                                coroutineScope.launch { listState.animateScrollToItem(0) }
+                            },
+                            containerColor = primaryColor,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, "Scroll to top", modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }

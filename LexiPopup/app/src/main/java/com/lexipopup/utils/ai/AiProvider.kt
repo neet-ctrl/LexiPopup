@@ -46,24 +46,29 @@ data class OnDeviceModel(
     val sizeGb: Float,
     val ramRequiredGb: Float,
     val qualityPercent: Int,
+    val fileName: String,     // actual filename saved to disk (extension matters for MediaPipe)
     val downloadUrl: String
 ) {
     companion object {
+        // Both URLs point to Google's official public MediaPipe model bucket —
+        // no authentication required, no HuggingFace account needed.
         val TINY = OnDeviceModel(
-            id = "gemma-2b-tiny",
-            displayName = "Gemma 2B Tiny (900 MB)",
-            sizeGb = 0.9f,
-            ramRequiredGb = 3f,
-            qualityPercent = 72,
-            downloadUrl = "https://huggingface.co/google/gemma-2b-it-cpu-int4/resolve/main/gemma-2b-it-cpu-int4.task"
+            id              = "gemma-2b-tiny",
+            displayName     = "Gemma 2B Tiny (900 MB)",
+            sizeGb          = 0.9f,
+            ramRequiredGb   = 3f,
+            qualityPercent  = 72,
+            fileName        = "gemma-2b-it-cpu-int4.bin",
+            downloadUrl     = "https://storage.googleapis.com/mediapipe-models/llm_inference/gemma-2b-it-cpu-int4/float32/1/gemma-2b-it-cpu-int4.bin"
         )
         val STANDARD = OnDeviceModel(
-            id = "phi2-standard",
-            displayName = "Phi-2 Standard (1.6 GB)",
-            sizeGb = 1.6f,
-            ramRequiredGb = 4f,
-            qualityPercent = 82,
-            downloadUrl = "https://huggingface.co/microsoft/phi-2/resolve/main/phi-2-default-cpu.task"
+            id              = "phi2-standard",
+            displayName     = "Phi-2 Standard (1.6 GB)",
+            sizeGb          = 1.6f,
+            ramRequiredGb   = 4f,
+            qualityPercent  = 82,
+            fileName        = "phi-2-default-cpu.task",
+            downloadUrl     = "https://storage.googleapis.com/mediapipe-models/llm_inference/phi-2-default-cpu/float32/1/phi-2-default-cpu.task"
         )
         val ALL = listOf(TINY, STANDARD)
     }

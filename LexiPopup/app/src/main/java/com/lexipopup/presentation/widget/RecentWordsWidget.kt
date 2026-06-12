@@ -2,6 +2,7 @@ package com.lexipopup.presentation.widget
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -34,46 +35,69 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
-import androidx.glance.unit.DayNightColorProvider
 import com.lexipopup.data.local.entities.WordEntity
 import com.lexipopup.presentation.popup.PopupActivity
 import dagger.hilt.android.EntryPointAccessors
 
+// ── Adaptive colour helper ────────────────────────────────────────────────────
+
+@Composable
+private fun isNight(): Boolean {
+    val config = LocalContext.current.resources.configuration
+    return (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+}
+
+@Composable
+private fun adaptiveColor(day: Color, night: Color): ColorProvider =
+    ColorProvider(if (isNight()) night else day)
+
+// ── Colour palette ────────────────────────────────────────────────────────────
+
 private val RecentHeaderBg = Color(0xFF004D40)
 private val RecentHeaderText = ColorProvider(Color.White)
-private val RecentHeaderSub = DayNightColorProvider(day = Color(0x99FFFFFF), night = Color(0x99FFFFFF))
 private val RecentTealAccent = ColorProvider(Color(0xFF80CBC4))
-private val RecentCardBg = DayNightColorProvider(day = Color(0xFFF5F7FA), night = Color(0xFF0D1F1E))
-private val RecentWordText = DayNightColorProvider(day = Color(0xFF0D1B2A), night = Color(0xFFECEFF1))
-private val RecentMeaning = DayNightColorProvider(day = Color(0xFF546E7A), night = Color(0xFF80A4A0))
-private val RecentDivider = DayNightColorProvider(day = Color(0x14000000), night = Color(0x14FFFFFF))
-private val RecentEmpty = DayNightColorProvider(day = Color(0xFF80A4A0), night = Color(0xFF37635F))
 
-private val CARD_ACCENTS = listOf(
-    DayNightColorProvider(day = Color(0xFF00695C), night = Color(0xFF4DB6AC)),
-    DayNightColorProvider(day = Color(0xFF00796B), night = Color(0xFF80CBC4)),
-    DayNightColorProvider(day = Color(0xFF00838F), night = Color(0xFF80DEEA)),
-    DayNightColorProvider(day = Color(0xFF0277BD), night = Color(0xFF4FC3F7)),
-    DayNightColorProvider(day = Color(0xFF6A1B9A), night = Color(0xFFCE93D8)),
-    DayNightColorProvider(day = Color(0xFFAD1457), night = Color(0xFFF48FB1)),
-    DayNightColorProvider(day = Color(0xFF558B2F), night = Color(0xFFAED581)),
-    DayNightColorProvider(day = Color(0xFFE65100), night = Color(0xFFFFB74D)),
-    DayNightColorProvider(day = Color(0xFF1565C0), night = Color(0xFF90CAF9)),
-    DayNightColorProvider(day = Color(0xFF37474F), night = Color(0xFF90A4AE)),
+private val cardAccentDay = listOf(
+    Color(0xFF00695C), Color(0xFF00796B), Color(0xFF00838F), Color(0xFF0277BD),
+    Color(0xFF6A1B9A), Color(0xFFAD1457), Color(0xFF558B2F), Color(0xFFE65100),
+    Color(0xFF1565C0), Color(0xFF37474F)
+)
+private val cardAccentNight = listOf(
+    Color(0xFF4DB6AC), Color(0xFF80CBC4), Color(0xFF80DEEA), Color(0xFF4FC3F7),
+    Color(0xFFCE93D8), Color(0xFFF48FB1), Color(0xFFAED581), Color(0xFFFFB74D),
+    Color(0xFF90CAF9), Color(0xFF90A4AE)
+)
+private val cardBgDay = listOf(
+    Color(0xFFE0F2F1), Color(0xFFE0F7FA), Color(0xFFE1F5FE), Color(0xFFE3F2FD),
+    Color(0xFFF3E5F5), Color(0xFFFCE4EC), Color(0xFFF9FBE7), Color(0xFFFFF3E0),
+    Color(0xFFE8EAF6), Color(0xFFECEFF1)
+)
+private val cardBgNight = listOf(
+    Color(0xFF0D302C), Color(0xFF082D30), Color(0xFF082233), Color(0xFF0D2045),
+    Color(0xFF2D1B33), Color(0xFF330F1C), Color(0xFF252D0A), Color(0xFF3D2000),
+    Color(0xFF1A1E40), Color(0xFF1A2226)
 )
 
-private val CARD_BGS = listOf(
-    DayNightColorProvider(day = Color(0xFFE0F2F1), night = Color(0xFF0D302C)),
-    DayNightColorProvider(day = Color(0xFFE0F7FA), night = Color(0xFF082D30)),
-    DayNightColorProvider(day = Color(0xFFE1F5FE), night = Color(0xFF082233)),
-    DayNightColorProvider(day = Color(0xFFE3F2FD), night = Color(0xFF0D2045)),
-    DayNightColorProvider(day = Color(0xFFF3E5F5), night = Color(0xFF2D1B33)),
-    DayNightColorProvider(day = Color(0xFFFCE4EC), night = Color(0xFF330F1C)),
-    DayNightColorProvider(day = Color(0xFFF9FBE7), night = Color(0xFF252D0A)),
-    DayNightColorProvider(day = Color(0xFFFFF3E0), night = Color(0xFF3D2000)),
-    DayNightColorProvider(day = Color(0xFFE8EAF6), night = Color(0xFF1A1E40)),
-    DayNightColorProvider(day = Color(0xFFECEFF1), night = Color(0xFF1A2226)),
-)
+@Composable private fun recentHeaderSub() = adaptiveColor(Color(0x99FFFFFF), Color(0x99FFFFFF))
+@Composable private fun recentCardBg() = adaptiveColor(Color(0xFFF5F7FA), Color(0xFF0D1F1E))
+@Composable private fun recentWordText() = adaptiveColor(Color(0xFF0D1B2A), Color(0xFFECEFF1))
+@Composable private fun recentMeaning() = adaptiveColor(Color(0xFF546E7A), Color(0xFF80A4A0))
+@Composable private fun recentDivider() = adaptiveColor(Color(0x14000000), Color(0x14FFFFFF))
+@Composable private fun recentEmpty() = adaptiveColor(Color(0xFF80A4A0), Color(0xFF37635F))
+
+@Composable
+private fun cardAccent(index: Int): ColorProvider {
+    val i = index % cardAccentDay.size
+    return adaptiveColor(cardAccentDay[i], cardAccentNight[i])
+}
+
+@Composable
+private fun cardBg(index: Int): ColorProvider {
+    val i = index % cardBgDay.size
+    return adaptiveColor(cardBgDay[i], cardBgNight[i])
+}
+
+// ── Widget ────────────────────────────────────────────────────────────────────
 
 class RecentWordsWidget : GlanceAppWidget() {
 
@@ -97,7 +121,7 @@ private fun RecentContent(words: List<WordEntity>) {
     val ctx = LocalContext.current
     val indexed = words.mapIndexed { i, w -> i to w }
 
-    Column(modifier = GlanceModifier.fillMaxSize().background(RecentCardBg)) {
+    Column(modifier = GlanceModifier.fillMaxSize().background(recentCardBg())) {
 
         Row(
             modifier = GlanceModifier
@@ -115,7 +139,7 @@ private fun RecentContent(words: List<WordEntity>) {
                 )
                 Text(
                     text = "Last ${words.size} looked up",
-                    style = TextStyle(color = RecentHeaderSub, fontSize = 10.sp)
+                    style = TextStyle(color = recentHeaderSub(), fontSize = 10.sp)
                 )
             }
             Text(
@@ -128,16 +152,16 @@ private fun RecentContent(words: List<WordEntity>) {
         if (words.isEmpty()) {
             Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("↺", style = TextStyle(color = RecentEmpty, fontSize = 28.sp))
+                    Text("↺", style = TextStyle(color = recentEmpty(), fontSize = 28.sp))
                     Spacer(GlanceModifier.height(6.dp))
                     Text(
                         text = "No words yet",
-                        style = TextStyle(color = RecentEmpty, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        style = TextStyle(color = recentEmpty(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     )
                     Spacer(GlanceModifier.height(2.dp))
                     Text(
                         text = "Look up words to see them here",
-                        style = TextStyle(color = RecentEmpty, fontSize = 10.sp)
+                        style = TextStyle(color = recentEmpty(), fontSize = 10.sp)
                     )
                 }
             }
@@ -153,9 +177,8 @@ private fun RecentContent(words: List<WordEntity>) {
 
 @Composable
 private fun RecentWordCard(word: WordEntity, index: Int, ctx: Context) {
-    val colorIdx = index % CARD_ACCENTS.size
-    val accent = CARD_ACCENTS[colorIdx]
-    val bg = CARD_BGS[colorIdx]
+    val accent = cardAccent(index)
+    val bg = cardBg(index)
 
     Column(
         modifier = GlanceModifier
@@ -189,13 +212,13 @@ private fun RecentWordCard(word: WordEntity, index: Int, ctx: Context) {
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
                     text = word.word.replaceFirstChar { it.uppercaseChar() },
-                    style = TextStyle(color = RecentWordText, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                    style = TextStyle(color = recentWordText(), fontSize = 13.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1
                 )
                 if (word.shortMeaning.isNotBlank()) {
                     Text(
                         text = word.shortMeaning,
-                        style = TextStyle(color = RecentMeaning, fontSize = 10.sp),
+                        style = TextStyle(color = recentMeaning(), fontSize = 10.sp),
                         maxLines = 1
                     )
                 }
@@ -207,7 +230,7 @@ private fun RecentWordCard(word: WordEntity, index: Int, ctx: Context) {
                 )
             }
         }
-        Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(RecentDivider)) {}
+        Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(recentDivider())) {}
     }
 }
 

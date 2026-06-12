@@ -1,3 +1,4 @@
 - [LexiPopup download system](lexipopup-download.md) — two separate DataStores required; WorkManager injected via AppModule @Provides.
 - [LexiPopup state-based nav](lexipopup-nav.md) — sealed class AppDestination, no Jetpack Nav component; overlays via early return.
 - [LexiPopup Gson TypeToken R8 crash](lexipopup-typetoken.md) — never use anonymous TypeToken<List<String>>() {} in release builds; use getParameterized() instead.
+- [Glance widget color API](glance-widget-colors.md) — stable Glance has no DayNightColorProvider; use @Composable helper reading LocalContext uiMode instead.

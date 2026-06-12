@@ -20,12 +20,19 @@ class DictionaryRepositoryImpl @Inject constructor(
     private val gson: Gson
 ) : DictionaryRepository {
 
-    override suspend fun lookupWord(word: String): WordEntry? {
+    override suspend fun lookupWord(word: String): WordEntry? =
+        lookupLocal(word) ?: lookupOnline(word)
+
+    override suspend fun lookupLocal(word: String): WordEntry? {
         val local = wordDao.findWord(word)
         if (local != null) {
             wordDao.updateAccess(word)
             return local.toDomain(gson)
         }
+        return null
+    }
+
+    override suspend fun lookupOnline(word: String): WordEntry? {
         return try {
             val remote = api.getDefinition(word)
             val entry = remote.firstOrNull()?.toWordEntry(word) ?: return null

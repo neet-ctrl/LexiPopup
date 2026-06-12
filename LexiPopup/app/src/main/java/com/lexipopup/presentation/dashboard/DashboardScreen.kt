@@ -66,6 +66,7 @@ sealed class AppDestination {
     object Backup : AppDestination()
     object WordHistory : AppDestination()
     object SeedWordList : AppDestination()
+    object LookupLayers : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -139,6 +140,7 @@ fun DashboardScreen(
             AppDestination.Backup        -> AppDestination.Settings
             AppDestination.WordHistory   -> AppDestination.Flashcards
             AppDestination.SeedWordList  -> AppDestination.Dictionary
+            AppDestination.LookupLayers -> AppDestination.Settings
             else -> AppDestination.Home
         }
     }
@@ -186,6 +188,14 @@ fun DashboardScreen(
                 viewModel = seedVm,
                 onWordSelected = { word -> destination = AppDestination.WordDetail(word) },
                 onBack = { destination = AppDestination.Dictionary }
+            )
+            return
+        }
+        AppDestination.LookupLayers -> {
+            val layersVm: com.lexipopup.presentation.layers.LookupLayersViewModel = hiltViewModel()
+            com.lexipopup.presentation.layers.LookupLayersScreen(
+                viewModel = layersVm,
+                onBack = { destination = AppDestination.Settings }
             )
             return
         }
@@ -289,7 +299,8 @@ fun DashboardScreen(
                     context = context,
                     onManagePacks = { destination = AppDestination.DownloadPacks },
                     onOpenAiSettings = { destination = AppDestination.AiSettings },
-                    onOpenBackup = { destination = AppDestination.Backup }
+                    onOpenBackup = { destination = AppDestination.Backup },
+                    onOpenLookupLayers = { destination = AppDestination.LookupLayers }
                 )
                 else -> Unit
             }
@@ -861,7 +872,8 @@ fun SettingsScreen(
     context: android.content.Context,
     onManagePacks: () -> Unit = {},
     onOpenAiSettings: () -> Unit = {},
-    onOpenBackup: () -> Unit = {}
+    onOpenBackup: () -> Unit = {},
+    onOpenLookupLayers: () -> Unit = {}
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -929,6 +941,38 @@ fun SettingsScreen(
         item { SectionHeader("📚 Vocabulary Tracking") }
         item { ToggleRow("Save search history", settings.saveSearchHistory) { viewModel.updateSetting(SettingsDataStore.SAVE_HISTORY, it) } }
         item { ToggleRow("Auto-generate flashcards", settings.autoGenerateFlashcards) { viewModel.updateSetting(SettingsDataStore.AUTO_FLASHCARDS, it) } }
+
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+        item { SectionHeader("🔍 Lookup Layers") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Layer Control Dashboard",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Reorder · enable/disable · configure each lookup layer",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    FilledTonalButton(onClick = onOpenLookupLayers) {
+                        Icon(Icons.Default.Tune, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Configure")
+                    }
+                }
+            }
+        }
 
         item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
         item { SectionHeader("📖 Dictionary Data") }

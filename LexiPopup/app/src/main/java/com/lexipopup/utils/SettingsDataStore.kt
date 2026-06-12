@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.google.gson.Gson
 import com.lexipopup.domain.models.AppSettings
+import com.lexipopup.domain.models.LayerSystemConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -15,7 +17,8 @@ import javax.inject.Singleton
 
 @Singleton
 class SettingsDataStore @Inject constructor(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val gson: Gson
 ) {
     companion object {
         val SHOW_PRONUNCIATION = booleanPreferencesKey("show_pronunciation")
@@ -65,6 +68,9 @@ class SettingsDataStore @Inject constructor(
         val WOTD_USER_LEVEL = intPreferencesKey("wotd_user_level")
         val WOTD_NOTIFICATION_ENABLED = booleanPreferencesKey("wotd_notification_enabled")
         val WOTD_NOTIFICATION_HOUR = intPreferencesKey("wotd_notification_hour")
+
+        // Layer System Config — full config stored as a single JSON blob
+        val LAYER_SYSTEM_CONFIG = stringPreferencesKey("layer_system_config")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -167,4 +173,21 @@ class SettingsDataStore @Inject constructor(
     suspend fun markHindiDisclaimerShown() {
         dataStore.edit { it[HINDI_DISCLAIMER_SHOWN] = true }
     }
+
+    // ── Layer System Config ───────────────────────────────────────────────────
+
+    val layerSystemConfig: Flow<LayerSystemConfig> = dataStore.data.map { prefs ->
+        val json = prefs[LAYER_SYSTEM_CONFIG]
+        if (json.isNullOrBlank()) LayerSystemConfig()
+        else try { gson.fromJson(json, LayerSystemConfig::class.java) } catch (_: Exception) { LayerSystemConfig() }
+    }
+
+    suspend fun updateLayerSystemConfig(config: LayerSystemConfig) {
+        dataStore.edit { prefs -> prefs[LAYER_SYSTEM_CONFIG] = gson.toJson(config) }
+    }
+
+    fun exportLayerConfig(config: LayerSystemConfig): String = gson.toJson(config)
+
+    fun parseLayerConfig(json: String): LayerSystemConfig? =
+        try { gson.fromJson(json, LayerSystemConfig::class.java) } catch (_: Exception) { null }
 }

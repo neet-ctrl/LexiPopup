@@ -71,6 +71,9 @@ class AiProviderManager @Inject constructor(
         }
     }
 
+    suspend fun explainWithOpenAI(word: String, apiKey: String): WordEntry? =
+        openAiHelper.explainWord(word, apiKey)
+
     fun clearHybridResult() {
         _lastHybridResult.value = null
     }

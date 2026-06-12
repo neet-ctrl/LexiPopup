@@ -63,6 +63,7 @@ fun PopupScreen(
     val suggestions by viewModel.suggestions.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isBubble by viewModel.isBubbleMode.collectAsState()
+    val hybridAiResult by viewModel.hybridAiResult.collectAsState()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -343,6 +344,15 @@ fun PopupScreen(
                                         )
                                 }
                             }
+                        }
+
+                        // Hybrid AI comparison panel — only shown when toggle is ON
+                        if (uiState is PopupUiState.Success &&
+                            settings.hybridShowComparison &&
+                            hybridAiResult != null
+                        ) {
+                            HorizontalDivider(thickness = 0.5.dp)
+                            HybridComparisonPanel(hybridAiResult = hybridAiResult!!)
                         }
 
                         // Action bar
@@ -898,6 +908,74 @@ fun PopupError(message: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Default.SearchOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(44.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun HybridComparisonPanel(hybridAiResult: com.lexipopup.utils.ai.HybridAiResult) {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(
+        onClick = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "🤖 AI Comparison",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.secondary
+                )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Groq column
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFF9800).copy(alpha = 0.10f),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFFF9800).copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("🤖 Groq", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold)
+                            if (hybridAiResult.groqEntry != null) {
+                                Text(hybridAiResult.groqEntry.shortMeaning, style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                Text("No result", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    // On-Device column
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFE91E63).copy(alpha = 0.10f),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFE91E63).copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("📱 On-Device", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE91E63), fontWeight = FontWeight.Bold)
+                            if (hybridAiResult.onDeviceEntry != null) {
+                                Text(hybridAiResult.onDeviceEntry.shortMeaning, style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                Text("No result", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

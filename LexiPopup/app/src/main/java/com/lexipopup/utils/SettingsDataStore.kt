@@ -81,6 +81,9 @@ class SettingsDataStore @Inject constructor(
         val WOTD_NOTIFICATION_ENABLED = booleanPreferencesKey("wotd_notification_enabled")
         val WOTD_NOTIFICATION_HOUR = intPreferencesKey("wotd_notification_hour")
 
+        // AI Chat — auto-speak each new AI response
+        val AUTO_SPEAK_AI_RESPONSE = booleanPreferencesKey("auto_speak_ai_response")
+
         // Layer System Config — full config stored as a single JSON blob
         val LAYER_SYSTEM_CONFIG = stringPreferencesKey("layer_system_config")
     }
@@ -134,7 +137,8 @@ class SettingsDataStore @Inject constructor(
             wotdMode = prefs[WOTD_MODE] ?: "global",
             wotdUserLevel = prefs[WOTD_USER_LEVEL] ?: 2,
             wotdNotificationEnabled = prefs[WOTD_NOTIFICATION_ENABLED] ?: true,
-            wotdNotificationHour = prefs[WOTD_NOTIFICATION_HOUR] ?: 9
+            wotdNotificationHour = prefs[WOTD_NOTIFICATION_HOUR] ?: 9,
+            autoSpeakAiResponse = prefs[AUTO_SPEAK_AI_RESPONSE] ?: false
         )
     }
 

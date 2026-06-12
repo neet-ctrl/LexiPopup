@@ -74,5 +74,8 @@ data class AppSettings(
     val wotdMode: String = "global",
     val wotdUserLevel: Int = 2,
     val wotdNotificationEnabled: Boolean = true,
-    val wotdNotificationHour: Int = 9
+    val wotdNotificationHour: Int = 9,
+
+    // AI Chat — auto-speak each new AI response via TTS
+    val autoSpeakAiResponse: Boolean = false
 )

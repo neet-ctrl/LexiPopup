@@ -179,6 +179,40 @@ fun AiSettingsScreen(
                 )
             }
 
+            // ── Auto-speak AI responses ───────────────────────────────────
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.RecordVoiceOver, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("AI Chat Voice",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Auto-speak each AI response",
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Every new AI reply is read aloud automatically in both popup chat and app chat — no need to tap the speaker icon.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked  = settings.autoSpeakAiResponse,
+                            onCheckedChange = viewModel::setAutoSpeakAiResponse
+                        )
+                    }
+                }
+            }
+
             // ── Info card ─────────────────────────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),

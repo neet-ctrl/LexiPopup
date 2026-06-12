@@ -59,6 +59,14 @@ class AiSettingsViewModel @Inject constructor(
         }
     }
 
+    // ── AI Chat auto-speak ───────────────────────────────────────────────────
+
+    fun setAutoSpeakAiResponse(value: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.update { it[SettingsDataStore.AUTO_SPEAK_AI_RESPONSE] = value }
+        }
+    }
+
     // ── Hybrid options ──────────────────────────────────────────────────────
 
     fun setHybridAutoSelect(value: Boolean) {

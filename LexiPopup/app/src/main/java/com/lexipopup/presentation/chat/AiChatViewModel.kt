@@ -442,6 +442,25 @@ Be conversational, educational, accurate, and concise. When you mention an inter
         enqueueFrom(0)
     }
 
+    /**
+     * Called automatically when auto-speak is enabled and a new AI response
+     * arrives.  Speaks the message quietly (no UI ttsActive indicator) so the
+     * user does not see the TTS controller bar flash open mid-conversation.
+     * The TTS controller still appears if the user manually taps the speak icon.
+     */
+    fun autoSpeakMessage(message: ChatMessageEntity) {
+        if (message.role != "assistant" || message.isError) return
+        initTts()
+        // Don't interrupt if the user is already listening to something they started
+        if (_ttsActive.value) return
+        rawStop()
+        speakQueue    = listOf(message)
+        pausedAtIndex = 0
+        _speakTotal.value = 1
+        _ttsActive.value  = true
+        enqueueFrom(0)
+    }
+
     fun speakAllMessages(messages: List<ChatMessageEntity>) {
         val aiMsgs = messages.filter { it.role == "assistant" && !it.isError }
         if (aiMsgs.isEmpty()) return

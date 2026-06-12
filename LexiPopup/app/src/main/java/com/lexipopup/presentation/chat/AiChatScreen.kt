@@ -98,6 +98,21 @@ fun AiChatScreen(
         }
     }
 
+    // Auto-speak: when a new AI message arrives and the setting is on,
+    // speak it immediately without requiring any manual action.
+    // We track the last spoken message ID so rapid responses don't double-speak.
+    val lastAutoSpokenId = remember { mutableStateOf<Long?>(-1L) }
+    LaunchedEffect(messages.size) {
+        if (!settings.autoSpeakAiResponse) return@LaunchedEffect
+        val latest = messages.lastOrNull { it.role == "assistant" && !it.isError }
+            ?: return@LaunchedEffect
+        if (latest.id == lastAutoSpokenId.value) return@LaunchedEffect
+        // Wait briefly in case the typing animation is still finishing
+        kotlinx.coroutines.delay(300)
+        lastAutoSpokenId.value = latest.id
+        viewModel.autoSpeakMessage(latest)
+    }
+
     // Provider availability flags
     val groqAvail   = settings.groqApiKey.isNotBlank()
     val openAiAvail = settings.openAiApiKey.isNotBlank()

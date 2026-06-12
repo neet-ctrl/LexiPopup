@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 interface DictionaryRepository {
     suspend fun lookupWord(word: String): WordEntry?
     suspend fun lookupLocal(word: String): WordEntry?
+    suspend fun lookupFromHistory(word: String, minAccessCount: Int = 1, includeAiSourced: Boolean = true): WordEntry?
     suspend fun lookupOnline(word: String): WordEntry?
     suspend fun searchSuggestions(query: String, limit: Int = 5): List<String>
     suspend fun searchWords(query: String, limit: Int = 60): List<WordEntry>

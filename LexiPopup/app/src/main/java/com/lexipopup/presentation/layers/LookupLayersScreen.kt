@@ -38,6 +38,7 @@ private data class LayerMeta(
 
 private val LAYER_META: Map<String, LayerMeta> = mapOf(
     LAYER_CACHE      to LayerMeta("⚡", "Memory Cache",                "Sub-millisecond – LRU in-process store"),
+    LAYER_HISTORY    to LayerMeta("🕘", "Offline Word History",         "Your previously looked-up words – 100% offline"),
     LAYER_OFFLINE_DB to LayerMeta("📚", "Offline Database",            "Room DB – seed words + downloaded packs"),
     LAYER_ONLINE_API to LayerMeta("🌐", "Online API",                  "FreeDictionaryAPI – free, no key needed"),
     LAYER_GROQ_AI    to LayerMeta("🤖", "Groq AI",                     "Free cloud AI – llama-3.3-70b"),
@@ -193,6 +194,7 @@ fun LookupLayersScreen(
                             dragHandleModifier = dragHandleModifier,
                             onToggle = { viewModel.toggleLayer(layerId, it) },
                             onCacheConfig = { viewModel.updateCacheConfig(it) },
+                            onWordHistoryConfig = { viewModel.updateWordHistoryConfig(it) },
                             onOfflineDbConfig = { viewModel.updateOfflineDbConfig(it) },
                             onOnlineApiConfig = { viewModel.updateOnlineApiConfig(it) },
                             onGroqAiConfig = { viewModel.updateGroqAiConfig(it) },
@@ -301,6 +303,7 @@ private fun LayerCard(
     dragHandleModifier: Modifier,
     onToggle: (Boolean) -> Unit,
     onCacheConfig: (CacheLayerConfig) -> Unit,
+    onWordHistoryConfig: (WordHistoryLayerConfig) -> Unit,
     onOfflineDbConfig: (OfflineDbLayerConfig) -> Unit,
     onOnlineApiConfig: (OnlineApiLayerConfig) -> Unit,
     onGroqAiConfig: (GroqAiLayerConfig) -> Unit,
@@ -396,6 +399,7 @@ private fun LayerCard(
                 Column(modifier = Modifier.padding(16.dp)) {
                     when (layerId) {
                         LAYER_CACHE      -> CacheConfigSection(config.cacheConfig, onCacheConfig, onClearCache)
+                        LAYER_HISTORY    -> WordHistoryConfigSection(config.historyConfig, onWordHistoryConfig)
                         LAYER_OFFLINE_DB -> OfflineDbConfigSection(config.offlineDbConfig, onOfflineDbConfig)
                         LAYER_ONLINE_API -> OnlineApiConfigSection(config.onlineApiConfig, onOnlineApiConfig)
                         LAYER_GROQ_AI    -> GroqAiConfigSection(config.groqAiConfig, onGroqAiConfig)
@@ -436,6 +440,34 @@ private fun CacheConfigSection(
             Icon(Icons.Default.DeleteSweep, null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
             Text("Clear Cache Now")
+        }
+    }
+}
+
+@Composable
+private fun WordHistoryConfigSection(cfg: WordHistoryLayerConfig, onUpdate: (WordHistoryLayerConfig) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Serves definitions only for words you've previously looked up — " +
+            "completely offline, no dictionary pack required.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        ConfigLabel("Min. lookups required: ${cfg.minAccessCount}")
+        Slider(
+            value = cfg.minAccessCount.toFloat(),
+            onValueChange = { onUpdate(cfg.copy(minAccessCount = it.roundToInt())) },
+            valueRange = 1f..10f,
+            steps = 8
+        )
+        Text(
+            "A word must have been looked up at least ${cfg.minAccessCount} time(s) to be served by this layer.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ConfigSwitch("Include AI-fetched words (Groq / Online API)", cfg.includeAiSourced) {
+            onUpdate(cfg.copy(includeAiSourced = it))
         }
     }
 }

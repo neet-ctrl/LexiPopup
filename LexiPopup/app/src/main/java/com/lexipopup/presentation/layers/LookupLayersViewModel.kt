@@ -12,6 +12,7 @@ import com.lexipopup.domain.models.OnDeviceLayerConfig
 import com.lexipopup.domain.models.OnlineApiLayerConfig
 import com.lexipopup.domain.models.OpenAiLayerConfig
 import com.lexipopup.domain.models.RuleBasedLayerConfig
+import com.lexipopup.domain.models.WordHistoryLayerConfig
 import com.lexipopup.domain.usecases.LookupWordUseCase
 import com.lexipopup.utils.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -51,6 +52,7 @@ class LookupLayersViewModel @Inject constructor(
     }
 
     fun updateCacheConfig(config: CacheLayerConfig) = update { copy(cacheConfig = config) }
+    fun updateWordHistoryConfig(config: WordHistoryLayerConfig) = update { copy(historyConfig = config) }
     fun updateOfflineDbConfig(config: OfflineDbLayerConfig) = update { copy(offlineDbConfig = config) }
     fun updateOnlineApiConfig(config: OnlineApiLayerConfig) = update { copy(onlineApiConfig = config) }
     fun updateGroqAiConfig(config: GroqAiLayerConfig) = update { copy(groqAiConfig = config) }

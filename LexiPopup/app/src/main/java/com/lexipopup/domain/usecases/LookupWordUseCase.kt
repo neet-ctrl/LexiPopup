@@ -3,6 +3,7 @@ package com.lexipopup.domain.usecases
 import android.util.LruCache
 import com.lexipopup.domain.models.LAYER_CACHE
 import com.lexipopup.domain.models.LAYER_GROQ_AI
+import com.lexipopup.domain.models.LAYER_HISTORY
 import com.lexipopup.domain.models.LAYER_OFFLINE_DB
 import com.lexipopup.domain.models.LAYER_ON_DEVICE
 import com.lexipopup.domain.models.LAYER_ONLINE_API
@@ -49,6 +50,11 @@ class LookupWordUseCase @Inject constructor(
             val entry: WordEntry? = when (layerId) {
 
                 LAYER_CACHE -> memoryCache.get(word)
+
+                LAYER_HISTORY -> try {
+                    val cfg = layerConfig.historyConfig
+                    repository.lookupFromHistory(word, cfg.minAccessCount, cfg.includeAiSourced)
+                } catch (_: Exception) { null }
 
                 LAYER_OFFLINE_DB -> try {
                     repository.lookupLocal(word)

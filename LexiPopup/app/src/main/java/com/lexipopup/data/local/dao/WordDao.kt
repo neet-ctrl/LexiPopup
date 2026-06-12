@@ -147,6 +147,19 @@ interface WordDao {
 
     @Query("""
         SELECT * FROM dictionary_cache
+        WHERE word = :word
+          AND (access_count >= :minCount
+               OR (:includeAiSourced = 1 AND source IN ('online', 'groq', 'openai', 'on_device')))
+        LIMIT 1
+    """)
+    suspend fun findHistoryWord(
+        word: String,
+        minCount: Int,
+        includeAiSourced: Boolean
+    ): WordEntity?
+
+    @Query("""
+        SELECT * FROM dictionary_cache
         WHERE access_count > 0 OR source IN ('online', 'groq', 'openai', 'on_device')
         ORDER BY last_accessed DESC
     """)

@@ -32,6 +32,19 @@ class DictionaryRepositoryImpl @Inject constructor(
         return null
     }
 
+    override suspend fun lookupFromHistory(
+        word: String,
+        minAccessCount: Int,
+        includeAiSourced: Boolean
+    ): WordEntry? {
+        val entity = wordDao.findHistoryWord(word, minAccessCount, includeAiSourced)
+        if (entity != null) {
+            wordDao.updateAccess(word)
+            return entity.toDomain(gson)
+        }
+        return null
+    }
+
     override suspend fun lookupOnline(word: String): WordEntry? {
         return try {
             val remote = api.getDefinition(word)

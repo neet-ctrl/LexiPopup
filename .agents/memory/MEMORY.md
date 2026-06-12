@@ -1,7 +1,1 @@
-- [LexiPopup download system](lexipopup-download.md) — two separate DataStores required; WorkManager injected via AppModule @Provides.
-- [LexiPopup state-based nav](lexipopup-nav.md) — sealed class AppDestination, no Jetpack Nav component; overlays via early return.
-- [LexiPopup Gson TypeToken R8 crash](lexipopup-typetoken.md) — never use anonymous TypeToken<List<String>>() {} in release builds; use getParameterized() instead.
-- [Glance widget color API](glance-widget-colors.md) — stable Glance has no DayNightColorProvider; use @Composable helper reading LocalContext uiMode instead.
-- [Room dynamic-default INSERT trap](room-dynamic-default-insert.md) — columns with System.currentTimeMillis() defaults have NO SQLite DEFAULT; raw execSQL omitting them → INSERT OR IGNORE silently drops the row.
-- [Glance widget PendingIntent MIME strip](glance-pendingintent-mime.md) — Glance PendingIntents can strip the MIME type from ACTION_SEND intents; use a custom String extra ("lookup_word") instead of relying on intent.type.
-- [LexiPopup Biology mode completion](lexipopup-biology-mode.md) — DB is v7; AiChatViewModel injects ModeManager + flatMapLatest sessions; BiologySeeder has 57 NEET UG/PG terms seeded on onCreate/onOpen.
+- [Biology feature parity audit](bio-parity-audit.md) — 6 gaps found and fixed; key pattern: always check `entry.isBiology()` before adding mode-specific UI/logic.

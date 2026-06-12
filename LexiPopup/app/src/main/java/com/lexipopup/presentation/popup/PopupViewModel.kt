@@ -111,7 +111,7 @@ class PopupViewModel @Inject constructor(
                     if (settings.value.saveSearchHistory) {
                         vocabularyRepository.recordSearch(clean, sourceApp, effectiveMode)
                     }
-                    if (settings.value.autoGenerateFlashcards && effectiveMode == AppMode.ENGLISH) {
+                    if (settings.value.autoGenerateFlashcards) {
                         vocabularyRepository.createFlashcard(clean, clean, entry.shortMeaning.take(100))
                     }
                     scheduleAutoClose()

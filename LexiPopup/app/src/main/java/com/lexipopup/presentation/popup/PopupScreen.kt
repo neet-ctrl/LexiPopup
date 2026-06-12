@@ -1385,16 +1385,19 @@ private fun SourceLayerBadge(source: String, onClick: () -> Unit = {}) {
     if (source.isBlank()) return
     data class LI(val emoji: String, val label: String, val color: Color)
     val info = when (source.lowercase()) {
-        "seed"       -> LI("🌱", "Seed DB",       Color(0xFF4CAF50))
-        "minimal"    -> LI("📦", "Minimal Pack",  Color(0xFF2196F3))
-        "standard"   -> LI("📚", "Standard Pack", Color(0xFF3F51B5))
-        "full"       -> LI("🗄",  "Full Pack",     Color(0xFF9C27B0))
-        "online"     -> LI("🌐", "Online API",    Color(0xFF009688))
-        "groq"       -> LI("🤖", "Groq AI",       Color(0xFFFF9800))
-        "openai"     -> LI("🤖", "OpenAI",        Color(0xFF43A047))
-        "on_device"  -> LI("📱", "On-Device AI",  Color(0xFFE91E63))
-        "rule_based" -> LI("🔧", "Rule-Based",    Color(0xFF607D8B))
-        else         -> LI("📄", source.replaceFirstChar { it.uppercase() }, Color(0xFF78909C))
+        "seed"          -> LI("🌱", "Seed DB",           Color(0xFF4CAF50))
+        "minimal"       -> LI("📦", "Minimal Pack",      Color(0xFF2196F3))
+        "standard"      -> LI("📚", "Standard Pack",     Color(0xFF3F51B5))
+        "full"          -> LI("🗄",  "Full Pack",         Color(0xFF9C27B0))
+        "online"        -> LI("🌐", "Online API",        Color(0xFF009688))
+        "groq"          -> LI("🤖", "Groq AI",           Color(0xFFFF9800))
+        "groq_bio"      -> LI("🤖", "Groq (Bio)",        Color(0xFFFF9800))
+        "openai"        -> LI("🤖", "OpenAI",            Color(0xFF43A047))
+        "openai_bio"    -> LI("🤖", "OpenAI (Bio)",      Color(0xFF43A047))
+        "on_device"     -> LI("📱", "On-Device AI",      Color(0xFFE91E63))
+        "on_device_bio" -> LI("📱", "On-Device (Bio)",   Color(0xFFE91E63))
+        "rule_based"    -> LI("🔧", "Rule-Based",        Color(0xFF607D8B))
+        else            -> LI("📄", source.replaceFirstChar { it.uppercase() }, Color(0xFF78909C))
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(

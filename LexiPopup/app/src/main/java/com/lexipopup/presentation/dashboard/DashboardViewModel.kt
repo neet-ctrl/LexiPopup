@@ -73,9 +73,9 @@ class DashboardViewModel @Inject constructor(
         .flatMapLatest { mode -> vocabularyRepository.getActivityHeatmap(84, mode) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
-    val difficultyDistribution: StateFlow<Map<Int, Int>> = flow {
-        emit(dictionaryRepository.getDifficultyDistribution(modeManager.currentMode.value))
-    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
+    val difficultyDistribution: StateFlow<Map<Int, Int>> = modeManager.currentMode
+        .flatMapLatest { mode -> flow { emit(dictionaryRepository.getDifficultyDistribution(mode)) } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     // ── Mode switching ────────────────────────────────────────────────────────
 

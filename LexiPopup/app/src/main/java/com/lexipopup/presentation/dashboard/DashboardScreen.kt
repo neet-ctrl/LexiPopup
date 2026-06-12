@@ -509,6 +509,7 @@ fun HomeScreen(
                 WotDHomeCard(
                     entry = wordOfDay!!,
                     onClick = { onWordSelected(wordOfDay!!.word) },
+                    activeMode = activeMode,
                     onAddToFavorites = { onToggleWotdFavorite(wordOfDay!!.word) },
                     onOpenSettings = onOpenWotdSettings
                 )
@@ -568,13 +569,13 @@ fun HomeScreen(
                 Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.AutoStories, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.3f))
-                        Text("Your dictionary is empty", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(ModeStrings.emptyDictMsg(activeMode), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("Long-press any word in Moon+ Reader → Dictionary → LexiPopup", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         Spacer(Modifier.height(4.dp))
                         FilledTonalButton(onClick = onNavigateToDictionary) {
                             Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Browse Dictionary")
+                            Text(ModeStrings.emptyDictAction(activeMode))
                         }
                     }
                 }
@@ -600,6 +601,7 @@ private fun StatMiniCard(modifier: Modifier, label: String, value: String, icon:
 private fun WotDHomeCard(
     entry: WordEntry,
     onClick: () -> Unit,
+    activeMode: com.lexipopup.domain.models.AppMode = com.lexipopup.domain.models.AppMode.ENGLISH,
     onAddToFavorites: () -> Unit = {},
     onOpenSettings: () -> Unit = {}
 ) {
@@ -627,7 +629,7 @@ private fun WotDHomeCard(
                     Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
                     Column {
                         Text(
-                            "WORD OF THE DAY",
+                            ModeStrings.wotdCardTitle(activeMode),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.ExtraBold,
                             color = primary,

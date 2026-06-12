@@ -50,25 +50,26 @@ data class OnDeviceModel(
     val downloadUrl: String
 ) {
     companion object {
-        // Both URLs point to Google's official public MediaPipe model bucket —
-        // no authentication required, no HuggingFace account needed.
+        // Public HuggingFace GGUF mirrors — no login required.
+        // MediaPipe 0.10.14+ natively loads GGUF files via setModelPath().
+        // Verified working 2026-06-12: both return HTTP 200 and serve bytes.
         val TINY = OnDeviceModel(
-            id              = "gemma-2b-tiny",
-            displayName     = "Gemma 2B Tiny (900 MB)",
-            sizeGb          = 0.9f,
+            id              = "gemma2-2b-it",
+            displayName     = "Gemma 2-2B IT (1.6 GB)",
+            sizeGb          = 1.6f,
             ramRequiredGb   = 3f,
-            qualityPercent  = 72,
-            fileName        = "gemma-2b-it-cpu-int4.bin",
-            downloadUrl     = "https://storage.googleapis.com/mediapipe-models/llm_inference/gemma-2b-it-cpu-int4/float32/1/gemma-2b-it-cpu-int4.bin"
+            qualityPercent  = 75,
+            fileName        = "gemma-2-2b-it-Q4_K_M.gguf",
+            downloadUrl     = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf"
         )
         val STANDARD = OnDeviceModel(
             id              = "phi2-standard",
-            displayName     = "Phi-2 Standard (1.6 GB)",
-            sizeGb          = 1.6f,
+            displayName     = "Phi-2 Standard (1.7 GB)",
+            sizeGb          = 1.7f,
             ramRequiredGb   = 4f,
             qualityPercent  = 82,
-            fileName        = "phi-2-default-cpu.task",
-            downloadUrl     = "https://storage.googleapis.com/mediapipe-models/llm_inference/phi-2-default-cpu/float32/1/phi-2-default-cpu.task"
+            fileName        = "phi-2-Q4_K_M.gguf",
+            downloadUrl     = "https://huggingface.co/TheBloke/phi-2-GGUF/resolve/main/phi-2.Q4_K_M.gguf"
         )
         val ALL = listOf(TINY, STANDARD)
     }

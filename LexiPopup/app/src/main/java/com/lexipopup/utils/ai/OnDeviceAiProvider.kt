@@ -20,13 +20,13 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * On-device AI provider using MediaPipe LLM Inference Task.
+ * On-device AI provider using MediaPipe LLM Inference Task (GGUF format).
  *
- * Model download URLs (public, no auth required):
- *   Gemma 2B Tiny (900 MB):
- *     https://storage.googleapis.com/mediapipe-models/llm_inference/gemma-2b-it-cpu-int4/float32/1/gemma-2b-it-cpu-int4.bin
- *   Phi-2 Standard (1.6 GB):
- *     https://storage.googleapis.com/mediapipe-models/llm_inference/phi-2-default-cpu/float32/1/phi-2-default-cpu.task
+ * Model download URLs (public HuggingFace mirrors — no login required):
+ *   Gemma 2-2B IT Q4_K_M (1.6 GB):
+ *     https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf
+ *   Phi-2 Q4_K_M (1.7 GB):
+ *     https://huggingface.co/TheBloke/phi-2-GGUF/resolve/main/phi-2.Q4_K_M.gguf
  *
  * If in-app download keeps failing (battery optimisation, poor signal), download the file
  * manually in a browser and use "Pick from Storage" in the AI Settings screen.

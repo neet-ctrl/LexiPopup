@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -44,11 +45,12 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var settingsDataStore: SettingsDataStore
 
     // ── Reactive permission states — backed by mutableStateOf so Compose recomposes ──
-    private var hasOverlay          by mutableStateOf(false)
-    private var hasNotificationPerm by mutableStateOf(false)
-    private var hasMicrophone       by mutableStateOf(false)
-    private var hasStorageRead      by mutableStateOf(false)
-    private var startWord           by mutableStateOf<String?>(null)
+    private var hasOverlay                  by mutableStateOf(false)
+    private var hasNotificationPerm         by mutableStateOf(false)
+    private var hasMicrophone               by mutableStateOf(false)
+    private var hasStorageRead              by mutableStateOf(false)
+    private var isBatteryOptimizationIgnored by mutableStateOf(false)
+    private var startWord                   by mutableStateOf<String?>(null)
 
     /**
      * true  → show PermissionSetupScreen (some critical permission is missing)
@@ -111,10 +113,11 @@ class MainActivity : ComponentActivity() {
                     if (showPermissionSetup) {
                         PermissionSetupScreen(
                             permissionStates = PermissionStates(
-                                hasOverlay       = hasOverlay,
-                                hasNotifications = hasNotificationPerm,
-                                hasMicrophone    = hasMicrophone,
-                                hasStorageRead   = hasStorageRead
+                                hasOverlay                   = hasOverlay,
+                                hasNotifications             = hasNotificationPerm,
+                                hasMicrophone                = hasMicrophone,
+                                hasStorageRead               = hasStorageRead,
+                                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored
                             ),
                             onRequestNotification = {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -130,6 +133,7 @@ class MainActivity : ComponentActivity() {
                                     storageReadPermLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
                                 }
                             },
+                            onRequestBatteryOptimization = { requestIgnoreBatteryOptimization() },
                             onContinue = {
                                 showPermissionSetup = false
                                 if (hasOverlay && hasNotificationPerm) startPopupService()
@@ -188,6 +192,8 @@ class MainActivity : ComponentActivity() {
         else ContextCompat.checkSelfPermission(
             this, Manifest.permission.READ_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        isBatteryOptimizationIgnored = pm.isIgnoringBatteryOptimizations(packageName)
     }
 
     /**
@@ -214,6 +220,27 @@ class MainActivity : ComponentActivity() {
                 Uri.parse("package:$packageName")
             )
         )
+    }
+
+    /**
+     * Requests that the system exempt this app from battery optimisation.
+     * Shows a system dialog (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) that lets
+     * the user whitelist the app in one tap. Falls back to the global battery
+     * optimisation settings screen if the direct intent is unavailable.
+     *
+     * Requires REQUEST_IGNORE_BATTERY_OPTIMIZATIONS in the manifest.
+     */
+    private fun requestIgnoreBatteryOptimization() {
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (_: Exception) {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
     }
 }
 

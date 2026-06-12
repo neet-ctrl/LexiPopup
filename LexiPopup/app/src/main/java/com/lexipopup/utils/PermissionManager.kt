@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +21,9 @@ import javax.inject.Singleton
  *                    → must redirect user to Settings.ACTION_MANAGE_OVERLAY_PERMISSION
  *  - Runtime:        POST_NOTIFICATIONS (API 33+), RECORD_AUDIO, READ_EXTERNAL_STORAGE (≤32)
  *                    → use ActivityResultContracts.RequestPermission / RequestMultiplePermissions
+ *  - Special (battery): REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+ *                    → direct intent Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS or
+ *                      fallback Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
  */
 @Singleton
 class PermissionManager @Inject constructor(
@@ -45,6 +49,16 @@ class PermissionManager @Inject constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) true
         else ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
                 PackageManager.PERMISSION_GRANTED
+
+    /**
+     * REQUEST_IGNORE_BATTERY_OPTIMIZATIONS — required on OEMs (Xiaomi, OPPO, Huawei, Samsung)
+     * that aggressively kill background services. Returns true when our app is already
+     * whitelisted from battery optimisation.
+     */
+    fun isBatteryOptimizationIgnored(): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
 
     /**
      * Returns true when every permission required for the popup to work is granted.

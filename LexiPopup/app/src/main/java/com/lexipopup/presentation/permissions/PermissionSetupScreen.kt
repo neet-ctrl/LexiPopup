@@ -30,7 +30,8 @@ data class PermissionStates(
     val hasOverlay: Boolean,
     val hasNotifications: Boolean,
     val hasMicrophone: Boolean,
-    val hasStorageRead: Boolean
+    val hasStorageRead: Boolean,
+    val isBatteryOptimizationIgnored: Boolean
 )
 
 private data class PermInfo(
@@ -52,6 +53,7 @@ fun PermissionSetupScreen(
     onRequestOverlay: () -> Unit,
     onRequestMicrophone: () -> Unit,
     onRequestStorageRead: () -> Unit,
+    onRequestBatteryOptimization: () -> Unit,
     onContinue: () -> Unit
 ) {
     val allCriticalGranted = permissionStates.hasOverlay && permissionStates.hasNotifications
@@ -83,6 +85,16 @@ fun PermissionSetupScreen(
                 isGranted = { it.hasNotifications },
                 actionLabel = "Allow",
                 onAction = onRequestNotification
+            ),
+            PermInfo(
+                icon = Icons.Default.BatteryFull,
+                iconTint = Color(0xFF00BCD4),
+                title = "Disable battery optimisation",
+                reason = "Recommended — prevents aggressive OEMs (Xiaomi, OPPO, Samsung, Huawei) from killing the popup service in the background. Without this the popup may stop responding after the screen turns off.",
+                isRequired = false,
+                isGranted = { it.isBatteryOptimizationIgnored },
+                actionLabel = "Disable",
+                onAction = onRequestBatteryOptimization
             ),
             PermInfo(
                 icon = Icons.Default.Mic,

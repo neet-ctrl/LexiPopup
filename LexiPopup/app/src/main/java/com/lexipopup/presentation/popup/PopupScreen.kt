@@ -1321,11 +1321,8 @@ fun PopupActionGrid(
     data class BtnDef(
         val icon: androidx.compose.ui.graphics.vector.ImageVector,
         val label: String,
-        val action: () -> Unit,
-        val enabled: Boolean
+        val action: () -> Unit
     )
-
-    // All possible buttons — exactly 10; id matches the buttonOrder string in AppSettings
     data class BtnDefWithId(
         val id: String,
         val icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1335,116 +1332,199 @@ fun PopupActionGrid(
     )
 
     val allButtons = listOf(
-        BtnDefWithId("copy",      Icons.Default.ContentCopy,     "Copy",            onCopy,          settings.showCopyButton),
-        BtnDefWithId("speak",     Icons.Default.VolumeUp,        "Speak\nWord",     onSpeakWord,     settings.showSpeakWordButton),
-        BtnDefWithId("meaning",   Icons.Default.RecordVoiceOver, "Speak\nMeaning",  onSpeakMeaning,  settings.showSpeakMeaningButton),
-        BtnDefWithId("translate", Icons.Default.Translate,       "Translate",       onTranslate,     settings.showTranslateButton),
-        BtnDefWithId("share",     Icons.Default.Share,           "Share",           onShare,         settings.showShareButton),
-        BtnDefWithId("note",      Icons.Default.Edit,            "Save\nNote",      onSaveNote,      settings.showSaveNoteButton),
-        BtnDefWithId("details",   Icons.Default.MenuBook,        "Full\nDetails",   onFullDetails,   settings.showFullDetailsButton),
-        BtnDefWithId("web",       Icons.Default.Language,        "Search\nWeb",     onSearchWeb,     settings.showSearchWebButton),
-        BtnDefWithId("flashcard", Icons.Default.Style,           "Flashcard",       onAddFlashcard,  settings.showFlashcardButton),
-        BtnDefWithId("browser",   Icons.Default.OpenInBrowser,   "Open in\nBrowser",onOpenBrowser,   settings.showBrowserButton)
+        BtnDefWithId("copy",      Icons.Default.ContentCopy,     "Copy",          onCopy,          settings.showCopyButton),
+        BtnDefWithId("speak",     Icons.Default.VolumeUp,        "Speak\nWord",   onSpeakWord,     settings.showSpeakWordButton),
+        BtnDefWithId("meaning",   Icons.Default.RecordVoiceOver, "Speak\nMeaning",onSpeakMeaning,  settings.showSpeakMeaningButton),
+        BtnDefWithId("translate", Icons.Default.Translate,       "Translate",     onTranslate,     settings.showTranslateButton),
+        BtnDefWithId("share",     Icons.Default.Share,           "Share",         onShare,         settings.showShareButton),
+        BtnDefWithId("note",      Icons.Default.Edit,            "Save\nNote",    onSaveNote,      settings.showSaveNoteButton),
+        BtnDefWithId("details",   Icons.Default.MenuBook,        "Full\nDetails", onFullDetails,   settings.showFullDetailsButton),
+        BtnDefWithId("web",       Icons.Default.Language,        "Search\nWeb",   onSearchWeb,     settings.showSearchWebButton),
+        BtnDefWithId("flashcard", Icons.Default.Style,           "Flashcard",     onAddFlashcard,  settings.showFlashcardButton),
+        BtnDefWithId("browser",   Icons.Default.OpenInBrowser,   "Browser",       onOpenBrowser,   settings.showBrowserButton)
     )
 
-    // Sort by the saved order from settings — user's drag-and-drop order is respected
     val orderIds = settings.buttonOrder.split(",").map { it.trim() }
     val sortedButtons = allButtons.sortedBy { btn ->
         val idx = orderIds.indexOf(btn.id)
         if (idx == -1) Int.MAX_VALUE else idx
     }
-
-    // Map back to BtnDef for the rest of the rendering logic
-    val enabled = sortedButtons.filter { it.enabled }.map { b ->
-        BtnDef(b.icon, b.label, b.action, b.enabled)
-    }
+    val enabled = sortedButtons.filter { it.enabled }.map { b -> BtnDef(b.icon, b.label, b.action) }
     if (enabled.isEmpty()) return
 
-    // First 9 shown in 2 rows; slot 10 (row2-pos5) is always "More ⋯"
-    val visible   = enabled.take(9)
-    val overflow  = enabled.drop(9)           // buttons that didn't fit
-    val hasMore   = overflow.isNotEmpty()
+    // Expanded grid splits: first 9 in 2 rows, rest in More sheet
+    val visible  = enabled.take(9)
+    val overflow = enabled.drop(9)
+    val hasMore  = overflow.isNotEmpty()
+    val row1     = visible.take(5)
+    val row2     = visible.drop(5)
 
-    var showSheet by remember { mutableStateOf(false) }
+    var showSheet  by remember { mutableStateOf(false) }
+    var expanded   by rememberSaveable { mutableStateOf(false) }
 
-    // Build display rows: row1 = slots 0-4, row2 = slots 5-8 + More
-    val row1 = visible.take(5)
-    val row2 = visible.drop(5)   // 0-4 items
+    val primary  = MaterialTheme.colorScheme.primary
+    val surface  = MaterialTheme.colorScheme.surfaceVariant
+    val onSurf   = MaterialTheme.colorScheme.onSurfaceVariant
 
+    // ── Outer container — animates height between collapsed and expanded ───────
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
-            .padding(vertical = 4.dp)
+            .background(surface.copy(alpha = 0.18f))
+            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
     ) {
-        // Row 1
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 2.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            row1.forEach { btn ->
-                GridActionButton(
-                    icon     = btn.icon,
-                    label    = btn.label,
-                    modifier = Modifier.weight(1f),
-                    onClick  = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); btn.action() }
-                )
-            }
-            // Pad to 5 if fewer
-            repeat(5 - row1.size) { Spacer(Modifier.weight(1f)) }
-        }
 
-        // Row 2 (only render if there is at least one row2 button or More is needed)
-        if (row2.isNotEmpty() || hasMore) {
+        if (!expanded) {
+            // ── COLLAPSED: single thin scrollable icon row + ▼ expand button ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .height(46.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                row2.forEach { btn ->
-                    GridActionButton(
-                        icon     = btn.icon,
-                        label    = btn.label,
-                        modifier = Modifier.weight(1f),
-                        onClick  = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); btn.action() }
-                    )
+                // Scrollable icon strip
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    items(enabled) { btn ->
+                        TrayIconButton(
+                            icon    = btn.icon,
+                            label   = btn.label,
+                            primary = primary,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                btn.action()
+                            }
+                        )
+                    }
                 }
-                // More button at slot 5 of row 2 when there are overflow items
-                if (hasMore) {
-                    GridActionButton(
-                        icon     = Icons.Default.MoreHoriz,
-                        label    = "More",
-                        modifier = Modifier.weight(1f),
-                        onClick  = { showSheet = true }
-                    )
-                }
-                // Pad remaining slots
-                val filled = row2.size + if (hasMore) 1 else 0
-                repeat(5 - filled) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-
-        // ── Page dots — always 3, first is active (matches screenshot exactly) ─
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val dotActive   = MaterialTheme.colorScheme.primary
-            val dotInactive = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
-            repeat(3) { i ->
+                // Thin vertical divider
                 Box(
                     Modifier
-                        .padding(horizontal = 3.dp)
-                        .size(if (i == 0) 6.dp else 4.dp)
-                        .clip(CircleShape)
-                        .background(if (i == 0) dotActive else dotInactive)
+                        .padding(vertical = 10.dp)
+                        .width(0.6.dp)
+                        .fillMaxHeight()
+                        .background(onSurf.copy(alpha = 0.20f))
                 )
+                // ▼ expand button — small square, right-pinned
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 6.dp)
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(primary.copy(alpha = 0.10f))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { expanded = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Expand toolbar",
+                        tint     = primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+        } else {
+            // ── EXPANDED: 2-row grid (current design) + ▲ collapse button ────
+
+            // Row 1
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 2.dp, end = 2.dp, top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                row1.forEach { btn ->
+                    GridActionButton(
+                        icon    = btn.icon,
+                        label   = btn.label,
+                        modifier = Modifier.weight(1f),
+                        onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); btn.action() }
+                    )
+                }
+                repeat(5 - row1.size) { Spacer(Modifier.weight(1f)) }
+            }
+
+            // Row 2 (if any row-2 buttons or More needed)
+            if (row2.isNotEmpty() || hasMore) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    row2.forEach { btn ->
+                        GridActionButton(
+                            icon    = btn.icon,
+                            label   = btn.label,
+                            modifier = Modifier.weight(1f),
+                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); btn.action() }
+                        )
+                    }
+                    if (hasMore) {
+                        GridActionButton(
+                            icon    = Icons.Default.MoreHoriz,
+                            label   = "More",
+                            modifier = Modifier.weight(1f),
+                            onClick = { showSheet = true }
+                        )
+                    }
+                    val filled = row2.size + if (hasMore) 1 else 0
+                    repeat(5 - filled) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+
+            // Bottom bar: page dots + ▲ collapse button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp, bottom = 4.dp, start = 8.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Page dots (centred in remaining space)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val dotActive   = primary
+                    val dotInactive = onSurf.copy(alpha = 0.28f)
+                    repeat(3) { i ->
+                        Box(
+                            Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(if (i == 0) 6.dp else 4.dp)
+                                .clip(CircleShape)
+                                .background(if (i == 0) dotActive else dotInactive)
+                        )
+                    }
+                }
+                // ▲ collapse button
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(primary.copy(alpha = 0.10f))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { expanded = false },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowUp,
+                        contentDescription = "Collapse toolbar",
+                        tint     = primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }
@@ -1479,7 +1559,6 @@ fun PopupActionGrid(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
                 )
-                // Show overflow buttons in rows of 5
                 overflow.chunked(5).forEach { row ->
                     Row(
                         Modifier
@@ -1489,10 +1568,10 @@ fun PopupActionGrid(
                     ) {
                         row.forEach { btn ->
                             GridActionButton(
-                                icon     = btn.icon,
-                                label    = btn.label,
+                                icon    = btn.icon,
+                                label   = btn.label,
                                 modifier = Modifier.weight(1f),
-                                onClick  = {
+                                onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     btn.action()
                                     showSheet = false
@@ -1505,6 +1584,36 @@ fun PopupActionGrid(
                 Spacer(Modifier.height(12.dp))
             }
         }
+    }
+}
+
+// ── Compact tray icon button (used in collapsed toolbar row) ──────────────────
+@Composable
+private fun TrayIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    primary: Color,
+    onClick: () -> Unit
+) {
+    val src     = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val sc by animateFloatAsState(if (pressed) 0.85f else 1f, label = "tray_sc")
+
+    Box(
+        modifier = Modifier
+            .scale(sc)
+            .size(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(primary.copy(alpha = if (pressed) 0.18f else 0.09f))
+            .clickable(interactionSource = src, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector        = icon,
+            contentDescription = label.replace("\n", " "),
+            tint               = primary,
+            modifier           = Modifier.size(18.dp)
+        )
     }
 }
 

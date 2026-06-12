@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -351,6 +352,8 @@ fun PopupScreen(
                     val cardH = if (isLandscape) 0.92f else heightFraction.coerceIn(0.38f, 0.92f)
 
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        val glassSurface = MaterialTheme.colorScheme.surface
+                        val glassPrimary = MaterialTheme.colorScheme.primary
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth(cardW)
@@ -363,7 +366,7 @@ fun PopupScreen(
                                 }
                                 .scale(scaleAnim)
                                 .graphicsLayer {
-                                    shadowElevation = 32f
+                                    shadowElevation = 40f
                                     shape = RoundedCornerShape(24.dp)
                                     clip = true
                                     rotationX = (parallax.y * 0.35f).coerceIn(-2f, 2f)
@@ -371,27 +374,47 @@ fun PopupScreen(
                                     cameraDistance = 12f * density.density
                                     alpha = alphaAnim
                                 }
+                                .border(
+                                    width = 1.dp,
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0.45f),
+                                            glassPrimary.copy(alpha = 0.20f),
+                                            Color.White.copy(alpha = 0.10f)
+                                        )
+                                    ),
+                                    shape = RoundedCornerShape(24.dp)
+                                )
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
                                 ) { /* consume */ },
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
+                                containerColor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                                    glassSurface.copy(alpha = 0.82f)
+                                else
+                                    glassSurface.copy(alpha = 0.97f)
                             ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 20.dp)
+                            elevation = CardDefaults.cardElevation(defaultElevation = 22.dp)
                         ) {
                             Box(Modifier.fillMaxSize()) {
 
-                                // Glassmorphism background
+                                // Glassmorphism background layer
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    Box(Modifier.fillMaxSize().blur(24.dp)
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)))
+                                    Box(Modifier.fillMaxSize().blur(32.dp)
+                                        .background(
+                                            Brush.verticalGradient(listOf(
+                                                glassSurface.copy(alpha = 0.55f),
+                                                glassPrimary.copy(alpha = 0.06f),
+                                                glassSurface.copy(alpha = 0.50f)
+                                            ))
+                                        ))
                                 } else {
                                     Box(Modifier.fillMaxSize().background(
                                         Brush.verticalGradient(listOf(
-                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                                            glassSurface.copy(alpha = 0.98f),
+                                            glassSurface.copy(alpha = 0.95f),
                                             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.06f)
                                         ))
                                     ))
@@ -864,29 +887,29 @@ fun PopupContent(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
 
-        // ── Why Important (detailed meaning) ─────────────────────────────────
+        // ── Short Meaning ─────────────────────────────────────────────────────
+        if (entry.shortMeaning.isNotBlank()) {
+            ContentBulletRow(
+                bulletColor = primary,
+                label  = "📖 Meaning",
+                text   = entry.shortMeaning,
+                italic = false,
+                onCopy = { copyField("Meaning", entry.shortMeaning) }
+            )
+        }
+
+        // ── Detailed Meaning (only if different from short) ───────────────────
         if (settings.showDetailedMeaning &&
             entry.detailedMeaning.isNotBlank() &&
             entry.detailedMeaning != entry.shortMeaning
         ) {
             ContentBulletRow(
                 bulletColor = Color(0xFF7C4DFF),
-                label   = "Why Important",
+                label   = "📖 Detailed Meaning",
                 text    = entry.detailedMeaning,
                 italic  = false,
-                diamond = true,                // ♦ rotated-square bullet, matches screenshot
-                onCopy  = { copyField("Why Important", entry.detailedMeaning) }
-            )
-        }
-
-        // ── Meaning ───────────────────────────────────────────────────────────
-        if (entry.shortMeaning.isNotBlank()) {
-            ContentBulletRow(
-                bulletColor = primary,
-                label  = "Meaning",
-                text   = entry.shortMeaning,
-                italic = false,
-                onCopy = { copyField("Meaning", entry.shortMeaning) }
+                diamond = true,
+                onCopy  = { copyField("Detailed Meaning", entry.detailedMeaning) }
             )
         }
 
@@ -944,41 +967,23 @@ fun PopupContent(
         if (settings.showExampleSentence && entry.exampleSentence.isNotBlank()) {
             val cleanExample = entry.exampleSentence.trim('"', '\u201C', '\u201D')
             ContentBulletRow(
-                bulletColor = primary,
-                label  = "Example",
+                bulletColor = tertiary,
+                label  = "📝 Example",
                 text   = "\"$cleanExample\"",
                 italic = true,
                 onCopy = { copyField("Example", cleanExample) }
             )
         }
 
-        // ── Two-column cards: Detailed Meaning | Etymology ────────────────────
-        val showDetailed  = settings.showDetailedMeaning && entry.detailedMeaning.isNotBlank()
-        val showEtymology = settings.showEtymology && entry.etymology.isNotBlank()
-        if (showDetailed || showEtymology) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (showDetailed) {
-                    TwoColCard(
-                        label      = "Detailed Meaning:",
-                        labelColor = tertiary,
-                        text       = entry.detailedMeaning,
-                        modifier   = Modifier.weight(1f),
-                        onCopy     = { copyField("Detailed Meaning", entry.detailedMeaning) }
-                    )
-                }
-                if (showEtymology) {
-                    TwoColCard(
-                        label      = "Etymology / Origin:",
-                        labelColor = secondary,
-                        text       = entry.etymology,
-                        modifier   = Modifier.weight(1f),
-                        onCopy     = { copyField("Etymology", entry.etymology) }
-                    )
-                }
-            }
+        // ── Etymology ─────────────────────────────────────────────────────────
+        if (settings.showEtymology && entry.etymology.isNotBlank()) {
+            ContentBulletRow(
+                bulletColor = secondary,
+                label  = "🌱 Etymology",
+                text   = entry.etymology,
+                italic = false,
+                onCopy = { copyField("Etymology", entry.etymology) }
+            )
         }
 
         // ── Synonyms ──────────────────────────────────────────────────────────
@@ -997,22 +1002,12 @@ fun PopupContent(
                     )
                     FieldCopyButton { copyField("Synonyms", entry.synonyms.joinToString(", ")) }
                 }
-                Row(
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val visible  = entry.synonyms.take(4)
-                    val overflow = entry.synonyms.size - visible.size
-                    visible.forEach { syn ->
+                    items(entry.synonyms) { syn ->
                         WordChip(syn, MaterialTheme.colorScheme.primaryContainer) { onWordChipClick(syn) }
-                    }
-                    if (overflow > 0) {
-                        Text(
-                            "+ $overflow more",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = primary,
-                            fontWeight = FontWeight.Medium
-                        )
                     }
                 }
             }
@@ -1035,22 +1030,12 @@ fun PopupContent(
                     )
                     FieldCopyButton { copyField("Antonyms", entry.antonyms.joinToString(", ")) }
                 }
-                Row(
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val visible  = entry.antonyms.take(4)
-                    val overflow = entry.antonyms.size - visible.size
-                    visible.forEach { ant ->
+                    items(entry.antonyms) { ant ->
                         WordChip(ant, MaterialTheme.colorScheme.errorContainer) { onWordChipClick(ant) }
-                    }
-                    if (overflow > 0) {
-                        Text(
-                            "+ $overflow more",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = errorColor,
-                            fontWeight = FontWeight.Medium
-                        )
                     }
                 }
             }
@@ -1672,44 +1657,58 @@ fun EdgeCollapsedTab(
     onExpand: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val glow by rememberInfiniteTransition(label = "tab_glow").animateFloat(
-        initialValue = 0.70f, targetValue = 1.00f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "glow_alpha"
+    val inf = rememberInfiniteTransition(label = "tab_inf")
+    val pulse by inf.animateFloat(
+        initialValue = 0.95f, targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "tab_pulse"
     )
-    val shape = if (side == "left")
-        RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
-    else
-        RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
+    val glowAlpha by inf.animateFloat(
+        initialValue = 0.35f, targetValue = 0.90f,
+        animationSpec = infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "tab_glow"
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val container = MaterialTheme.colorScheme.primaryContainer
 
-    Surface(
-        onClick = onExpand,
-        modifier = modifier.width(46.dp).height(120.dp),
-        shape = shape,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = glow),
-        shadowElevation = 18.dp
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .scale(pulse)
+            .shadow(elevation = 10.dp, shape = CircleShape,
+                spotColor = primary.copy(alpha = 0.35f),
+                ambientColor = primary.copy(alpha = 0.18f))
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        container.copy(alpha = 0.94f),
+                        primary.copy(alpha = 0.82f)
+                    )
+                )
+            )
+            .border(
+                width = 1.5.dp,
+                brush = Brush.sweepGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = glowAlpha),
+                        primary.copy(alpha = 0.30f),
+                        Color.White.copy(alpha = glowAlpha * 0.5f),
+                        Color.White.copy(alpha = glowAlpha)
+                    )
+                ),
+                shape = CircleShape
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onExpand() },
+        contentAlignment = Alignment.Center
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)
-            ) {
-                Text(
-                    word.firstOrNull()?.uppercase() ?: "L",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(Modifier.height(6.dp))
-                Icon(
-                    imageVector = if (side == "left") Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
-                    contentDescription = "Expand",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f)
-                )
-            }
-        }
+        Text(
+            text = "📖",
+            fontSize = 22.sp
+        )
     }
 }
 
@@ -1738,26 +1737,58 @@ fun ParticleBurst(modifier: Modifier, onFinish: () -> Unit) {
 
 @Composable
 fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) {
-    val word = (uiState as? PopupUiState.Success)?.entry?.word ?: ""
-    val pulse by rememberInfiniteTransition(label = "bubble_pulse").animateFloat(
-        initialValue = 0.93f, targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "bubble_scale"
+    val inf = rememberInfiniteTransition(label = "bubble_inf")
+    val pulse by inf.animateFloat(
+        initialValue = 0.95f, targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bubble_scale"
     )
-    Surface(
-        onClick = onExpand,
-        modifier = modifier.size(44.dp).scale(pulse),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary,
-        shadowElevation = 12.dp
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = word.firstOrNull()?.uppercase() ?: "L",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                fontWeight = FontWeight.ExtraBold
+    val glowAlpha by inf.animateFloat(
+        initialValue = 0.35f, targetValue = 0.90f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "glow_alpha"
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val container = MaterialTheme.colorScheme.primaryContainer
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .scale(pulse)
+            .shadow(elevation = 10.dp, shape = CircleShape,
+                spotColor = primary.copy(alpha = 0.35f),
+                ambientColor = primary.copy(alpha = 0.18f))
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        container.copy(alpha = 0.94f),
+                        primary.copy(alpha = 0.82f)
+                    )
+                )
             )
-        }
+            .border(
+                width = 1.5.dp,
+                brush = Brush.sweepGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = glowAlpha),
+                        primary.copy(alpha = 0.30f),
+                        Color.White.copy(alpha = glowAlpha * 0.5f),
+                        Color.White.copy(alpha = glowAlpha)
+                    )
+                ),
+                shape = CircleShape
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onExpand() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "📖",
+            fontSize = 22.sp
+        )
     }
 }
 

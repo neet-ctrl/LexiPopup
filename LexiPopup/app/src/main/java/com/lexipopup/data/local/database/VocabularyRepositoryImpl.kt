@@ -4,6 +4,7 @@ import com.lexipopup.data.local.dao.FavoriteWordDao
 import com.lexipopup.data.local.dao.FlashcardDao
 import com.lexipopup.data.local.dao.UserNoteDao
 import com.lexipopup.data.local.dao.VocabularyDao
+import com.lexipopup.data.local.dao.WordDao
 import com.lexipopup.data.local.entities.FavoriteWordEntity
 import com.lexipopup.data.local.entities.FlashcardEntity
 import com.lexipopup.data.local.entities.UserNoteEntity
@@ -27,6 +28,7 @@ class VocabularyRepositoryImpl @Inject constructor(
     private val flashcardDao: FlashcardDao,
     private val favoriteWordDao: FavoriteWordDao,
     private val userNoteDao: UserNoteDao,
+    private val wordDao: WordDao,
     private val srs: SpacedRepetitionUseCase
 ) : VocabularyRepository {
 
@@ -77,8 +79,11 @@ class VocabularyRepositoryImpl @Inject constructor(
     // ─── Favorites ────────────────────────────────────────────────
 
     override suspend fun toggleFavorite(word: String) {
-        if (favoriteWordDao.isFavorite(word)) favoriteWordDao.removeFavorite(word)
-        else favoriteWordDao.addFavorite(FavoriteWordEntity(word = word))
+        val nowFav = !favoriteWordDao.isFavorite(word)
+        if (nowFav) favoriteWordDao.addFavorite(FavoriteWordEntity(word = word))
+        else favoriteWordDao.removeFavorite(word)
+        // Keep dictionary_cache.is_favorite in sync so the dashboard flow updates instantly
+        wordDao.setFavorite(word, nowFav)
     }
 
     override suspend fun isFavorite(word: String): Boolean = favoriteWordDao.isFavorite(word)

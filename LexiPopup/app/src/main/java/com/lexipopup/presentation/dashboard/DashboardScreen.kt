@@ -1381,7 +1381,7 @@ private fun ButtonReorderPanel(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pointerInput(orderedIds) {
+                    .pointerInput(Unit) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = { offset ->
                                 val idx = (offset.y / itemHeightPx).toInt()

@@ -22,6 +22,9 @@ interface WordDao {
     @Query("UPDATE dictionary_cache SET is_favorite = NOT is_favorite WHERE word = :word")
     suspend fun toggleFavorite(word: String)
 
+    @Query("UPDATE dictionary_cache SET is_favorite = :isFav WHERE word = :word")
+    suspend fun setFavorite(word: String, isFav: Boolean)
+
     @Query("UPDATE dictionary_cache SET user_note = :note WHERE word = :word")
     suspend fun updateNote(word: String, note: String)
 

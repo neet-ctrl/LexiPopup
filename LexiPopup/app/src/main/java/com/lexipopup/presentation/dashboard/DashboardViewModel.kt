@@ -121,7 +121,9 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun toggleWotdWordFavorite(word: String) {
-        viewModelScope.launch { dictionaryRepository.toggleFavorite(word) }
+        // Route through vocabularyRepository so both favorite_words and
+        // dictionary_cache.is_favorite stay in sync (favorites flow updates immediately)
+        viewModelScope.launch { vocabularyRepository.toggleFavorite(word) }
     }
 
     fun updateWotdSettings(mode: String, level: Int, notifEnabled: Boolean, hour: Int) {

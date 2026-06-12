@@ -1,0 +1,62 @@
+name: Debug APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x LexiPopup/gradlew
+
+      - name: Build debug APK
+        working-directory: LexiPopup
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK with commit SHA
+        run: |
+          cd LexiPopup/app/build/outputs/apk/debug
+          mv app-debug.apk LexiPopup-debug-${{ github.sha }}.apk
+
+      - name: Delete old debug release
+        continue-on-error: true
+        run: |
+          gh release delete debug-latest --yes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload debug APK as GitHub pre-release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: debug-latest
+          name: "Debug Build (latest) — ${{ github.sha }}"
+          body: |
+            **Automated debug build**
+            Commit: `${{ github.sha }}`
+            Branch: `${{ github.ref_name }}`
+            Built: ${{ github.event.head_commit.timestamp }}
+
+            ### Install
+            1. Download `LexiPopup-debug-*.apk`
+            2. Transfer to your Android device
+            3. Enable "Install from unknown sources" in Android Settings
+            4. Tap the APK to install
+          files: LexiPopup/app/build/outputs/apk/debug/LexiPopup-debug-${{ github.sha }}.apk
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

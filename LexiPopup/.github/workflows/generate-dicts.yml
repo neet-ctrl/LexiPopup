@@ -1,0 +1,89 @@
+name: Generate Dictionary Packs
+
+# Run manually from GitHub → Actions → "Generate Dictionary Packs" → Run workflow
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install nltk tqdm
+
+      - name: Download NLTK data
+        run: |
+          python -c "
+          import nltk
+          nltk.download('wordnet')
+          nltk.download('omw-1.4')
+          nltk.download('cmudict')
+          nltk.download('words')
+          print('All NLTK data downloaded.')
+          "
+
+      - name: Generate dictionary packs
+        run: python LexiPopup/scripts/generate_dicts.py
+
+      - name: Show output sizes and checksums
+        run: |
+          ls -lh output/
+          cat output/checksums.txt
+
+      - name: Delete old dict release (if exists)
+        continue-on-error: true
+        run: gh release delete dict-v1 --yes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish dictionary packs as GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: dict-v1
+          name: "Dictionary Packs v1"
+          body: |
+            ## LexiPopup Dictionary Packs
+
+            Auto-generated from WordNet 3.1 + CMU Pronouncing Dictionary.
+
+            | Pack | Words | Use case |
+            |------|-------|---------|
+            | `dict_minimal_v1.db.gz` | ~10,000 | Most common English vocabulary |
+            | `dict_standard_v1.db.gz` | ~60,000 | Full WordNet coverage |
+            | `dict_full_v1.db.gz` | ~60,000+ | Full + Hindi meanings |
+
+            ### Data sources
+            - **WordNet 3.1** (Princeton) — free for all use
+            - **CMU Pronouncing Dictionary** — free for all use
+
+            ### SHA-256 checksums
+            See `checksums.txt` attached below.
+          files: |
+            output/dict_minimal_v1.db.gz
+            output/dict_standard_v1.db.gz
+            output/dict_full_v1.db.gz
+            output/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print next steps
+        run: |
+          echo ""
+          echo "=== NEXT STEP ==="
+          echo "Copy checksums from output/checksums.txt into"
+          echo "LexiPopup/app/src/main/java/com/lexipopup/data/download/DictionaryDownloadWorker.kt"
+          echo ""
+          cat output/checksums.txt

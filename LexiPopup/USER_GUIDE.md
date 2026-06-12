@@ -3,393 +3,275 @@
 
 ---
 
-## ⚠️ Honest Dictionary Coverage (Read This First)
+## ⚠️ Dictionary Coverage (Read This First)
 
 | Tier | Words Available | Requires |
 |------|----------------|----------|
-| **Built-in seed data** | **129 hand-curated words** (high quality, fully offline) | Nothing — works immediately |
-| **Online fallback** | ~200,000+ common English words | Internet connection |
-| **AI fallback** | Any word, rare/technical/regional included | Your OpenAI API key (Settings) |
-| **Downloaded packs** | 100,000+ offline (Wiktionary + WordNet + Hindi) | Internet once to download, then fully offline |
+| **Built-in seed data** | 1,000 common words (fully offline) | Nothing — works immediately |
+| **Online fallback** | ~200,000+ common English words | Internet connection (no key needed) |
+| **Groq AI fallback** | Any word including rare/technical | Free API key from console.groq.com |
+| **On-Device AI** | Any word, fully offline | One-time model download (1.5–2.7 GB) |
+| **Downloaded packs** | ~10K–60K+ offline words | Internet once to download |
 
-> **Short answer:** On first install you get 129 seed words offline. For everything else, internet or a downloaded pack is needed. The 129 seed words include the highest-frequency academic and literary vocabulary — see the full list below.
-
-### ✅ Confirmed working words (in seed data)
-`belittle` · `procrastination` · `serendipity` · `ephemeral` · `eloquent` · `resilient` · `ambiguous` · `pragmatic` · `meticulous` · `ubiquitous` · `tenacious` · `candid` · `clandestine` · `anomaly` · `altruistic` · `capricious` · `diligent` · `eloquence` · `enigmatic` · `equanimity` · `benevolent` · `audacious` · `rhetoric` · `stoic` · `sagacious` · `verbose` · `succinct` · `plethora` · `perennial` · `profound` + 99 more
+> **Short answer:** You get 1,000 seed words on first install. For best coverage: download the Standard pack (offline, ~60K words) + configure free Groq AI key (explains anything the dictionary misses).
 
 ---
 
 ## Part 1 — Installation
 
-### Step 1: Build & Install the APK
-1. Open the project in Android Studio (File → Open → select `LexiPopup/` folder)
-2. Connect your Android phone (USB debugging ON) or start an emulator
-3. Click **Run ▶** or press `Shift+F10`
-4. Android Studio builds the APK and installs it automatically
-5. Minimum Android version: **Android 10 (API 29)**
+### Option A: Download from GitHub Releases (easiest)
+1. Go to **https://github.com/neet-ctrl/LexiPopup/releases**
+2. Download the latest `LexiPopup-debug-*.apk`
+3. Transfer to your phone → tap to install
+4. Enable "Install from unknown sources" if prompted
 
-### Step 2: First Launch — Onboarding
-The app opens to a 4-screen onboarding flow:
+### Option B: Build from source
+See [SETUP_COMPLETE.md](SETUP_COMPLETE.md) for full instructions.
 
-**Screen 1 — Instant Definitions**
-> "Long-press any word in Moon+ Reader, tap Dictionary, select LexiPopup"
-- Tap **Next**
+Minimum Android version: **Android 10 (API 29)**
 
-**Screen 2 — Hindi + English**
-> Explains bilingual popup features
-- Tap **Next**
-
-**Screen 3 — Grant Overlay Permission** ⭐ *Critical*
-> This permission lets the popup float over Moon+ Reader
-- Tap **Grant Overlay Permission**
-- Android opens the "Display over other apps" system settings screen
-- Find **LexiPopup** in the list → tap it → toggle **Allow** ON
-- Press Back to return to the app
-- Tap **Skip for now** if you want to continue without it (popup won't work yet)
-
-**Screen 4 — Download Dictionary (Optional)**
-> Choose how to start:
-- **Download Dictionary Packs** → opens the download manager (recommended)
-- **Start with seed words only** → goes to the home screen immediately with 129 built-in words
+### First Launch — Onboarding
+The app opens to a 4-screen onboarding:
+1. **Instant Definitions** → tap Next
+2. **Hindi + English** → tap Next
+3. **Grant Overlay Permission** ⭐ *Critical — tap "Grant Overlay Permission" and enable it*
+4. **Download Dictionary (Optional)** → choose "Download Dictionary Packs" or "Start with seed words"
 
 ---
 
 ## Part 2 — Setting Up Moon+ Reader
 
-### Step 1: Install Moon+ Reader
-- Download from Google Play: **Moon+ Reader** (free version works fine)
+1. Install **Moon+ Reader** from Google Play
+2. Open Moon+ Reader → **Settings (⚙) → Read → Dictionary app** → select **LexiPopup**
+3. Open any ebook → long-press a word → tap **LexiPopup** in the toolbar
+4. The floating popup appears instantly
 
-### Step 2: Open any ebook in Moon+ Reader
-
-### Step 3: Connect LexiPopup as the dictionary
-1. In Moon+ Reader, go to **Settings (⚙) → Read → Dictionary app**
-2. Select **LexiPopup** from the list
-3. *(If not listed, skip to Step 4)*
-
-### Step 4: Use the text-selection method (always works)
-1. Long-press any word in Moon+ Reader
-2. The text selection toolbar appears
-3. Look for **"LexiPopup"** icon OR tap the **⋯ More** button
-4. Select **LexiPopup** — the popup appears instantly
-
-### Alternative: Share method (works in any app)
-1. Select any word in any app (browser, Kindle, PDF viewer, etc.)
-2. Tap **Share**
-3. Select **LexiPopup** from the share sheet
-4. The popup appears
+**Alternative (works in any app):** Select any text → tap **Share** → select **LexiPopup**
 
 ---
 
 ## Part 3 — The Popup Window
 
-### What the popup shows
-
 ```
-┌─────────────────────────────────────────────┐
-│  procrastination           ★ Favorite   ✕  │
-│  /prəˌkræs.tɪˈneɪ.ʃən/   [noun]           │
-├─────────────────────────────────────────────┤
-│  📖 The action of delaying or postponing    │
-│     something                               │
-│                                             │
-│  🇮🇳 टालमटोल (Taalmatol)                    │
-│                                             │
-│  📌 "Procrastination is the thief of       │
-│      time; it robs you of productivity."   │
-│                                             │
-│  🔗 Synonyms: delay · postponement ···     │
-│  ↔ Antonyms: promptness · diligence ···    │
-│                                             │
-│  🌱 From Latin procrastinatus…             │
-│                                             │
-│  ⚡ Intermediate     Frequency ████░ 72%  │
-├─────────────────────────────────────────────┤
-│  📋 Copy  🔊 Speak  🎙 Meaning  🌐 Translate│
-│  📤 Share  📝 Note  📖 Full Details        │
-└─────────────────────────────────────────────┘
-         ☰ Drag handle (resize popup)
+┌──────────────────────────────────────────────────┐
+│  procrastination              ★ Favorite    ✕   │
+│  /prəˌkræs.tɪˈneɪ.ʃən/  [noun]                  │
+├──────────────────────────────────────────────────┤
+│  📖 The action of delaying or postponing         │
+│     something                                    │
+│                                                  │
+│  🇮🇳 टालमटोल (Taalmatol)                         │
+│                                                  │
+│  📌 "Procrastination is the thief of time"       │
+│                                                  │
+│  🔗 Synonyms: delay · postponement · deferral    │
+│  ↔ Antonyms: promptness · diligence              │
+│                                                  │
+│  🌱 From Latin procrastinatus…                   │
+│                                                  │
+│  ⚡ Advanced          Frequency  ███░░  55%      │
+├──────────────────────────────────────────────────┤
+│  📋 Copy  🔊 Speak  🎙 Meaning  🌐 Translate     │
+│  📤 Share  📝 Note  📖 Full Details              │
+└──────────────────────────────────────────────────┘
+                ☰ Drag handle (resize)
 ```
-
-### How to interact with the popup
 
 | Action | How |
 |--------|-----|
-| **Move popup** | Drag anywhere on the header bar |
-| **Resize popup** | Drag the ◢ handle at the bottom-right corner |
-| **Collapse to bubble** | Tap the **◉** button at top-left (if enabled) |
+| **Move popup** | Drag the header bar |
+| **Resize** | Drag the ◢ corner handle |
+| **Collapse to bubble** | Tap ◉ top-left |
 | **Expand from bubble** | Tap the pulsing circle |
-| **Close popup** | Tap **✕** or press Android Back |
-| **Mark favorite** | Tap **★** star icon |
-| **Copy definition** | Tap 📋 Copy button |
-| **Hear pronunciation** | Tap 🔊 Speak — speaks the word aloud |
-| **Hear the definition** | Tap 🎙 Meaning — reads the definition aloud |
-| **Translate** | Tap 🌐 Translate — opens Google Translate |
-| **Share** | Tap 📤 Share — system share sheet |
-| **Add a note** | Tap 📝 Note — type your personal note |
-| **Full dictionary page** | Tap 📖 Full Details — opens full word screen |
-
-### Tap a synonym/antonym chip
-Tapping any word in the Synonyms or Antonyms row looks up **that word** immediately — you can chain through related words.
+| **Close** | Tap ✕ or press Back |
+| **Favorite** | Tap ★ |
+| **Copy definition** | Tap 📋 |
+| **Speak word** | Tap 🔊 |
+| **Speak definition** | Tap 🎙 |
+| **Translate** | Tap 🌐 (opens Google Translate) |
+| **Share** | Tap 📤 |
+| **Add note** | Tap 📝 |
+| **Full details** | Tap 📖 |
+| **Tap synonym/antonym** | Looks up that word immediately |
 
 ---
 
 ## Part 4 — Manual Search (Notification)
 
-You don't need Moon+ Reader to look up a word. A **persistent notification** lives in your notification drawer:
-
+A **persistent notification** stays in your notification shade:
 1. Pull down notification shade
 2. Tap the **LexiPopup** notification
-3. A search popup appears
-4. Type any word → results appear as suggestions
-5. Tap a suggestion or press GO
+3. Type any word → suggestions appear → tap or press GO
 
-**To toggle the notification on/off:**
-Dashboard → Settings tab → *Notification* section → **Persistent notification** switch
+Toggle it: **Settings tab → Notification → Persistent notification**
 
 ---
 
-## Part 5 — Dashboard App
+## Part 5 — Dashboard Tabs
 
-Tap the LexiPopup icon on your home screen to open the main dashboard.
+### 🏠 Home
+- Today's lookup count
+- Word of the Day (changes daily)
+- Recent words (last 50)
+- Favorites ★
+- Weekly activity chart
 
-### Tab 1: Home
-- **Today's count** — how many words you've looked up today
-- **Word of the Day** — changes daily (deterministic, same word all day)
-- **Recent words** — last 50 words you looked up, tap any to see details
-- **Favorites** — words you've starred ★ in the popup
-- **Weekly activity chart** — bar chart of lookups per day
+### 📖 Dictionary
+Full browser with A–Z tabs, search bar, sort, filter by POS.
 
-### Tab 2: Dictionary
-Full dictionary browser:
-- **A–Z tabs** — browse all words starting with each letter
-- **Search bar** at top — type any word to search
-- **Sort** — alphabetical / by frequency / by difficulty
-- **Filter** — show only nouns / verbs / adjectives / etc.
-- Tap any word → full word detail screen with all sections + TTS + share
+### 🃏 Flashcards (SM-2 Spaced Repetition)
+- Word on front, definition + Hindi + example on back
+- Tap or swipe up to flip
+- Rate: **Again (0)** · **Hard (3)** · **Good (4)** · **Easy (5)**
+- SM-2 algorithm schedules your next review automatically
 
-### Tab 3: Flashcards
-Spaced-repetition flashcard system (SM-2 algorithm):
-- Shows the **word** on front, **definition + Hindi + example** on back
-- **Tap or swipe up** to flip the card
-- After flipping, rate yourself:
-  - **Again (0)** — didn't remember, will repeat soon
-  - **Hard (3)** — remembered with difficulty
-  - **Good (4)** — remembered correctly
-  - **Easy (5)** — perfect, interval increases significantly
-- The app automatically schedules the next review date
-- Cards you rate low come back the next day; cards you rate high come back in days/weeks
+### 📊 Statistics
+- GitHub-style 12-week activity heatmap
+- Weekly bar chart
+- Top 10 most-searched words
+- Difficulty distribution pie chart
 
-> **Auto-generate:** If enabled in Settings, every word you look up in the popup is automatically added as a flashcard.
-
-### Tab 4: Statistics
-- **Activity heatmap** — GitHub-style 12-week calendar showing how many words you looked up per day
-- **Weekly bar chart** — lookups per day for the current week
-- **Most searched** — top 10 words you look up most often
-- **Difficulty breakdown** — pie chart showing the distribution of your vocabulary (Beginner / Intermediate / Advanced / Expert)
-
-### Tab 5: Settings
-
-#### 🎨 Popup Layout (10 toggles)
-Turn on/off: Pronunciation (IPA) · Part of Speech chip · Detailed meaning · Hindi meaning · Example sentence · Synonyms · Antonyms · Etymology · Difficulty badge · Frequency meter
-
-#### 🔘 Action Buttons (8 toggles)
-Turn on/off any of the 7 buttons: Copy · Speak Word · Speak Meaning · Translate · Share · Save Note · Favorite · Full Details
-
-#### 🧩 Popup Behavior
-- Enable/disable dragging
-- Enable/disable resizing
-- Enable/disable collapse to bubble mode
-- Auto-close after 5 seconds
-
-#### 🔔 Notification
-- Toggle the persistent notification launcher on/off
-
-#### 📚 Vocabulary Tracking
-- Save search history on/off
-- Auto-generate flashcards on/off
-
-#### 📖 Dictionary Data
-- **Manage Dictionary Packs** → download Wiktionary (4.7M words), WordNet (155,000), and Hindi packs
-
-#### 🤖 AI Features (Optional)
-- Enter your **OpenAI API key** (starts with `sk-`)
-- Once set, any word not found in the offline database is automatically explained by **GPT-4o-mini**
-- The AI result is cached locally so the same word is fast next time
-- To get a key: visit [platform.openai.com](https://platform.openai.com) → API Keys
-
-#### 📤 Export
-- **Export Vocabulary (CSV / JSON / Anki)** — exports all your looked-up words
-  - *CSV*: open in Excel or Google Sheets
-  - *JSON*: developer backup format
-  - *Anki (.txt)*: import into the Anki desktop app for advanced flashcards
-- **Export Settings as JSON** — backup your toggle settings
-- **Reset to Defaults** — restores all toggles to factory settings
+### ⚙ Settings
+See Part 6 below.
 
 ---
 
-## Part 6 — Downloading Full Dictionary Packs
+## Part 6 — Settings Tab
 
-> The pack download URLs must be set up by the developer before these work. See the "Developer Setup" section.
+### 🎨 Popup Layout (toggles)
+IPA pronunciation · Part of speech · Detailed meaning · Hindi meaning · Example sentence · Synonyms · Antonyms · Etymology · Difficulty badge · Frequency meter
 
-### From onboarding
-Tap **Download Dictionary Packs** on the last onboarding screen.
+### 🔘 Action Buttons (toggles)
+Copy · Speak Word · Speak Meaning · Translate · Share · Save Note · Favorite · Full Details
 
-### From the app
-Settings tab → **Manage Dictionary Packs** → choose a pack:
+### 🧩 Popup Behavior
+Dragging · Resizing · Bubble collapse mode · Auto-close (5s)
+
+### 🔔 Notification
+Persistent notification launcher on/off
+
+### 📚 Vocabulary Tracking
+Save history · Auto-generate flashcards
+
+### 📖 Dictionary Data
+**Manage Dictionary Packs** — download Wiktionary-based packs:
 
 | Pack | Words | Size | Contents |
 |------|-------|------|----------|
-| **Minimal** | ~10,000 | ~15 MB | Most common English words |
-| **Standard** | ~60,000 | ~80 MB | Wiktionary + WordNet |
-| **Full** | ~100,000+ | ~200 MB | Wiktionary + WordNet + Hindi WordNet |
+| **Minimal** | ~10,000 | ~15 MB | Most common English |
+| **Standard** | ~60,000 | ~80 MB | Full WordNet coverage |
+| **Full** | ~60,000+ | ~120 MB | Standard + Hindi meanings |
 
-**Download progress screen shows:**
-- Phase: Downloading → Decompressing → Verifying (SHA-256) → Importing
-- MB downloaded / total MB
-- Download speed (KB/s)
-- ETA (seconds remaining)
-- Words imported count
+### 🤖 AI Assistant
+LexiPopup uses AI only as a last resort — offline dictionary first, then online FreeDictionaryAPI, then AI.
 
-The download **resumes automatically** if interrupted (no need to start over).
+Tap **"Configure"** to open the AI settings:
+
+#### Groq Cloud (recommended, free)
+1. Go to **https://console.groq.com** → sign up (no credit card)
+2. API Keys → Create → copy the `gsk_...` key
+3. Paste it in LexiPopup → AI Settings → Groq API Key
+- **Free: 1,000 lookups/day, 30/minute**
+- Model: llama-3.3-70b-versatile
+
+#### OpenAI
+- Requires a paid OpenAI account at platform.openai.com
+- Uses GPT-4o-mini
+
+#### On-Device AI (offline, no API key)
+1. Select a model:
+   - **Gemma 2B Tiny** — 1.5 GB download, ~4 GB RAM needed
+   - **Phi-2** — 2.7 GB download, ~6 GB RAM needed
+2. Tap "Download Model"
+3. Works offline forever after download
+
+#### Hybrid Mode
+Runs Groq + On-Device simultaneously, shows the best result (or lets you compare both).
+
+### 📤 Export
+- **Export Vocabulary** as CSV (Excel), JSON, or Anki TSV
+- **Export Settings** as JSON backup
+- **Reset to Defaults**
 
 ---
 
-## Part 7 — Word Lookup Logic (Technical Flow)
-
-When you look up a word, LexiPopup searches in this order:
+## Part 7 — Word Lookup Flow (Technical)
 
 ```
 Word tapped in Moon+ Reader
          │
          ▼
-┌─────────────────────┐
-│  Layer 1: Memory    │ ← <1ms — LruCache of last 200 words this session
-│  Cache (LruCache)   │
-└────────┬────────────┘
-         │ Not found
-         ▼
-┌─────────────────────┐
-│  Layer 2: Room DB   │ ← <5ms — SQLite database (seed + downloaded packs)
-│  (offline SQLite)   │
-└────────┬────────────┘
-         │ Not found
-         ▼
-┌─────────────────────┐
-│  Layer 3: Online    │ ← ~200ms — api.dictionaryapi.dev (FREE, no key needed)
-│  FreeDictionaryAPI  │ Result is saved to Room for next time (offline)
-└────────┬────────────┘
-         │ Not found / no internet
-         ▼
-┌─────────────────────┐
-│  Layer 4: AI        │ ← ~2-5s — GPT-4o-mini via your OpenAI key
-│  Explanation        │ Result is saved to Room for next time (offline)
-└────────┬────────────┘
-         │ Not found / no key set
-         ▼
-     Error shown:
-  "Word not found in
-   local dictionary"
+┌──────────────────────┐
+│  Layer 1: LRU Cache  │  <1 ms — last 200 words this session
+└───────┬──────────────┘
+        │ miss
+        ▼
+┌──────────────────────┐
+│  Layer 2: Room DB    │  <5 ms — seed + downloaded pack
+└───────┬──────────────┘
+        │ miss
+        ▼
+┌──────────────────────┐
+│  Layer 3: Online API │  ~200ms — api.dictionaryapi.dev (free, no key)
+│  (FreeDictionaryAPI) │  Result saved to Room for next time
+└───────┬──────────────┘
+        │ miss / no internet
+        ▼
+┌──────────────────────┐
+│  Layer 4: Groq AI    │  ~1-3s — llama-3.3-70b (free key from groq.com)
+│  (Cloud AI)          │  Result saved to Room for next time
+└───────┬──────────────┘
+        │ miss / no key
+        ▼
+┌──────────────────────┐
+│  Layer 5: On-Device  │  ~3-8s — Gemma 2B / Phi-2 (downloaded model)
+│  AI (MediaPipe)      │  Result saved to Room for next time
+└───────┬──────────────┘
+        │ miss
+        ▼
+   "Word not found"
 ```
 
 ---
 
 ## Part 8 — About & Legal
 
-The app is built on these open data sources:
-
 | Source | License | Coverage |
 |--------|---------|----------|
-| **Wiktionary** | CC BY-SA 3.0 | 4.7M+ entries, IPA, etymology, examples |
-| **WordNet 3.1** (Princeton) | Free for all use | 155,000 words, synonyms, antonyms |
-| **Hindi WordNet** (IIT Bombay) | GNU FDL — **non-commercial only** | Hindi meanings, Devanagari |
+| **WordNet 3.1** (Princeton) | Free for all use | ~117,000 words, synonyms, antonyms |
+| **CMU Pronouncing Dictionary** | Free / Public Domain | IPA pronunciation |
+| **Hindi WordNet** (IIT Bombay) | GNU FDL — **non-commercial only** | Hindi meanings |
 | **FreeDictionaryAPI** | Free | Online fallback |
+| **Groq AI** | Free tier | AI explanations |
 
-> ⚠️ **If you plan to use LexiPopup commercially**, you must obtain a separate licence from IIT Bombay for the Hindi WordNet data. Contact: cfilt@cse.iitb.ac.in
+> ⚠️ **Commercial use:** If you use LexiPopup commercially, you need a separate licence from IIT Bombay for Hindi WordNet data. Contact: cfilt@cse.iitb.ac.in
 
 ---
 
 ## Part 9 — Troubleshooting
 
-### Popup doesn't appear after tapping a word
-1. Open **Settings** → Apps → LexiPopup → **"Display over other apps"** → Enable
-2. Or: Dashboard → top bar warning icon ⚠ → tap to open permission screen
-
-### Word shows "not found"
-- Check internet connection (for online fallback)
-- Or set an OpenAI API key in Settings → AI Features
-- Or download a dictionary pack from Settings → Manage Dictionary Packs
-
-### Notification doesn't appear
-- Settings tab → Notification → toggle **Persistent notification** ON
-- Check Android notification permissions for LexiPopup
-
-### Popup disappeared after phone restart
-- The persistent notification relaunches automatically after boot via a boot receiver
-- If it doesn't: open the app once → go to Settings → toggle the notification
-
-### TTS (speak) button doesn't work
-- Go to Android Settings → Accessibility → Text-to-speech → install a TTS engine
-- Google TTS or Samsung TTS both work
-
-### Flashcards not generating automatically
-- Settings tab → Vocabulary Tracking → **Auto-generate flashcards** → ON
-
----
-
-## Part 10 — Developer Setup (Hosting Dictionary Packs)
-
-To make the dictionary pack download work, you need to host the database files:
-
-### 1. Generate the database files
-The pack files must be gzipped SQLite databases with the same schema as `dictionary_cache` in Room:
-```
-table: dictionary_cache
-columns: word, pronunciation, part_of_speech, short_meaning, detailed_meaning,
-         hindi_meaning, hindi_pronunciation, example_sentence, synonyms (JSON),
-         antonyms (JSON), etymology, difficulty_level, frequency_rating,
-         source, is_favorite, user_note, last_accessed, access_count
-```
-
-### 2. Host the .db.gz files
-Recommended: GitHub Releases (free, fast CDN):
-```
-https://github.com/YOUR_ORG/lexipopup-data/releases/latest/download/dict_minimal_v1.db.gz
-https://github.com/YOUR_ORG/lexipopup-data/releases/latest/download/dict_standard_v1.db.gz
-https://github.com/YOUR_ORG/lexipopup-data/releases/latest/download/dict_full_v1.db.gz
-```
-
-### 3. Update the URLs in code
-Edit `DictionaryDownloadWorker.kt`:
-```kotlin
-private val PACK_URLS = mapOf(
-    DatabasePack.MINIMAL.name  to "https://YOUR_REAL_URL/dict_minimal_v1.db.gz",
-    DatabasePack.STANDARD.name to "https://YOUR_REAL_URL/dict_standard_v1.db.gz",
-    DatabasePack.FULL.name     to "https://YOUR_REAL_URL/dict_full_v1.db.gz"
-)
-private val PACK_CHECKSUMS = mapOf(
-    DatabasePack.MINIMAL.name  to "SHA256_OF_MINIMAL_FILE",
-    DatabasePack.STANDARD.name to "SHA256_OF_STANDARD_FILE",
-    DatabasePack.FULL.name     to "SHA256_OF_FULL_FILE"
-)
-```
-
-### 4. Get the SHA-256 checksum
-```bash
-sha256sum dict_minimal_v1.db.gz
-```
+| Problem | Fix |
+|---------|-----|
+| Popup doesn't appear | Settings → Apps → LexiPopup → "Display over other apps" → ON |
+| Word shows "not found" | Need: internet, or dictionary pack, or Groq key |
+| AI says "No API key" | Settings → AI Assistant → Configure → enter Groq key |
+| Dictionary download fails | Check WiFi; tap retry (download resumes where it left off) |
+| Notification doesn't appear | Settings → Notification → toggle ON |
+| TTS (speak) doesn't work | Android Settings → Accessibility → Text-to-speech → install Google TTS |
+| Popup disappeared after restart | Open app → Settings → toggle notification off then on |
+| Flashcards not auto-generating | Settings → Vocabulary Tracking → Auto-generate flashcards → ON |
 
 ---
 
 ## Quick-Start Checklist
 
-- [ ] Install APK on Android 10+ device
-- [ ] Grant **"Display over other apps"** permission during onboarding
-- [ ] Install Moon+ Reader from Google Play
-- [ ] In Moon+ Reader: Settings → Read → Dictionary app → LexiPopup
-- [ ] Open a book, long-press a word, tap LexiPopup
-- [ ] Optionally: download a dictionary pack (Settings → Manage Dictionary Packs)
-- [ ] Optionally: add OpenAI API key for AI fallback (Settings → AI Features)
-- [ ] Optionally: enable persistent notification for quick search anywhere
+- [ ] Install APK
+- [ ] Grant "Display over other apps" during onboarding
+- [ ] Install Moon+ Reader
+- [ ] In Moon+: Settings → Read → Dictionary → LexiPopup
+- [ ] Download dictionary pack (Standard recommended)
+- [ ] Get free Groq key → console.groq.com → paste in AI Settings
+- [ ] Long-press a word in Moon+ → LexiPopup → enjoy 🎉
 
 ---
 

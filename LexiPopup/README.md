@@ -1,83 +1,56 @@
-# LexiPopup - Advanced Android Popup Dictionary
+# LexiPopup — Advanced Android Popup Dictionary
 
-A production-ready Android popup dictionary that integrates with Moon+ Reader and any app via PROCESS_TEXT intent. Instant definitions, Hindi meanings, offline-first, with a beautiful modern 3D UI.
-
----
-
-## 🚀 Push to GitHub in 4 Commands
-
-The `LexiPopup/` folder **IS** your complete Android project root. Push it directly:
-
-```bash
-# 1. Navigate into the project folder
-cd LexiPopup
-
-# 2. Initialize git (first time only)
-git init
-git add .
-git commit -m "Initial LexiPopup release"
-
-# 3. Connect to your GitHub repo (create an empty repo on github.com first)
-git remote add origin https://github.com/YOUR_USERNAME/LexiPopup.git
-
-# 4. Push — workflows trigger automatically
-git push -u origin main
-```
-
-That's it. No secrets, no configuration, no extra setup.
+A production-ready Android popup dictionary that integrates with Moon+ Reader and any app via PROCESS_TEXT intent. Instant definitions, Hindi meanings, offline-first, Groq AI fallback, with a beautiful Material 3 glassmorphism UI.
 
 ---
 
-## ⚡ Automated CI/CD
+## 🚀 GitHub repo: https://github.com/neet-ctrl/LexiPopup
 
-### Debug APK — triggers on every `git push`
+---
 
-| Action | Result |
-|--------|--------|
-| Push any branch | Builds debug APK → creates **GitHub Pre-Release** tagged `debug-latest` |
-| Download from | GitHub → Releases → "Debug Build (latest)" |
-
-### Release APK — triggers on version tag push
+## ⚡ Quick start (3 steps)
 
 ```bash
-# Tag and push to trigger the signed release build
-git tag v1.0.0
-git push origin v1.0.0
+# 1. Every push → debug APK auto-builds → download from Releases
+git push origin main
+
+# 2. Version release → signed APK
+git tag v1.0.0 && git push origin v1.0.0
+
+# 3. Generate dictionary packs (once) → GitHub Actions → "Generate Dictionary Packs" → Run
 ```
 
-| Action | Result |
-|--------|--------|
-| Push `v*` tag | Builds **signed release APK** → creates **GitHub Release** |
-| Signing | Hardcoded in workflow — no secrets setup required |
-| Key alias | `my-key` |
-| Download from | GitHub → Releases → latest |
+→ **See [SETUP_COMPLETE.md](SETUP_COMPLETE.md) for the full step-by-step guide including Termux commands.**
 
-> **No secrets to configure.** The keystore is embedded (base64) directly in `.github/workflows/release.yml`.
+---
+
+## CI/CD Workflows
+
+| Workflow | Trigger | Result |
+|----------|---------|--------|
+| **Debug APK** | Every `git push` | Debug APK → GitHub pre-release `debug-latest` |
+| **Release APK** | Push `v*` tag | Signed APK → GitHub Release |
+| **Generate Dictionary Packs** | Manual (Actions tab) | `.db.gz` files → GitHub Release `dict-v1` |
+
+No secrets to configure. `GITHUB_TOKEN` is automatic.
 
 ---
 
 ## Features
 
 - **Instant popup** (<150ms) from Moon+ Reader or any app via PROCESS_TEXT
-- **Offline-first** — 1000 seed words bundled; full Wiktionary + WordNet + Hindi pack downloadable in-app
+- **Offline-first** — 1,000 seed words built-in; Minimal/Standard/Full packs downloadable
+- **Dual AI Layer** — Groq Cloud (free) + On-Device AI (Gemma 2B / Phi-2) + Hybrid mode
 - **Hindi meanings** with Devanagari script and transliteration
 - **Synonyms, antonyms, etymology, example sentences**
 - **IPA pronunciation** with TTS (text-to-speech)
-- **Glassmorphism + 3D effects** — Compose `graphicsLayer`, parallax tilt via accelerometer, spring animations
-- **Particle burst** animation on favorite toggle
-- **Collapsible bubble mode** with pulse animation
-- **Save Note dialog** — attach your own notes to any word
-- **Resize handle** — drag the popup taller or shorter
-- **Persistent notification** — quick search from anywhere without switching apps
-- **20+ toggleable UI elements** — disable any element from the Customize tab
-- **Flashcard system** with SM-2 spaced repetition algorithm
+- **Glassmorphism + 3D effects** — parallax tilt, spring animations, particle burst
+- **Flashcard system** with SM-2 spaced repetition
 - **Vocabulary dashboard** — bar charts, pie chart, GitHub-style calendar heatmap
 - **Export** vocabulary as CSV, JSON, or Anki TSV deck
-- **Export settings** as JSON (share/restore your toggle config)
-- **About/License screen** with proper legal attributions
-- **Database Pack selection** — Minimal (35MB), Standard (65MB), Full (105MB)
+- **Persistent notification** — quick search from anywhere
+- **20+ toggleable UI elements** — customize every part of the popup
 - **Dark mode** + Material You dynamic color
-- **Edge-to-edge** display with notch/cutout support
 
 ---
 
@@ -89,53 +62,66 @@ git push origin v1.0.0
 | UI | Jetpack Compose + Material 3 |
 | Architecture | MVVM + Clean Architecture |
 | DI | Hilt |
-| Database | Room (SQLite) + WAL mode, page_size=4096 |
+| Database | Room (SQLite) + WAL mode |
 | Networking | Retrofit + OkHttp |
+| AI (Cloud) | Groq API — llama-3.3-70b-versatile (free tier) |
+| AI (Device) | MediaPipe LLM — Gemma 2B / Phi-2 |
+| Background | WorkManager |
 | Settings | DataStore Preferences |
-| Background | WorkManager (dictionary downloads) |
-| Sensors | Android SensorManager (parallax tilt) |
+
+---
+
+## Word Lookup Flow (5 layers)
+
+```
+Word tapped in Moon+ Reader
+  ↓ 1. LRU memory cache         <1 ms
+  ↓ 2. Room SQLite (offline)    <5 ms  (seed + downloaded pack)
+  ↓ 3. FreeDictionaryAPI        ~200ms (free, no key)
+  ↓ 4. Groq AI Cloud            ~1-3s  (free API key from console.groq.com)
+  ↓ 5. On-Device AI             ~3-8s  (Gemma 2B / Phi-2, downloaded once)
+```
 
 ---
 
 ## Project Structure
 
 ```
-LexiPopup/                         ← Push THIS folder as your GitHub repo root
-├── .github/
-│   └── workflows/
-│       ├── debug.yml              ← Auto debug APK → pre-release (every push)
-│       └── release.yml            ← Signed release APK → GitHub release (on v* tag)
-├── app/
-│   └── src/main/java/com/lexipopup/
-│       ├── data/
-│       │   ├── download/          DictionaryDownloadWorker (checksum verified)
-│       │   ├── local/
-│       │   │   ├── dao/           WordDao, VocabularyDao, FlashcardDao,
-│       │   │   │                  FavoriteWordDao, UserNoteDao
-│       │   │   ├── database/      LexiDatabase (Room), DatabaseSeeder (1000 words)
-│       │   │   └── entities/      WordEntity, VocabularyHistoryEntity, FlashcardEntity,
-│       │   │                      FavoriteWordEntity, UserNoteEntity, UserSettingsEntity
-│       │   └── remote/            DictionaryApi (FreeDictionaryAPI fallback)
-│       ├── di/                    AppModule, DataStoreModule
-│       ├── domain/
-│       │   ├── models/            WordEntry, AppSettings, Flashcard, UserNote, VocabularyHistory
-│       │   ├── repositories/      DictionaryRepository, VocabularyRepository (interfaces)
-│       │   └── usecases/          LookupWordUseCase (LRU cache), SpacedRepetitionUseCase (SM-2)
-│       ├── presentation/
-│       │   ├── about/             AboutScreen (legal attributions)
-│       │   ├── dashboard/         DashboardScreen (4 tabs), CalendarHeatmap, DashboardViewModel
-│       │   ├── flashcards/        FlashcardsScreen (swipe gestures), FlashcardsViewModel
-│       │   ├── onboarding/        OnboardingActivity, DatabasePackScreen (Minimal/Standard/Full)
-│       │   ├── popup/             PopupActivity, PopupScreen (full 3D UI), PopupViewModel
-│       │   └── theme/             Material 3 theme
-│       └── utils/
-│           ├── ExportHelper       CSV / JSON / Anki TSV export
-│           ├── NotificationHelper Persistent notification
-│           ├── SensorHelper       Accelerometer → parallax tilt flow
-│           ├── SettingsDataStore  29 toggle keys (all with defaults)
-│           └── TtsHelper          TTS word/meaning speaking
-└── app/src/test/                  SpacedRepetitionTest, LookupWordNormalizationTest,
-                                   DatabaseSizeAndWordTest (word existence + performance)
+LexiPopup/
+├── .github/workflows/
+│   ├── debug.yml            ← Auto debug APK on every push
+│   ├── release.yml          ← Signed release APK on v* tag
+│   └── generate-dicts.yml   ← Generate dictionary .db.gz packs
+├── scripts/
+│   └── generate_dicts.py    ← Python script for dict generation (WordNet-based)
+├── app/src/main/java/com/lexipopup/
+│   ├── data/
+│   │   ├── download/        DictionaryDownloadWorker (checksum + resume)
+│   │   ├── local/
+│   │   │   ├── dao/         WordDao, VocabularyDao, FlashcardDao, ...
+│   │   │   ├── database/    LexiDatabase (Room), DatabaseSeeder (1000 words)
+│   │   │   └── entities/    WordEntity, VocabularyHistoryEntity, ...
+│   │   └── remote/          DictionaryApi (FreeDictionaryAPI)
+│   ├── di/                  AppModule, DataStoreModule
+│   ├── domain/
+│   │   ├── models/          WordEntry, AppSettings, Flashcard, ...
+│   │   ├── repositories/    DictionaryRepository, VocabularyRepository
+│   │   └── usecases/        LookupWordUseCase (5-layer), SpacedRepetitionUseCase
+│   ├── presentation/
+│   │   ├── ai/              AiSettingsScreen, AiSettingsViewModel
+│   │   ├── dashboard/       DashboardScreen (5 tabs), DashboardViewModel
+│   │   ├── flashcards/      FlashcardsScreen, FlashcardsViewModel
+│   │   ├── onboarding/      OnboardingActivity, DatabasePackScreen
+│   │   ├── popup/           PopupActivity, PopupScreen (glassmorphism UI)
+│   │   └── theme/           Material 3 theme
+│   └── utils/
+│       ├── ai/              AiProvider, GroqAiProvider, OnDeviceAiProvider,
+│       │                    AiProviderManager (Hybrid orchestrator)
+│       ├── ExportHelper     CSV / JSON / Anki TSV
+│       ├── NotificationHelper Persistent notification
+│       ├── SettingsDataStore 30 toggle keys (all with defaults)
+│       └── TtsHelper        TTS word/meaning speaking
+└── SETUP_COMPLETE.md        ← Full step-by-step setup guide
 ```
 
 ---
@@ -143,55 +129,48 @@ LexiPopup/                         ← Push THIS folder as your GitHub repo root
 ## Moon+ Reader Setup
 
 1. Install LexiPopup APK
-2. Grant **Display over other apps** permission
-3. Open Moon+ Reader → **Settings → Reading → Dictionary**
-4. Select **LexiPopup** from the list
-5. Long-press any word → **Dictionary** → definition popup appears instantly
+2. Grant **"Display over other apps"** permission
+3. Open Moon+ Reader → **Settings → Read → Dictionary app** → select **LexiPopup**
+4. Long-press any word → **LexiPopup** → popup appears instantly
 
 ---
 
-## Word Lookup Flow
-
-```
-Selected word from Moon+ Reader (PROCESS_TEXT intent)
-  ↓ normalize (lowercase, trim punctuation)
-  ↓ LRU memory cache (< 10ms)
-  ↓ Room database — seed words (< 30ms)
-  ↓ Downloaded dictionary pack (if installed)
-  ↓ Online API fallback (FreeDictionaryAPI, 2s timeout)
-  ↓ Show popup — skeleton visible in < 50ms
-```
-
----
-
-## Database Sources & Licenses
+## Dictionary Pack Sources & Licenses
 
 | Source | License | Words |
 |--------|---------|-------|
-| Wiktionary | CC BY-SA 3.0 | 4.7M (Full pack) |
-| WordNet (Princeton) | WordNet 3.1 (free) | 155,000 |
-| Hindi WordNet (CFILT, IIT Bombay) | GNU FDL — non-commercial | 28,000+ |
-
-Hindi WordNet used for non-commercial/research purposes per IIT Bombay license.
-Attribution shown in **About → Licenses** screen inside the app.
+| WordNet 3.1 (Princeton) | Free for all use | ~117,000 |
+| CMU Pronouncing Dictionary | Free/Public Domain | IPA pronunciation |
+| Hindi WordNet (IIT Bombay) | GNU FDL — non-commercial | ~28,000 |
+| FreeDictionaryAPI | Free | Online fallback |
 
 ---
 
 ## Building Locally
 
+Requirements: JDK 17, Android SDK (API 29+), Gradle 8.6
+
 ```bash
+cd LexiPopup
+
 # Debug build
 ./gradlew assembleDebug
 
-# Release build (signed with your own keystore)
-./gradlew assembleRelease \
-  -Pandroid.injected.signing.store.file=/path/to/keystore.jks \
-  -Pandroid.injected.signing.store.password=YOUR_PASS \
-  -Pandroid.injected.signing.key.alias=YOUR_ALIAS \
-  -Pandroid.injected.signing.key.password=YOUR_KEY_PASS
+# Release build
+./gradlew assembleRelease
 
 # Run unit tests
 ./gradlew test
 ```
 
-Requirements: JDK 17, Android SDK (API 29+), Gradle 8.6
+---
+
+## Complete Setup Guide
+
+**→ [SETUP_COMPLETE.md](SETUP_COMPLETE.md)** — Step-by-step guide including:
+- Termux setup commands
+- How to generate and host dictionary packs
+- APK build + install
+- Groq AI configuration
+- Moon+ Reader setup
+- Troubleshooting

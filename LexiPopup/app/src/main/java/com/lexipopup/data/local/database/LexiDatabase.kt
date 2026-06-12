@@ -34,7 +34,7 @@ import kotlinx.coroutines.CoroutineScope
         ChatSessionEntity::class,
         ChatMessageEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -227,6 +227,29 @@ abstract class LexiDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 7 → 8: Fix bad synonyms/antonyms data in existing rows.
+         *
+         * The Biology seeder previously stored antonyms as '' (empty string) and synonyms
+         * as raw comma-separated text instead of JSON arrays. Any row whose synonyms or
+         * antonyms column does not start with '[' is not a valid JSON array — replace it
+         * with '[]' so gson.fromJson never receives invalid input.
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    UPDATE dictionary_cache
+                    SET antonyms = '[]'
+                    WHERE antonyms IS NULL OR antonyms NOT LIKE '[%'
+                """.trimIndent())
+                db.execSQL("""
+                    UPDATE dictionary_cache
+                    SET synonyms = '[]'
+                    WHERE synonyms IS NULL OR synonyms NOT LIKE '[%'
+                """.trimIndent())
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
@@ -234,7 +257,7 @@ abstract class LexiDatabase : RoomDatabase() {
                 DATABASE_NAME
             )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

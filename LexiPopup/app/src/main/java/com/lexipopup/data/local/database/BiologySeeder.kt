@@ -570,20 +570,27 @@ object BiologySeeder {
         }
     }
 
+    private fun toJsonArray(csv: String): String {
+        if (csv.isBlank()) return "[]"
+        val items = csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        return "[" + items.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" } + "]"
+    }
+
     private fun seedSafely(db: SupportSQLiteDatabase, t: BioTerm, now: Long) {
         try {
+            val synonymsJson = toJsonArray(t.synonyms)
             db.execSQL("""
                 INSERT OR IGNORE INTO dictionary_cache
                 (word, mode, pronunciation, part_of_speech, short_meaning, detailed_meaning,
                  hindi_meaning, hindi_pronunciation, example_sentence, synonyms, antonyms,
                  etymology, difficulty_level, frequency_rating, source, created_at, last_accessed,
                  access_count, is_favorite, user_note, bio_ext_data)
-                VALUES (?, 'biology', ?, ?, ?, ?, ?, '', ?, ?, '', ?, ?, ?, 'seed', ?, 0, 0, 0, '', '{}')
+                VALUES (?, 'biology', ?, ?, ?, ?, ?, '', ?, ?, '[]', ?, ?, ?, 'seed', ?, 0, 0, 0, '', '{}')
             """, arrayOf(
                 t.word, t.pronunciation, t.partOfSpeech,
                 t.shortMeaning, t.detailedMeaning,
                 t.hindiMeaning, t.exampleSentence,
-                t.synonyms, t.etymology,
+                synonymsJson, t.etymology,
                 t.difficultyLevel.toString(), t.frequencyRating.toString(),
                 now.toString()
             ))

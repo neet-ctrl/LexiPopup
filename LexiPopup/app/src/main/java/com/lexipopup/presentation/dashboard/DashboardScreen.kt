@@ -1387,6 +1387,19 @@ private fun ButtonReorderPanel(
                     )
                 }
         ) {
+            // ── Live mini-preview — updates every time orderedIds or enabled state changes ──
+            ActionGridPreview(
+                orderedIds = orderedIds,
+                isEnabled  = ::isEnabled,
+                getIcon    = { id -> metaById[id]?.icon ?: Icons.Default.GridView },
+                getLabel   = { id -> metaById[id]?.label ?: id }
+            )
+
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            )
+
             orderedIds.forEachIndexed { index, id ->
                 val meta      = metaById[id] ?: return@forEachIndexed
                 val enabled   = isEnabled(id)
@@ -1489,5 +1502,274 @@ private fun ButtonReorderPanel(
                 }
             }
         }
+    }
+}
+
+// ── Action Grid Live Preview ───────────────────────────────────────────────────
+// Renders a scaled-down, real-time thumbnail of exactly how the popup's
+// 2-row button grid will appear with the current order and enabled states.
+
+@Composable
+private fun ActionGridPreview(
+    orderedIds: List<String>,
+    isEnabled: (String) -> Boolean,
+    getIcon: (String) -> androidx.compose.ui.graphics.vector.ImageVector,
+    getLabel: (String) -> String
+) {
+    // Compute which buttons land where — mirrors PopupActionGrid logic exactly
+    val enabled  = orderedIds.filter { isEnabled(it) }
+    val row1Ids  = enabled.take(5)
+    val row2Ids  = enabled.drop(5).take(4)
+    val hasMore  = enabled.size > 9
+    val row1Count = row1Ids.size
+    val row2Count = row2Ids.size + (if (hasMore) 1 else 0)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.surface,
+                RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // Header: label + live stats badge
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(
+                    Icons.Default.Visibility,
+                    contentDescription = null,
+                    tint  = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    "Live Preview",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            // Stats: "Row 1: 5  Row 2: 4  More: ●"
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PreviewStatChip("R1", row1Count, 5, MaterialTheme.colorScheme.primary)
+                PreviewStatChip("R2", row2Count, 5, MaterialTheme.colorScheme.secondary)
+                if (hasMore) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            "⋯ More",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Mini grid card — visually matches the real popup toolbar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape    = RoundedCornerShape(10.dp),
+            color    = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shadowElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp, horizontal = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Row 1
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    row1Ids.forEach { id ->
+                        MiniPreviewBtn(
+                            icon    = getIcon(id),
+                            label   = getLabel(id).replace("\n", " "),
+                            enabled = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    // Empty slots (greyed dashes)
+                    repeat(5 - row1Ids.size) { _ ->
+                        MiniEmptySlot(modifier = Modifier.weight(1f))
+                    }
+                }
+
+                // Row 2 (only if there are row-2 buttons or a More button)
+                if (row2Ids.isNotEmpty() || hasMore) {
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        row2Ids.forEach { id ->
+                            MiniPreviewBtn(
+                                icon    = getIcon(id),
+                                label   = getLabel(id).replace("\n", " "),
+                                enabled = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (hasMore) {
+                            MiniPreviewBtn(
+                                icon    = Icons.Default.MoreHoriz,
+                                label   = "More",
+                                enabled = true,
+                                isMore  = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        val filled = row2Ids.size + (if (hasMore) 1 else 0)
+                        repeat(5 - filled) { _ ->
+                            MiniEmptySlot(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+
+                // Page dots — matches real popup
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val dotActive   = MaterialTheme.colorScheme.primary
+                    val dotInactive = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                    repeat(3) { i ->
+                        Box(
+                            Modifier
+                                .padding(horizontal = 2.dp)
+                                .size(if (i == 0) 5.dp else 3.dp)
+                                .clip(CircleShape)
+                                .background(if (i == 0) dotActive else dotInactive)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Caption: disabled buttons not shown in popup
+        val disabledCount = orderedIds.count { !isEnabled(it) }
+        if (disabledCount > 0) {
+            Text(
+                "$disabledCount button${if (disabledCount > 1) "s" else ""} hidden (toggle on to show)",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewStatChip(
+    label: String,
+    count: Int,
+    max: Int,
+    color: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = color.copy(alpha = 0.13f)
+    ) {
+        Text(
+            "$label: $count/$max",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun MiniPreviewBtn(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    isMore: Boolean = false
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+
+    Column(
+        modifier = modifier.padding(vertical = 4.dp, horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (isMore) secondary.copy(alpha = 0.12f)
+                    else primary.copy(alpha = 0.12f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector  = icon,
+                contentDescription = null,
+                tint    = if (isMore) secondary else primary,
+                modifier = Modifier.size(15.dp)
+            )
+        }
+        Text(
+            text     = label,
+            style    = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+            color    = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.8f else 0.35f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun MiniEmptySlot(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(vertical = 4.dp, horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+                )
+        )
+        Text(
+            "—",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+            textAlign = TextAlign.Center
+        )
     }
 }

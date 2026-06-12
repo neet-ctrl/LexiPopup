@@ -106,4 +106,11 @@ class DashboardViewModel @Inject constructor(
             null
         }
     }
+
+    val isHindiDisclaimerShown: StateFlow<Boolean> = settingsDataStore.isHindiDisclaimerShown
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun markHindiDisclaimerShown() {
+        viewModelScope.launch { settingsDataStore.markHindiDisclaimerShown() }
+    }
 }

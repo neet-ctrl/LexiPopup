@@ -57,6 +57,7 @@ class SettingsDataStore @Inject constructor(
         val HYBRID_AUTO_SELECT = booleanPreferencesKey("hybrid_auto_select")
         val HYBRID_SHOW_COMPARISON = booleanPreferencesKey("hybrid_show_comparison")
         val ON_DEVICE_MODEL_ID = stringPreferencesKey("on_device_model_id")
+        val HINDI_DISCLAIMER_SHOWN = booleanPreferencesKey("hindi_disclaimer_shown")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -139,5 +140,11 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun markOnboardingDone() {
         dataStore.edit { it[ONBOARDING_DONE] = true }
+    }
+
+    val isHindiDisclaimerShown: Flow<Boolean> = dataStore.data.map { it[HINDI_DISCLAIMER_SHOWN] ?: false }
+
+    suspend fun markHindiDisclaimerShown() {
+        dataStore.edit { it[HINDI_DISCLAIMER_SHOWN] = true }
     }
 }

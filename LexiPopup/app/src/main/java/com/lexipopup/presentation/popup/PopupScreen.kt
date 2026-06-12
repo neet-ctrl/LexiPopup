@@ -1,7 +1,11 @@
 package com.lexipopup.presentation.popup
 
+import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.animation.core.*
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalConfiguration
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -62,9 +66,12 @@ fun PopupScreen(
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
 
-    // Drag offset
-    var offsetX by remember { mutableStateOf(0f) }
-    var offsetY by remember { mutableStateOf(0f) }
+    // Drag offset — Animatable for spring edge-snap on release
+    val coroutineScope = rememberCoroutineScope()
+    val animOffsetX = remember { Animatable(0f) }
+    val animOffsetY = remember { Animatable(0f) }
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     // Parallax tilt from accelerometer
     var parallax by remember { mutableStateOf(ParallaxOffset(0f, 0f)) }
@@ -178,23 +185,24 @@ fun PopupScreen(
             BubbleMode(
                 uiState = uiState,
                 onExpand = { viewModel.toggleBubble() },
-                modifier = Modifier.offset { IntOffset(offsetX.toInt(), offsetY.toInt()) }
+                modifier = Modifier.offset { IntOffset(animOffsetX.value.toInt(), animOffsetY.value.toInt()) }
             )
         } else {
             // Parallax offset in px → dp
             val parallaxX = with(density) { parallax.x.dp.toPx() }
             val parallaxY = with(density) { parallax.y.dp.toPx() }
 
-            val screenHeightFraction = popupHeightFraction.coerceIn(0.35f, 0.85f)
+            val popupWidthFraction = if (isLandscape) 0.65f else 0.88f
+            val screenHeightFraction = if (isLandscape) 0.9f else popupHeightFraction.coerceIn(0.35f, 0.85f)
 
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.88f)
+                    .fillMaxWidth(popupWidthFraction)
                     .fillMaxHeight(screenHeightFraction)
-                    .offset { IntOffset((offsetX + parallaxX).roundToInt(), (offsetY + parallaxY).roundToInt()) }
+                    .offset { IntOffset((animOffsetX.value + parallaxX).roundToInt(), (animOffsetY.value + parallaxY).roundToInt()) }
                     .scale(scaleAnim)
                     .graphicsLayer {
-                        shadowElevation = 28f + (offsetY.coerceIn(-200f, 200f) / 20f)
+                        shadowElevation = 28f + (animOffsetY.value.coerceIn(-200f, 200f) / 20f)
                         shape = RoundedCornerShape(28.dp)
                         clip = true
                         // Subtle 3D tilt from parallax
@@ -214,13 +222,27 @@ fun PopupScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Glassmorphism blur layer (API 31+)
+                    // Glassmorphism layer — native blur on API 31+, layered gradient fallback for API 29/30
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .blur(20.dp)
                                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.07f)
+                                        )
+                                    )
+                                )
                         )
                     }
 
@@ -251,14 +273,28 @@ fun PopupScreen(
                             shimmerOffset = shimmerOffset,
                             onDrag = { dx, dy ->
                                 if (settings.enableDragging) {
-                                    val bound = 350f; val rf = 0.25f
-                                    offsetX += if (abs(offsetX) < bound) dx else dx * rf
-                                    offsetY += if (abs(offsetY) < bound) dy else dy * rf
+                                    coroutineScope.launch {
+                                        val bound = 350f; val rf = 0.25f
+                                        animOffsetX.snapTo(animOffsetX.value + if (abs(animOffsetX.value) < bound) dx else dx * rf)
+                                        animOffsetY.snapTo(animOffsetY.value + if (abs(animOffsetY.value) < bound) dy else dy * rf)
+                                    }
                                 }
                             },
                             onDragEnd = {
-                                // Edge snap: snap to nearest horizontal edge
-                                // (for now just prevent going off-screen; full edge snap needs WindowInsets)
+                                if (settings.enableDragging) {
+                                    coroutineScope.launch {
+                                        val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+                                        val cardFraction = if (isLandscape) 0.65f else 0.88f
+                                        val maxEdgeX = (screenWidthPx * (1f - cardFraction)) / 2f * 0.9f
+                                        val targetX = when {
+                                            animOffsetX.value >  maxEdgeX * 0.3f ->  maxEdgeX
+                                            animOffsetX.value < -maxEdgeX * 0.3f -> -maxEdgeX
+                                            else -> 0f
+                                        }
+                                        launch { animOffsetX.animateTo(targetX, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)) }
+                                        launch { animOffsetY.animateTo(0f,      spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)) }
+                                    }
+                                }
                             },
                             onClose = safeClose,
                             onMinimize = { viewModel.toggleBubble() },
@@ -325,7 +361,20 @@ fun PopupScreen(
                                     noteText = ""
                                     showNoteDialog = true
                                 },
-                                onFullDetails = { /* navigate to dashboard */ }
+                                onFullDetails = {
+                                    val s = uiState as? PopupUiState.Success
+                                    if (s != null) {
+                                        context.startActivity(
+                                            android.content.Intent(
+                                                context,
+                                                com.lexipopup.presentation.dashboard.MainActivity::class.java
+                                            ).apply {
+                                                putExtra("lookup_word", s.entry.word)
+                                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                            }
+                                        )
+                                    }
+                                }
                             )
                         }
 

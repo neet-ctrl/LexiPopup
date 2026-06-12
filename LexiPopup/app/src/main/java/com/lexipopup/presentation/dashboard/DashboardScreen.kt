@@ -58,6 +58,7 @@ sealed class AppDestination {
     object About : AppDestination()
     object DownloadPacks : AppDestination()
     object AiSettings : AppDestination()
+    object Backup : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,7 +66,8 @@ sealed class AppDestination {
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onRequestOverlayPermission: () -> Unit,
-    hasOverlayPermission: Boolean
+    hasOverlayPermission: Boolean,
+    startWord: String? = null
 ) {
     val settings by viewModel.settings.collectAsState()
     val todayCount by viewModel.todayCount.collectAsState()
@@ -75,12 +77,45 @@ fun DashboardScreen(
     val weeklyStats by viewModel.weeklyStats.collectAsState()
     val activityData by viewModel.activityHeatmapData.collectAsState()
     val difficultyDistribution by viewModel.difficultyDistribution.collectAsState()
+    val isHindiDisclaimerShown by viewModel.isHindiDisclaimerShown.collectAsState()
 
     val browserVm: DictionaryBrowserViewModel = hiltViewModel()
     val wordOfDay by browserVm.wordOfDay.collectAsState()
 
     var destination by remember { mutableStateOf<AppDestination>(AppDestination.Home) }
     val context = LocalContext.current
+
+    // Navigate to word detail when launched via "Full Details" from PopupActivity
+    LaunchedEffect(startWord) {
+        if (!startWord.isNullOrBlank()) destination = AppDestination.WordDetail(startWord)
+    }
+
+    // Hindi WordNet first-run non-commercial licensing acknowledgment (shown once)
+    if (!isHindiDisclaimerShown) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("⚖️ Data Licensing Notice") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("LexiPopup uses these open data sources:", style = MaterialTheme.typography.bodyMedium)
+                    Text("• Wiktionary — CC BY-SA 3.0 (free)", style = MaterialTheme.typography.bodySmall)
+                    Text("• WordNet 3.1 — Princeton (free for all use)", style = MaterialTheme.typography.bodySmall)
+                    Text("• Hindi WordNet — IIT Bombay CFILT, GNU FDL", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Hindi WordNet is licensed for non-commercial personal use only. By continuing you agree to use LexiPopup for personal, non-commercial purposes.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.markHindiDisclaimerShown() }) {
+                    Text("I Understand — Personal Use")
+                }
+            }
+        )
+    }
 
     // Word-of-day click → open detail
     val onWordSelected: (String) -> Unit = { word -> destination = AppDestination.WordDetail(word) }
@@ -92,6 +127,7 @@ fun DashboardScreen(
             AppDestination.About         -> AppDestination.Settings
             AppDestination.DownloadPacks -> AppDestination.Settings
             AppDestination.AiSettings   -> AppDestination.Settings
+            AppDestination.Backup        -> AppDestination.Settings
             else -> AppDestination.Home
         }
     }
@@ -117,6 +153,11 @@ fun DashboardScreen(
         AppDestination.AiSettings -> {
             val aiVm: AiSettingsViewModel = hiltViewModel()
             AiSettingsScreen(viewModel = aiVm, onBack = { destination = AppDestination.Settings })
+            return
+        }
+        AppDestination.Backup -> {
+            val backupVm: com.lexipopup.presentation.backup.BackupViewModel = hiltViewModel()
+            com.lexipopup.presentation.backup.BackupRestoreScreen(viewModel = backupVm, onBack = { destination = AppDestination.Settings })
             return
         }
         else -> Unit
@@ -208,7 +249,8 @@ fun DashboardScreen(
                     viewModel = viewModel,
                     context = context,
                     onManagePacks = { destination = AppDestination.DownloadPacks },
-                    onOpenAiSettings = { destination = AppDestination.AiSettings }
+                    onOpenAiSettings = { destination = AppDestination.AiSettings },
+                    onOpenBackup = { destination = AppDestination.Backup }
                 )
                 else -> Unit
             }
@@ -516,7 +558,8 @@ fun SettingsScreen(
     viewModel: DashboardViewModel,
     context: android.content.Context,
     onManagePacks: () -> Unit = {},
-    onOpenAiSettings: () -> Unit = {}
+    onOpenAiSettings: () -> Unit = {},
+    onOpenBackup: () -> Unit = {}
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -673,6 +716,17 @@ fun SettingsScreen(
                 Text("Export Settings as JSON")
             }
         }
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+        item { SectionHeader("💾 Backup & Restore") }
+        item {
+            OutlinedButton(onClick = onOpenBackup, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.CloudUpload, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Backup & Restore Vocabulary Data")
+            }
+        }
+
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
         item {
             Button(
                 onClick = { showResetDialog = true },

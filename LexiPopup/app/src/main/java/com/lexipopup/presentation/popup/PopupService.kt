@@ -3,30 +3,32 @@ package com.lexipopup.presentation.popup
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import com.lexipopup.utils.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import javax.inject.Inject
 
 /**
- * Optional foreground service for keeping LexiPopup active for faster popup launch.
- * Not required for basic operation — PopupActivity handles everything.
+ * Foreground service that keeps LexiPopup alive for faster popup launch.
+ * Runs at IMPORTANCE_MIN — invisible in the status bar, no sound/vibration.
+ * Started by BootReceiver on device restart and by MainActivity on first launch.
  */
 @AndroidEntryPoint
 class PopupService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Inject lateinit var notificationHelper: NotificationHelper
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForeground(
+            NotificationHelper.SERVICE_NOTIFICATION_ID,
+            notificationHelper.buildServiceNotification()
+        )
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        scope.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 }

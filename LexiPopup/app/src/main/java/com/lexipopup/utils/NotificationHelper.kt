@@ -15,10 +15,12 @@ class NotificationHelper @Inject constructor(
     private val context: Context
 ) {
     companion object {
-        const val CHANNEL_ID          = "lexipopup_quick_search"
+        const val CHANNEL_ID           = "lexipopup_quick_search"
         const val CHANNEL_FLASHCARD_ID = "lexipopup_flashcard_review"
-        const val NOTIFICATION_ID          = 1001
+        const val CHANNEL_SERVICE_ID   = "lexipopup_service"
+        const val NOTIFICATION_ID           = 1001
         const val NOTIFICATION_FLASHCARD_ID = 1002
+        const val SERVICE_NOTIFICATION_ID   = 1003
     }
 
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -39,8 +41,37 @@ class NotificationHelper @Inject constructor(
             setShowBadge(true)
         }
 
+        val serviceChannel = NotificationChannel(
+            CHANNEL_SERVICE_ID, "LexiPopup Background Service", NotificationManager.IMPORTANCE_MIN
+        ).apply {
+            description = "Keeps LexiPopup ready for instant word lookup"
+            setShowBadge(false)
+            setSound(null, null)
+        }
+
         manager.createNotificationChannel(searchChannel)
         manager.createNotificationChannel(flashcardChannel)
+        manager.createNotificationChannel(serviceChannel)
+    }
+
+    fun buildServiceNotification(): android.app.Notification {
+        val intent = Intent(context, PopupActivity::class.java).apply {
+            putExtra("mode", "manual_search")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, SERVICE_NOTIFICATION_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_SERVICE_ID)
+            .setContentTitle("LexiPopup")
+            .setContentText("Ready for instant word lookup")
+            .setSmallIcon(android.R.drawable.ic_menu_search)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
     }
 
     fun showPersistentNotification() {
@@ -78,7 +109,7 @@ class NotificationHelper @Inject constructor(
     fun showFlashcardReminderNotification(dueCount: Int) {
         if (!manager.areNotificationsEnabled()) return
 
-        val intent = Intent(context, com.lexipopup.presentation.MainActivity::class.java).apply {
+        val intent = Intent(context, com.lexipopup.presentation.dashboard.MainActivity::class.java).apply {
             putExtra("tab", "flashcards")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }

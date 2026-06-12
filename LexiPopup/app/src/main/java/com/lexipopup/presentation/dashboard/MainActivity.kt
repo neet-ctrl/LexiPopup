@@ -14,6 +14,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.lifecycleScope
@@ -33,8 +35,11 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var settingsDataStore: SettingsDataStore
 
+    private var startWord by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startWord = intent?.getStringExtra("lookup_word")
 
         lifecycleScope.launch {
             val settings = settingsDataStore.settings.first()
@@ -55,11 +60,18 @@ class MainActivity : ComponentActivity() {
                     DashboardScreen(
                         viewModel = viewModel,
                         onRequestOverlayPermission = { requestOverlayPermission() },
-                        hasOverlayPermission = Settings.canDrawOverlays(this)
+                        hasOverlayPermission = Settings.canDrawOverlays(this),
+                        startWord = startWord
                     )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        startWord = intent.getStringExtra("lookup_word")
     }
 
     private fun requestOverlayPermission() {

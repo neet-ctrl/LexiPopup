@@ -325,16 +325,58 @@ private fun OnDeviceSettingsCard(
                 }
             }
 
+            // Download confirmation dialog
+            var showDownloadConfirmDialog by remember { mutableStateOf(false) }
+            if (showDownloadConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDownloadConfirmDialog = false },
+                    title = { Text("Download AI Model?") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("You're about to download ${selectedModel.displayName}.", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(Modifier.height(2.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text("Download size: ${selectedModel.sizeGb} GB", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Memory, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text("RAM required: ${selectedModel.ramRequiredGb} GB", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Wifi, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
+                                Text("Use Wi-Fi to avoid mobile data charges.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                            }
+                            Text(
+                                "Once downloaded the model works fully offline, forever.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { showDownloadConfirmDialog = false; onDownload() }) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Download (${selectedModel.sizeGb} GB)")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDownloadConfirmDialog = false }) { Text("Cancel") }
+                    }
+                )
+            }
+
             // Status + action
             when (status) {
                 is OnDeviceModelStatus.NotDownloaded -> {
-                    OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { showDownloadConfirmDialog = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Download Model (${selectedModel.sizeGb} GB)")
                     }
                     Text(
-                        "Requires ${selectedModel.ramRequiredGb} GB RAM. Download once, works forever offline.",
+                        "Requires ${selectedModel.ramRequiredGb} GB RAM · ${selectedModel.sizeGb} GB download · works offline forever.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

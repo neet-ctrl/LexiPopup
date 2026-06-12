@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
@@ -63,11 +64,11 @@ fun PopupScreen(
     viewModel: PopupViewModel,
     onClose: () -> Unit
 ) {
-    val uiState       by viewModel.uiState.collectAsState()
-    val settings      by viewModel.settings.collectAsState()
-    val suggestions   by viewModel.suggestions.collectAsState()
-    val searchQuery   by viewModel.searchQuery.collectAsState()
-    val isBubble      by viewModel.isBubbleMode.collectAsState()
+    val uiState        by viewModel.uiState.collectAsState()
+    val settings       by viewModel.settings.collectAsState()
+    val suggestions    by viewModel.suggestions.collectAsState()
+    val searchQuery    by viewModel.searchQuery.collectAsState()
+    val isBubble       by viewModel.isBubbleMode.collectAsState()
     val hybridAiResult by viewModel.hybridAiResult.collectAsState()
 
     val context       = LocalContext.current
@@ -81,19 +82,17 @@ fun PopupScreen(
     val animX = remember { Animatable(0f) }
     val animY = remember { Animatable(0f) }
 
-    // ── Bubble independent position (completely separate from main window) ────
+    // ── Bubble position ───────────────────────────────────────────────────────
     val bubbleX = remember { Animatable(0f) }
-    val bubbleY = remember { Animatable(100f) }  // slightly below center by default
+    val bubbleY = remember { Animatable(100f) }
 
     fun snapBubbleToEdge() {
         scope.launch {
             val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
-            // Snap to left or right based on current X position
             val snapX = if (bubbleX.value >= 0f)
                 screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() }
             else
                 -(screenW / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 12.dp.toPx() })
-            // Clamp Y so bubble stays within screen bounds
             val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
             val maxY = screenH / 2f - with(density) { 44.dp.toPx() } / 2f - with(density) { 24.dp.toPx() }
             val snapY = bubbleY.value.coerceIn(-maxY, maxY)
@@ -102,7 +101,6 @@ fun PopupScreen(
         }
     }
 
-    // Reset bubble to a nice default when entering bubble mode
     LaunchedEffect(isBubble) {
         if (isBubble) {
             val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
@@ -122,60 +120,60 @@ fun PopupScreen(
         }
     }
 
-    // ── Window size state ────────────────────────────────────────────────────
+    // ── Window size state ─────────────────────────────────────────────────────
     var widthFraction  by remember { mutableStateOf(settings.popupWidthFraction.coerceIn(0.50f, 0.95f)) }
-    var heightFraction by remember { mutableStateOf(settings.popupHeightFraction.coerceIn(0.35f, 0.88f)) }
+    var heightFraction by remember { mutableStateOf(settings.popupHeightFraction.coerceIn(0.35f, 0.92f)) }
 
-    // ── Window collapse mode ─────────────────────────────────────────────────
+    // ── Window collapse mode ──────────────────────────────────────────────────
     var windowMode by remember { mutableStateOf(PopupWindowState.FULL) }
     val effectiveWindowState = when {
-        isBubble                             -> PopupWindowState.BUBBLE
+        isBubble                              -> PopupWindowState.BUBBLE
         windowMode == PopupWindowState.EDGE_LEFT  -> PopupWindowState.EDGE_LEFT
         windowMode == PopupWindowState.EDGE_RIGHT -> PopupWindowState.EDGE_RIGHT
-        else                                 -> PopupWindowState.FULL
+        else                                  -> PopupWindowState.FULL
     }
 
-    // ── Parallax tilt ────────────────────────────────────────────────────────
+    // ── Parallax tilt ─────────────────────────────────────────────────────────
     var parallax by remember { mutableStateOf(ParallaxOffset(0f, 0f)) }
     LaunchedEffect(Unit) {
         SensorHelper.parallaxFlow(context).distinctUntilChanged().collect { parallax = it }
     }
 
-    // ── Entrance / exit animation ────────────────────────────────────────────
+    // ── Entrance / exit animation ─────────────────────────────────────────────
     var isClosing   by remember { mutableStateOf(false) }
-    var scaleTarget by remember { mutableStateOf(0.85f) }
+    var scaleTarget by remember { mutableStateOf(0.88f) }
     var alphaTarget by remember { mutableStateOf(0f) }
     val scaleAnim by animateFloatAsState(
-        targetValue = scaleTarget,
+        targetValue   = scaleTarget,
         animationSpec = if (isClosing) tween(180, easing = FastOutLinearInEasing)
-                        else spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+                        else spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow),
         label = "popup_scale"
     )
     val alphaAnim by animateFloatAsState(
-        targetValue = alphaTarget,
-        animationSpec = tween(if (isClosing) 180 else 140),
+        targetValue   = alphaTarget,
+        animationSpec = tween(if (isClosing) 160 else 130),
         label = "popup_alpha"
     )
     LaunchedEffect(Unit) { scaleTarget = 1f; alphaTarget = 1f }
     LaunchedEffect(isClosing) {
-        if (isClosing) { scaleTarget = 0.9f; alphaTarget = 0f; delay(200); onClose() }
+        if (isClosing) { scaleTarget = 0.92f; alphaTarget = 0f; delay(200); onClose() }
     }
     val safeClose = { isClosing = true }
 
-    // ── Shimmer border ───────────────────────────────────────────────────────
+    // ── Shimmer border ────────────────────────────────────────────────────────
     val shimmerInf = rememberInfiniteTransition(label = "shimmer")
     val shimmerOffset by shimmerInf.animateFloat(
         initialValue = -1f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2200), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(2400), RepeatMode.Restart),
         label = "shimmer_offset"
     )
 
-    // ── Misc dialog state ────────────────────────────────────────────────────
+    // ── Dialog state ──────────────────────────────────────────────────────────
     var showNoteDialog by remember { mutableStateOf(false) }
     var noteText       by remember { mutableStateOf("") }
     var showParticles  by remember { mutableStateOf(false) }
 
-    // ── Voice search launcher ────────────────────────────────────────────────
+    // ── Voice search ──────────────────────────────────────────────────────────
     val voiceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -187,7 +185,7 @@ fun PopupScreen(
         }
     }
 
-    // ── Collapse helpers ─────────────────────────────────────────────────────
+    // ── Collapse helpers ──────────────────────────────────────────────────────
     fun collapseToEdge(side: PopupWindowState) {
         scope.launch {
             val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
@@ -208,7 +206,6 @@ fun PopupScreen(
         scope.launch {
             val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
             val threshold = screenW * 0.30f
-
             if (settings.enableEdgeCollapse) {
                 when {
                     animX.value > threshold -> {
@@ -229,7 +226,6 @@ fun PopupScreen(
                     }
                 }
             }
-            // Normal edge-snap spring
             val cardFraction = if (isLandscape) 0.65f else widthFraction
             val maxEdgeX = (screenW * (1f - cardFraction)) / 2f * 0.9f
             val snapX = when {
@@ -238,17 +234,16 @@ fun PopupScreen(
                 else -> 0f
             }
             launch { animX.animateTo(snapX, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)) }
-            launch { animY.animateTo(0f,    spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)) }
+            launch { animY.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)) }
             viewModel.saveWindowPosition(snapX, 0f)
         }
     }
 
-    // ── Save size when it changes ────────────────────────────────────────────
     LaunchedEffect(widthFraction, heightFraction) {
         viewModel.saveWindowSize(widthFraction, heightFraction)
     }
 
-    // ── Save Note dialog ─────────────────────────────────────────────────────
+    // ── Save Note dialog ──────────────────────────────────────────────────────
     if (showNoteDialog) {
         AlertDialog(
             onDismissRequest = { showNoteDialog = false },
@@ -272,15 +267,15 @@ fun PopupScreen(
         )
     }
 
-    // ── Root container ───────────────────────────────────────────────────────
+    // ── Root container ────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Scrim — only in FULL mode
+        // Scrim — FULL mode only
         if (effectiveWindowState == PopupWindowState.FULL) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.38f))
+                    .background(Color.Black.copy(alpha = 0.32f))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -288,26 +283,24 @@ fun PopupScreen(
             )
         }
 
-        // Animated window content
         AnimatedContent(
             targetState = effectiveWindowState,
             transitionSpec = {
-                val toEdge = targetState == PopupWindowState.EDGE_LEFT || targetState == PopupWindowState.EDGE_RIGHT
+                val toEdge   = targetState  == PopupWindowState.EDGE_LEFT || targetState  == PopupWindowState.EDGE_RIGHT
                 val fromEdge = initialState == PopupWindowState.EDGE_LEFT || initialState == PopupWindowState.EDGE_RIGHT
                 when {
-                    toEdge -> fadeIn(tween(180)) togetherWith fadeOut(tween(150))
-                    fromEdge -> (fadeIn(tween(220)) + scaleIn(spring(dampingRatio = 0.7f), 0.8f)) togetherWith fadeOut(tween(150))
+                    toEdge   -> fadeIn(tween(180)) togetherWith fadeOut(tween(150))
+                    fromEdge -> (fadeIn(tween(220)) + scaleIn(spring(dampingRatio = 0.7f), 0.82f)) togetherWith fadeOut(tween(150))
                     targetState == PopupWindowState.BUBBLE ->
                         (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.7f), 0.5f)) togetherWith
                         (fadeOut(tween(180)) + scaleOut(tween(180), 0.5f))
-                    else -> (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.8f), 0.85f)) togetherWith fadeOut(tween(150))
+                    else -> (fadeIn(tween(200)) + scaleIn(spring(dampingRatio = 0.8f), 0.88f)) togetherWith fadeOut(tween(150))
                 }
             },
             label = "window_state"
         ) { state ->
             when (state) {
 
-                // ── Bubble mode — own drag state, snaps to screen edge ────────
                 PopupWindowState.BUBBLE -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         BubbleMode(
@@ -316,9 +309,7 @@ fun PopupScreen(
                             modifier = Modifier
                                 .offset { IntOffset(bubbleX.value.toInt(), bubbleY.value.toInt()) }
                                 .pointerInput(Unit) {
-                                    detectDragGestures(
-                                        onDragEnd = { snapBubbleToEdge() }
-                                    ) { _, drag ->
+                                    detectDragGestures(onDragEnd = { snapBubbleToEdge() }) { _, drag ->
                                         scope.launch {
                                             bubbleX.snapTo(bubbleX.value + drag.x)
                                             bubbleY.snapTo(bubbleY.value + drag.y)
@@ -329,7 +320,6 @@ fun PopupScreen(
                     }
                 }
 
-                // ── Edge-collapsed tab (left) ─────────────────────────────────
                 PopupWindowState.EDGE_LEFT -> {
                     Box(Modifier.fillMaxSize()) {
                         EdgeCollapsedTab(
@@ -341,7 +331,6 @@ fun PopupScreen(
                     }
                 }
 
-                // ── Edge-collapsed tab (right) ────────────────────────────────
                 PopupWindowState.EDGE_RIGHT -> {
                     Box(Modifier.fillMaxSize()) {
                         EdgeCollapsedTab(
@@ -357,8 +346,8 @@ fun PopupScreen(
                 PopupWindowState.FULL -> {
                     val parallaxXPx = with(density) { parallax.x.dp.toPx() }
                     val parallaxYPx = with(density) { parallax.y.dp.toPx() }
-                    val cardW = if (isLandscape) 0.65f else widthFraction.coerceIn(0.50f, 0.95f)
-                    val cardH = if (isLandscape) 0.90f else heightFraction.coerceIn(0.35f, 0.88f)
+                    val cardW = if (isLandscape) 0.68f else widthFraction.coerceIn(0.52f, 0.96f)
+                    val cardH = if (isLandscape) 0.92f else heightFraction.coerceIn(0.38f, 0.92f)
 
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Card(
@@ -373,53 +362,51 @@ fun PopupScreen(
                                 }
                                 .scale(scaleAnim)
                                 .graphicsLayer {
-                                    shadowElevation = 28f + (animY.value.coerceIn(-200f, 200f) / 20f)
-                                    shape = RoundedCornerShape(28.dp)
+                                    shadowElevation = 32f
+                                    shape = RoundedCornerShape(24.dp)
                                     clip = true
-                                    rotationX = (parallax.y * 0.4f).coerceIn(-2f, 2f)
-                                    rotationY = (-parallax.x * 0.4f).coerceIn(-2f, 2f)
+                                    rotationX = (parallax.y * 0.35f).coerceIn(-2f, 2f)
+                                    rotationY = (-parallax.x * 0.35f).coerceIn(-2f, 2f)
                                     cameraDistance = 12f * density.density
                                     alpha = alphaAnim
                                 }
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
-                                ) { /* consume tap, don't close */ },
-                            shape = RoundedCornerShape(28.dp),
+                                ) { /* consume */ },
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
                             ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+                            elevation = CardDefaults.cardElevation(defaultElevation = 20.dp)
                         ) {
                             Box(Modifier.fillMaxSize()) {
-                                // Glassmorphism
+
+                                // Glassmorphism background
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    Box(
-                                        Modifier.fillMaxSize().blur(20.dp)
-                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
-                                    )
+                                    Box(Modifier.fillMaxSize().blur(24.dp)
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)))
                                 } else {
-                                    Box(
-                                        Modifier.fillMaxSize().background(
-                                            Brush.verticalGradient(listOf(
-                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.07f)
-                                            ))
-                                        )
-                                    )
+                                    Box(Modifier.fillMaxSize().background(
+                                        Brush.verticalGradient(listOf(
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.06f)
+                                        ))
+                                    ))
                                 }
 
                                 Column(Modifier.fillMaxSize()) {
-                                    // Shimmer border line
+
+                                    // ── Shimmer accent line ───────────────────
                                     Box(
                                         Modifier.fillMaxWidth().height(3.dp).background(
                                             Brush.horizontalGradient(
                                                 colors = listOf(
                                                     Color.Transparent,
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-                                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f),
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                                                     Color.Transparent
                                                 ),
                                                 startX = shimmerOffset * 1200f,
@@ -428,55 +415,93 @@ fun PopupScreen(
                                         )
                                     )
 
-                                    // Header
+                                    // ── Drag pill ─────────────────────────────
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp, bottom = 2.dp)
+                                            .pointerInput(Unit) {
+                                                detectDragGestures(onDragEnd = {
+                                                    if (settings.enableDragging) handleDragEnd()
+                                                }) { _, d ->
+                                                    if (settings.enableDragging) {
+                                                        scope.launch {
+                                                            val bound = 360f; val rf = 0.25f
+                                                            animX.snapTo(animX.value + if (abs(animX.value) < bound) d.x else d.x * rf)
+                                                            animY.snapTo(animY.value + if (abs(animY.value) < bound) d.y else d.y * rf)
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            Modifier
+                                                .width(36.dp)
+                                                .height(4.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f))
+                                        )
+                                    }
+
+                                    // ── Header ────────────────────────────────
                                     PopupHeader(
-                                        uiState        = uiState,
-                                        settings       = settings,
-                                        shimmerOffset  = shimmerOffset,
-                                        onDrag         = { dx, dy ->
+                                        uiState          = uiState,
+                                        settings         = settings,
+                                        onDrag           = { dx, dy ->
                                             if (settings.enableDragging) {
                                                 scope.launch {
-                                                    val bound = 350f; val rf = 0.25f
+                                                    val bound = 360f; val rf = 0.25f
                                                     animX.snapTo(animX.value + if (abs(animX.value) < bound) dx else dx * rf)
                                                     animY.snapTo(animY.value + if (abs(animY.value) < bound) dy else dy * rf)
                                                 }
                                             }
                                         },
-                                        onDragEnd      = { if (settings.enableDragging) handleDragEnd() },
-                                        onClose        = safeClose,
-                                        onCollapse     = { collapseButtonTapped() },
-                                        onSpeakWord    = { viewModel.speakWord(context) },
+                                        onDragEnd        = { if (settings.enableDragging) handleDragEnd() },
+                                        onClose          = safeClose,
+                                        onCollapse       = { collapseButtonTapped() },
+                                        onSpeakWord      = { viewModel.speakWord(context) },
                                         onToggleFavorite = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             viewModel.toggleFavorite()
                                             showParticles = true
-                                        }
+                                        },
+                                        onManualSearch   = { viewModel.setManualSearchMode() }
                                     )
 
-                                    HorizontalDivider(thickness = 0.5.dp)
+                                    // ── Word info row (POS + frequency + difficulty) ──
+                                    val successEntry = (uiState as? PopupUiState.Success)?.entry
+                                    if (successEntry != null) {
+                                        WordInfoRow(entry = successEntry, settings = settings)
+                                    }
 
-                                    // Content area
+                                    HorizontalDivider(
+                                        thickness = 0.6.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
+
+                                    // ── Body ──────────────────────────────────
                                     Box(Modifier.weight(1f)) {
                                         androidx.compose.animation.Crossfade(
-                                            targetState  = uiState,
+                                            targetState   = uiState,
                                             animationSpec = tween(200),
-                                            label        = "content_crossfade"
+                                            label         = "content_crossfade"
                                         ) { st ->
                                             when (st) {
                                                 is PopupUiState.Loading -> PopupSkeleton()
                                                 is PopupUiState.Success -> PopupContent(
-                                                    entry            = st.entry,
-                                                    settings         = settings,
-                                                    onWordChipClick  = { w -> viewModel.lookupWord(w) }
+                                                    entry           = st.entry,
+                                                    settings        = settings,
+                                                    onWordChipClick = { w -> viewModel.lookupWord(w) }
                                                 )
-                                                is PopupUiState.Error  -> PopupError(st.message)
+                                                is PopupUiState.Error -> PopupError(st.message)
                                                 is PopupUiState.ManualSearch,
-                                                is PopupUiState.Idle   -> ManualSearchContent(
-                                                    query          = searchQuery,
-                                                    suggestions    = suggestions,
-                                                    onQueryChange  = { viewModel.onSearchQueryChange(it) },
-                                                    onSearch       = { viewModel.lookupWord(it) },
-                                                    onVoiceSearch  = {
+                                                is PopupUiState.Idle  -> ManualSearchContent(
+                                                    query         = searchQuery,
+                                                    suggestions   = suggestions,
+                                                    onQueryChange = { viewModel.onSearchQueryChange(it) },
+                                                    onSearch      = { viewModel.lookupWord(it) },
+                                                    onVoiceSearch = {
                                                         try {
                                                             voiceLauncher.launch(
                                                                 Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -491,7 +516,7 @@ fun PopupScreen(
                                         }
                                     }
 
-                                    // Hybrid AI comparison panel
+                                    // ── Hybrid AI comparison ──────────────────
                                     if (uiState is PopupUiState.Success &&
                                         settings.hybridShowComparison &&
                                         hybridAiResult != null
@@ -500,10 +525,13 @@ fun PopupScreen(
                                         HybridComparisonPanel(hybridAiResult = hybridAiResult!!)
                                     }
 
-                                    // Scrollable action bar
+                                    // ── Bottom action grid ────────────────────
                                     if (uiState is PopupUiState.Success) {
-                                        HorizontalDivider(thickness = 0.5.dp)
-                                        PopupActionBar(
+                                        HorizontalDivider(
+                                            thickness = 0.6.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                        )
+                                        PopupActionGrid(
                                             settings       = settings,
                                             haptic         = haptic,
                                             onCopy         = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.copyToClipboard(context) },
@@ -528,30 +556,31 @@ fun PopupScreen(
                                         )
                                     }
 
-                                    // Resize handle (corner ◢ — drag diagonally)
+                                    // ── Resize corner handle ──────────────────
                                     if (settings.enableResizing) {
                                         Box(
-                                            modifier = Modifier.fillMaxWidth(),
+                                            Modifier.fillMaxWidth(),
                                             contentAlignment = Alignment.BottomEnd
                                         ) {
                                             Icon(
                                                 Icons.Default.OpenInFull,
                                                 contentDescription = "Resize",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                                                 modifier = Modifier
-                                                    .size(22.dp)
-                                                    .padding(bottom = 4.dp, end = 4.dp)
+                                                    .size(20.dp)
+                                                    .padding(bottom = 3.dp, end = 3.dp)
                                                     .pointerInput(Unit) {
                                                         detectDragGestures { _, dragAmount ->
                                                             val dy = dragAmount.y / size.height.coerceAtLeast(1)
                                                             val dx = dragAmount.x / size.width.coerceAtLeast(1)
-                                                            heightFraction = (heightFraction + dy).coerceIn(0.35f, 0.88f)
-                                                            widthFraction  = (widthFraction  + dx * 0.5f).coerceIn(0.50f, 0.95f)
+                                                            heightFraction = (heightFraction + dy).coerceIn(0.38f, 0.92f)
+                                                            widthFraction  = (widthFraction  + dx * 0.5f).coerceIn(0.52f, 0.96f)
                                                         }
                                                     }
                                             )
                                         }
                                     }
+
                                 } // end Column
 
                                 // Particle burst on favorite
@@ -565,155 +594,113 @@ fun PopupScreen(
                                 }
                             } // end Box inside Card
                         } // end Card
-                    } // end Box(Center)
+                    } // end Box Center
                 }
             } // when
         } // AnimatedContent
     } // root Box
 }
 
-// ── Edge-collapsed tab (YouTube-style) ────────────────────────────────────────
-
-@Composable
-fun EdgeCollapsedTab(
-    side: String,         // "left" | "right"
-    word: String,
-    onExpand: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val glow by rememberInfiniteTransition(label = "tab_glow").animateFloat(
-        initialValue = 0.70f, targetValue = 1.00f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "glow_alpha"
-    )
-    val shape = if (side == "left")
-        RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)
-    else
-        RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
-
-    val firstLetter = word.firstOrNull()?.uppercase() ?: "L"
-
-    Surface(
-        onClick = onExpand,
-        modifier = modifier
-            .width(48.dp)
-            .height(120.dp),
-        shape = shape,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = glow),
-        shadowElevation = 18.dp
-    ) {
-        // Shimmer border on open side
-        Box(contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)
-            ) {
-                Text(
-                    firstLetter,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(Modifier.height(6.dp))
-                Icon(
-                    imageVector = if (side == "left") Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
-                    contentDescription = "Tap to expand",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f)
-                )
-            }
-        }
-    }
-}
-
-// ── Particle burst ────────────────────────────────────────────────────────────
-
-@Composable
-fun ParticleBurst(modifier: Modifier, onFinish: () -> Unit) {
-    val anim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { anim.animateTo(1f, tween(700)); onFinish() }
-    val progress = anim.value
-    val colors = listOf(Color(0xFFFFC107), Color(0xFFFF5722), Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF2196F3))
-    androidx.compose.foundation.Canvas(modifier = modifier.size(100.dp)) {
-        repeat(12) { i ->
-            val angle = (i * 30f) * (Math.PI / 180f).toFloat()
-            val r = progress * 80f
-            drawCircle(
-                color = colors[i % colors.size].copy(alpha = (1f - progress).coerceIn(0f, 1f)),
-                radius = 6f * (1f - progress * 0.5f),
-                center = Offset(center.x + r * kotlin.math.cos(angle), center.y + r * kotlin.math.sin(angle))
-            )
-        }
-    }
-}
-
-// ── Header ────────────────────────────────────────────────────────────────────
+// ── Header ─────────────────────────────────────────────────────────────────────
+// Screenshot layout: [☰]  WORD 🔊  /pron/          [★][✕]
 
 @Composable
 fun PopupHeader(
     uiState: PopupUiState,
     settings: AppSettings,
-    shimmerOffset: Float,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     onClose: () -> Unit,
     onCollapse: () -> Unit,
     onSpeakWord: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onManualSearch: () -> Unit
 ) {
+    val isFav = (uiState as? PopupUiState.Success)?.entry?.isFavorite ?: false
+    val primaryColor = MaterialTheme.colorScheme.primary
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 6.dp)
             .pointerInput(Unit) {
-                detectDragGestures(onDragEnd = { onDragEnd() }) { _, d ->
-                    onDrag(d.x, d.y)
-                }
+                detectDragGestures(onDragEnd = { onDragEnd() }) { _, d -> onDrag(d.x, d.y) }
             },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Drag handle (visual only)
-        if (settings.enableDragging) {
+        // Left: menu/collapse button in rounded-square container
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    if (settings.enableCollapseTooBubble || settings.enableEdgeCollapse) onCollapse()
+                    else onManualSearch()
+                },
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
-                Icons.Default.DragHandle, "Drag",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier.size(20.dp)
+                Icons.Default.Menu,
+                contentDescription = "Menu",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(Modifier.width(4.dp))
         }
 
-        // Edge-collapse / minimize button
-        if (settings.enableCollapseTooBubble || settings.enableEdgeCollapse) {
-            IconButton(onClick = onCollapse, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Remove, "Collapse to edge",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
+        Spacer(Modifier.width(10.dp))
 
-        // Word + pronunciation
+        // Center: word, speaker icon inline, pronunciation
         Column(modifier = Modifier.weight(1f)) {
             when (val st = uiState) {
                 is PopupUiState.Success -> {
-                    Text(
-                        text = st.entry.word.uppercase(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = st.entry.word.uppercase(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (settings.showSpeakWordButton) {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(primaryColor.copy(alpha = 0.12f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onSpeakWord() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.VolumeUp,
+                                    contentDescription = "Speak",
+                                    tint = primaryColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
                     if (settings.showPronunciation && st.entry.pronunciation.isNotBlank()) {
                         Text(
                             text = st.entry.pronunciation,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         )
                     }
                 }
                 is PopupUiState.Loading ->
-                    Text("Looking up…", style = MaterialTheme.typography.titleMedium,
+                    Text("Looking up…", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 else ->
                     Text("LexiPopup", style = MaterialTheme.typography.titleMedium,
@@ -721,31 +708,122 @@ fun PopupHeader(
             }
         }
 
-        // Header action buttons
-        if (uiState is PopupUiState.Success) {
-            if (settings.showSpeakWordButton) {
-                IconButton(onClick = onSpeakWord) {
-                    Icon(Icons.Default.VolumeUp, "Speak", tint = MaterialTheme.colorScheme.primary)
-                }
+        Spacer(Modifier.width(4.dp))
+
+        // Right: star + close in rounded-square containers
+        if (uiState is PopupUiState.Success && settings.showFavoriteButton) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onToggleFavorite() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (isFav) Icons.Default.Star else Icons.Outlined.StarBorder,
+                    contentDescription = "Favorite",
+                    tint = if (isFav) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
-            if (settings.showFavoriteButton) {
-                val isFav = (uiState as? PopupUiState.Success)?.entry?.isFavorite ?: false
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(
-                        if (isFav) Icons.Default.Star else Icons.Outlined.StarBorder,
-                        "Favorite",
-                        tint = if (isFav) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Spacer(Modifier.width(6.dp))
+        }
+
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onClose() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Close",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Spacer(Modifier.width(4.dp))
+    }
+}
+
+// ── Word info sub-row (POS chip + frequency + difficulty) ─────────────────────
+
+@Composable
+fun WordInfoRow(entry: WordEntry, settings: AppSettings) {
+    val posColor = Color(entry.partOfSpeechColor)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // POS chip
+        if (settings.showPartOfSpeech && entry.partOfSpeech.isNotBlank()) {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = posColor.copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text = entry.partOfSpeech.replaceFirstChar { it.uppercase() },
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = posColor
+                )
+            }
+        }
+
+        // Frequency mini bars
+        if (settings.showFrequencyMeter) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    "Frequency: ${entry.frequencyRating}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(2.dp))
+                // 5-bar frequency indicator
+                val bars = (entry.frequencyRating / 20f).roundToInt().coerceIn(0, 5)
+                val barColor = MaterialTheme.colorScheme.primary
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    repeat(5) { i ->
+                        Box(
+                            Modifier
+                                .width(3.dp)
+                                .height((8 + i * 2).dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(if (i < bars) barColor else barColor.copy(alpha = 0.22f))
+                        )
+                    }
                 }
             }
         }
-        IconButton(onClick = onClose) {
-            Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Spacer(Modifier.weight(1f))
+
+        // Difficulty label
+        if (settings.showDifficultyBadge) {
+            Text(
+                text = "Difficulty: ${entry.difficultyLabel}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
-// ── Content ───────────────────────────────────────────────────────────────────
+// ── Body content ──────────────────────────────────────────────────────────────
 
 @Composable
 fun PopupContent(
@@ -754,126 +832,214 @@ fun PopupContent(
     onWordChipClick: (String) -> Unit
 ) {
     val scroll = rememberScrollState()
+    val primary  = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    val secondary = MaterialTheme.colorScheme.secondary
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(scroll)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (settings.showPartOfSpeech && entry.partOfSpeech.isNotBlank()) {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = Color(entry.partOfSpeechColor).copy(alpha = 0.15f)
-            ) {
-                Text(
-                    text = entry.partOfSpeech.replaceFirstChar { it.uppercase() },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(entry.partOfSpeechColor)
-                )
-            }
+
+        // ── Why Important (detailed meaning) ─────────────────────────────────
+        if (settings.showDetailedMeaning &&
+            entry.detailedMeaning.isNotBlank() &&
+            entry.detailedMeaning != entry.shortMeaning
+        ) {
+            ContentBulletRow(
+                bulletColor = Color(0xFF7C4DFF),
+                label = "Why Important",
+                text  = entry.detailedMeaning,
+                italic = false
+            )
         }
 
+        // ── Meaning ───────────────────────────────────────────────────────────
         if (entry.shortMeaning.isNotBlank()) {
-            RaisedCard {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("📖 Meaning", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    Text(entry.shortMeaning, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    if (settings.showDetailedMeaning && entry.detailedMeaning.isNotBlank() && entry.detailedMeaning != entry.shortMeaning) {
-                        Text(entry.detailedMeaning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
+            ContentBulletRow(
+                bulletColor = primary,
+                label = "Meaning",
+                text  = entry.shortMeaning,
+                italic = false
+            )
         }
 
+        // ── Hindi ─────────────────────────────────────────────────────────────
         if (settings.showHindiMeaning && entry.hindiMeaning.isNotBlank()) {
-            RaisedCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🇮🇳  ", style = MaterialTheme.typography.bodyMedium)
-                    Column {
-                        Text("हिंदी", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        Text(entry.hindiMeaning, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    Modifier
+                        .padding(top = 3.dp)
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(primary)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        "Hindi:",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = primary
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text("🇮🇳", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            entry.hindiMeaning,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
                         if (entry.hindiPronunciation.isNotBlank()) {
-                            Text("(${entry.hindiPronunciation})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "(${entry.hindiPronunciation})",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
         }
 
+        // ── Example ───────────────────────────────────────────────────────────
         if (settings.showExampleSentence && entry.exampleSentence.isNotBlank()) {
-            RaisedCard {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("📝 Example", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    Text(
-                        "\"${entry.exampleSentence.trim('"', '\u201C', '\u201D')}\"",
-                        style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            ContentBulletRow(
+                bulletColor = primary,
+                label = "Example",
+                text  = "\"${entry.exampleSentence.trim('"', '\u201C', '\u201D')}\"",
+                italic = true
+            )
+        }
+
+        // ── Two-column cards: Detailed Meaning | Etymology ────────────────────
+        val showDetailed  = settings.showDetailedMeaning && entry.detailedMeaning.isNotBlank()
+        val showEtymology = settings.showEtymology && entry.etymology.isNotBlank()
+        if (showDetailed || showEtymology) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (showDetailed) {
+                    TwoColCard(
+                        label      = "Detailed Meaning:",
+                        labelColor = tertiary,
+                        text       = entry.detailedMeaning,
+                        modifier   = Modifier.weight(1f)
+                    )
+                }
+                if (showEtymology) {
+                    TwoColCard(
+                        label      = "Etymology / Origin:",
+                        labelColor = secondary,
+                        text       = entry.etymology,
+                        modifier   = Modifier.weight(1f)
                     )
                 }
             }
         }
 
+        // ── Synonyms ──────────────────────────────────────────────────────────
         if (settings.showSynonyms && entry.synonyms.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("🔗 Synonyms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(entry.synonyms) { syn ->
+                Text(
+                    "Synonyms",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primary
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val visible = entry.synonyms.take(4)
+                    val overflow = entry.synonyms.size - visible.size
+                    visible.forEach { syn ->
                         WordChip(syn, MaterialTheme.colorScheme.primaryContainer) { onWordChipClick(syn) }
                     }
+                    if (overflow > 0) {
+                        Text(
+                            "+ $overflow more",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }
 
+        // ── Antonyms ──────────────────────────────────────────────────────────
         if (settings.showAntonyms && entry.antonyms.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("⚡ Antonyms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(entry.antonyms) { ant ->
+                Text(
+                    "Antonyms",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val visible  = entry.antonyms.take(4)
+                    val overflow = entry.antonyms.size - visible.size
+                    visible.forEach { ant ->
                         WordChip(ant, MaterialTheme.colorScheme.errorContainer) { onWordChipClick(ant) }
                     }
+                    if (overflow > 0) {
+                        Text(
+                            "+ $overflow more",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }
 
-        if (settings.showEtymology && entry.etymology.isNotBlank()) {
-            var expanded by remember { mutableStateOf(false) }
-            Surface(
-                onClick = { expanded = !expanded },
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        // ── Difficulty + Frequency progress bars ──────────────────────────────
+        val showDiff  = settings.showDifficultyBadge
+        val showFreq  = settings.showFrequencyMeter
+        if (showDiff || showFreq) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(Modifier.padding(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📜 Word Origin", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
-                    }
-                    if (expanded) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(entry.etymology, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        if (settings.showDifficultyBadge || settings.showFrequencyMeter) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                if (settings.showDifficultyBadge) {
-                    val cols = listOf(Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFF9800), Color(0xFFf44336))
-                    Surface(shape = RoundedCornerShape(50), color = cols.getOrElse(entry.difficultyLevel - 1) { cols[0] }.copy(alpha = 0.18f)) {
-                        Text("⚡ ${entry.difficultyLabel}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall, color = cols.getOrElse(entry.difficultyLevel - 1) { cols[0] }, fontWeight = FontWeight.Bold)
+                if (showDiff) {
+                    val diffColors = listOf(Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFF9800), Color(0xFFf44336))
+                    val diffColor  = diffColors.getOrElse(entry.difficultyLevel - 1) { diffColors[0] }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Difficulty", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(entry.difficultyLabel, style = MaterialTheme.typography.labelSmall, color = diffColor, fontWeight = FontWeight.Medium)
+                        }
+                        LinearProgressIndicator(
+                            progress = { entry.difficultyLevel / 4f },
+                            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(50)),
+                            color     = diffColor,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
                     }
                 }
-                if (settings.showFrequencyMeter) {
-                    Column(Modifier.width(130.dp)) {
-                        Text("Frequency ${entry.frequencyRating}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (showFreq) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Frequency", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${entry.frequencyRating}%", style = MaterialTheme.typography.labelSmall, color = primary, fontWeight = FontWeight.Medium)
+                        }
                         LinearProgressIndicator(
                             progress = { entry.frequencyRating / 100f },
                             modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(50)),
-                            color = MaterialTheme.colorScheme.primary,
+                            color     = primary,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     }
@@ -881,26 +1047,88 @@ fun PopupContent(
             }
         }
 
+        // ── Source badge ──────────────────────────────────────────────────────
         SourceLayerBadge(source = entry.source)
         Spacer(Modifier.height(4.dp))
     }
 }
+
+// ── Bullet row helper (for Why Important / Meaning / Example) ─────────────────
+
+@Composable
+private fun ContentBulletRow(
+    bulletColor: Color,
+    label: String,
+    text: String,
+    italic: Boolean
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            Modifier
+                .padding(top = 4.dp)
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(bulletColor)
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "$label:",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = bulletColor
+            )
+            Text(
+                text,
+                style = if (italic)
+                    MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic)
+                else
+                    MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+// ── Two-column small card helper ──────────────────────────────────────────────
+
+@Composable
+private fun TwoColCard(label: String, labelColor: Color, text: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Column(
+            Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = labelColor)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 5, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+// ── Source layer badge ────────────────────────────────────────────────────────
 
 @Composable
 private fun SourceLayerBadge(source: String) {
     if (source.isBlank()) return
     data class LI(val emoji: String, val label: String, val color: Color)
     val info = when (source.lowercase()) {
-        "seed"      -> LI("🌱", "Seed DB",       Color(0xFF4CAF50))
-        "minimal"   -> LI("📦", "Minimal Pack",  Color(0xFF2196F3))
-        "standard"  -> LI("📚", "Standard Pack", Color(0xFF3F51B5))
-        "full"      -> LI("🗄", "Full Pack",     Color(0xFF9C27B0))
-        "online"    -> LI("🌐", "Online API",    Color(0xFF009688))
-        "groq"      -> LI("🤖", "Groq AI",       Color(0xFFFF9800))
-        "openai"    -> LI("🤖", "OpenAI",        Color(0xFF43A047))
-        "on_device" -> LI("📱", "On-Device AI",  Color(0xFFE91E63))
-        "rule_based"-> LI("🔧", "Rule-Based",    Color(0xFF607D8B))
-        else        -> LI("📄", source.replaceFirstChar { it.uppercase() }, Color(0xFF78909C))
+        "seed"       -> LI("🌱", "Seed DB",       Color(0xFF4CAF50))
+        "minimal"    -> LI("📦", "Minimal Pack",  Color(0xFF2196F3))
+        "standard"   -> LI("📚", "Standard Pack", Color(0xFF3F51B5))
+        "full"       -> LI("🗄",  "Full Pack",     Color(0xFF9C27B0))
+        "online"     -> LI("🌐", "Online API",    Color(0xFF009688))
+        "groq"       -> LI("🤖", "Groq AI",       Color(0xFFFF9800))
+        "openai"     -> LI("🤖", "OpenAI",        Color(0xFF43A047))
+        "on_device"  -> LI("📱", "On-Device AI",  Color(0xFFE91E63))
+        "rule_based" -> LI("🔧", "Rule-Based",    Color(0xFF607D8B))
+        else         -> LI("📄", source.replaceFirstChar { it.uppercase() }, Color(0xFF78909C))
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
@@ -908,8 +1136,13 @@ private fun SourceLayerBadge(source: String) {
             color = info.color.copy(alpha = 0.12f),
             border = BorderStroke(0.5.dp, info.color.copy(alpha = 0.4f))
         ) {
-            Text("${info.emoji} ${info.label}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall, color = info.color, fontWeight = FontWeight.Medium)
+            Text(
+                "${info.emoji} ${info.label}",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = info.color,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -936,18 +1169,25 @@ fun RaisedCard(content: @Composable () -> Unit) {
 
 @Composable
 fun WordChip(word: String, color: Color, onClick: () -> Unit) {
-    val src = remember { MutableInteractionSource() }
+    val src     = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val sc by animateFloatAsState(if (pressed) 0.91f else 1f, label = "chip_scale")
-    Surface(onClick = onClick, modifier = Modifier.scale(sc), shape = RoundedCornerShape(50), color = color, interactionSource = src) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.scale(sc),
+        shape = RoundedCornerShape(50),
+        color = color,
+        interactionSource = src
+    ) {
         Text(word, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
     }
 }
 
-// ── Horizontal-scrolling action bar ──────────────────────────────────────────
+// ── 2-row action grid ─────────────────────────────────────────────────────────
+// Row 1: first 5 enabled buttons | Row 2: next up-to-5 enabled buttons
 
 @Composable
-fun PopupActionBar(
+fun PopupActionGrid(
     settings: AppSettings,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     onCopy: () -> Unit,
@@ -960,64 +1200,208 @@ fun PopupActionBar(
     onSearchWeb: () -> Unit,
     onAddFlashcard: () -> Unit
 ) {
-    // Button registry: id → (icon, label, action, enabled)
-    data class BtnDef(val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val action: () -> Unit, val enabled: Boolean)
-    val registry = mapOf(
-        "copy"      to BtnDef(Icons.Default.ContentCopy,    "Copy",      onCopy,          settings.showCopyButton),
-        "speak"     to BtnDef(Icons.Default.VolumeUp,       "Speak",     onSpeakWord,     settings.showSpeakWordButton),
-        "meaning"   to BtnDef(Icons.Default.RecordVoiceOver,"Meaning",   onSpeakMeaning,  settings.showSpeakMeaningButton),
-        "translate" to BtnDef(Icons.Default.Translate,      "Translate", onTranslate,     settings.showTranslateButton),
-        "share"     to BtnDef(Icons.Default.Share,          "Share",     onShare,         settings.showShareButton),
-        "note"      to BtnDef(Icons.Default.Edit,           "Note",      onSaveNote,      settings.showSaveNoteButton),
-        "details"   to BtnDef(Icons.Default.MenuBook,       "Details",   onFullDetails,   settings.showFullDetailsButton),
-        "web"       to BtnDef(Icons.Default.Language,       "Web",       onSearchWeb,     settings.showSearchWebButton),
-        "flashcard" to BtnDef(Icons.Default.Style,          "Flashcard", onAddFlashcard,  settings.showFlashcardButton)
+    data class BtnDef(
+        val icon: androidx.compose.ui.graphics.vector.ImageVector,
+        val label: String,
+        val action: () -> Unit,
+        val enabled: Boolean
     )
 
-    val orderedEnabled = settings.buttonOrder
-        .split(",")
-        .map { it.trim() }
-        .mapNotNull { id -> registry[id]?.takeIf { it.enabled } }
+    val allButtons = listOf(
+        BtnDef(Icons.Default.ContentCopy,    "Copy",      onCopy,          settings.showCopyButton),
+        BtnDef(Icons.Default.VolumeUp,       "Speak\nWord",    onSpeakWord,     settings.showSpeakWordButton),
+        BtnDef(Icons.Default.RecordVoiceOver,"Speak\nMeaning", onSpeakMeaning,  settings.showSpeakMeaningButton),
+        BtnDef(Icons.Default.Translate,      "Translate", onTranslate,     settings.showTranslateButton),
+        BtnDef(Icons.Default.Share,          "Share",     onShare,         settings.showShareButton),
+        BtnDef(Icons.Default.Edit,           "Save Note", onSaveNote,      settings.showSaveNoteButton),
+        BtnDef(Icons.Default.MenuBook,       "Full\nDetails",  onFullDetails,   settings.showFullDetailsButton),
+        BtnDef(Icons.Default.Language,       "Search\nWeb",    onSearchWeb,     settings.showSearchWebButton),
+        BtnDef(Icons.Default.Style,          "Add\nFlashcard", onAddFlashcard,  settings.showFlashcardButton)
+    )
 
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    val enabled = allButtons.filter { it.enabled }
+    if (enabled.isEmpty()) return
+
+    // Split into rows of 5
+    val rows = enabled.chunked(5)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .padding(vertical = 6.dp)
     ) {
-        items(orderedEnabled) { btn ->
-            ActionButton(
-                icon  = btn.icon,
-                label = btn.label,
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    btn.action()
+        rows.take(2).forEach { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                row.forEach { btn ->
+                    GridActionButton(
+                        icon   = btn.icon,
+                        label  = btn.label,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            btn.action()
+                        }
+                    )
                 }
-            )
+                // Fill remaining slots so spacing is consistent
+                if (row.size < 5) {
+                    repeat(5 - row.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        // Page dots if more than 10 buttons (rare)
+        if (enabled.size > 10) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(minOf(rows.size, 3)) { i ->
+                    Box(
+                        Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(if (i == 0) 6.dp else 4.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (i == 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            )
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-fun ActionButton(
+fun GridActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val src = remember { MutableInteractionSource() }
+    val src     = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
-    val sc  by animateFloatAsState(if (pressed) 0.87f else 1f, label = "action_scale")
-    val elv by animateDpAsState(if (pressed) 6.dp else 0.dp, label = "action_elev")
-    Column(Modifier.scale(sc), horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(shape = CircleShape, shadowElevation = elv, color = Color.Transparent) {
-            IconButton(onClick = onClick, interactionSource = src) {
-                Icon(icon, label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            }
+    val sc  by animateFloatAsState(if (pressed) 0.88f else 1f,  label = "btn_scale")
+    val bgAlpha by animateFloatAsState(if (pressed) 0.18f else 0f, label = "btn_bg")
+    val primary = MaterialTheme.colorScheme.primary
+
+    Column(
+        modifier = modifier
+            .scale(sc)
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(primary.copy(alpha = 0.10f + bgAlpha)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = primary,
+                modifier = Modifier.size(22.dp)
+            )
         }
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            lineHeight = 13.sp
+        )
     }
 }
 
-// ── Bubble mode (legacy, kept for compat) ────────────────────────────────────
+// ── Edge-collapsed tab ────────────────────────────────────────────────────────
+
+@Composable
+fun EdgeCollapsedTab(
+    side: String,
+    word: String,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val glow by rememberInfiniteTransition(label = "tab_glow").animateFloat(
+        initialValue = 0.70f, targetValue = 1.00f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "glow_alpha"
+    )
+    val shape = if (side == "left")
+        RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
+    else
+        RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
+
+    Surface(
+        onClick = onExpand,
+        modifier = modifier.width(46.dp).height(120.dp),
+        shape = shape,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = glow),
+        shadowElevation = 18.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)
+            ) {
+                Text(
+                    word.firstOrNull()?.uppercase() ?: "L",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(Modifier.height(6.dp))
+                Icon(
+                    imageVector = if (side == "left") Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
+                    contentDescription = "Expand",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f)
+                )
+            }
+        }
+    }
+}
+
+// ── Particle burst ────────────────────────────────────────────────────────────
+
+@Composable
+fun ParticleBurst(modifier: Modifier, onFinish: () -> Unit) {
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { anim.animateTo(1f, tween(700)); onFinish() }
+    val progress = anim.value
+    val colors = listOf(Color(0xFFFFC107), Color(0xFFFF5722), Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF2196F3))
+    androidx.compose.foundation.Canvas(modifier = modifier.size(100.dp)) {
+        repeat(12) { i ->
+            val angle = (i * 30f) * (Math.PI / 180f).toFloat()
+            val r = progress * 80f
+            drawCircle(
+                color  = colors[i % colors.size].copy(alpha = (1f - progress).coerceIn(0f, 1f)),
+                radius = 6f * (1f - progress * 0.5f),
+                center = Offset(center.x + r * kotlin.math.cos(angle), center.y + r * kotlin.math.sin(angle))
+            )
+        }
+    }
+}
+
+// ── Bubble mode ───────────────────────────────────────────────────────────────
 
 @Composable
 fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) {
@@ -1026,7 +1410,6 @@ fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) 
         initialValue = 0.93f, targetValue = 1.04f,
         animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "bubble_scale"
     )
-    // 44dp — smaller, less intrusive
     Surface(
         onClick = onExpand,
         modifier = modifier.size(44.dp).scale(pulse),
@@ -1055,10 +1438,17 @@ fun ManualSearchContent(
     onSearch: (String) -> Unit,
     onVoiceSearch: () -> Unit = {}
 ) {
-    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             OutlinedTextField(
-                value = query, onValueChange = onQueryChange,
+                value = query,
+                onValueChange = onQueryChange,
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Search any word…") },
                 leadingIcon  = { Icon(Icons.Default.Search, null) },
@@ -1067,17 +1457,20 @@ fun ManualSearchContent(
                         Icon(Icons.Default.Mic, "Voice search", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
-                singleLine = true, shape = RoundedCornerShape(50)
+                singleLine = true,
+                shape = RoundedCornerShape(50)
             )
-            Button(onClick = { if (query.isNotBlank()) onSearch(query.trim().split(" ").first()) }, shape = RoundedCornerShape(50)) {
-                Text("GO")
-            }
+            Button(
+                onClick = { if (query.isNotBlank()) onSearch(query.trim().split(" ").first()) },
+                shape = RoundedCornerShape(50)
+            ) { Text("GO") }
         }
         if (suggestions.isNotEmpty()) {
             Text("Suggestions:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             suggestions.take(5).forEach { suggestion ->
                 Surface(
-                    onClick = { onSearch(suggestion) }, modifier = Modifier.fillMaxWidth(),
+                    onClick = { onSearch(suggestion) },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
@@ -1101,7 +1494,7 @@ fun PopupSkeleton() {
             Box(
                 Modifier
                     .fillMaxWidth(if (it == 0) 0.45f else if (it % 2 == 0) 1f else 0.75f)
-                    .height(if (it == 0) 30.dp else 16.dp)
+                    .height(if (it == 0) 28.dp else 14.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = shimmer))
             )
@@ -1114,7 +1507,10 @@ fun PopupSkeleton() {
 @Composable
 fun PopupError(message: String) {
     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Icon(Icons.Default.SearchOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(44.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -1127,7 +1523,8 @@ fun PopupError(message: String) {
 fun HybridComparisonPanel(hybridAiResult: com.lexipopup.utils.ai.HybridAiResult) {
     var expanded by remember { mutableStateOf(false) }
     Surface(
-        onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth(),
+        onClick = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -1140,7 +1537,7 @@ fun HybridComparisonPanel(hybridAiResult: com.lexipopup.utils.ai.HybridAiResult)
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    @Composable fun AiColumn(emoji: String, label: String, color: Color, text: String?) {
+                    @Composable fun AiCol(emoji: String, label: String, color: Color, text: String?) {
                         Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp),
                             color = color.copy(alpha = 0.10f), border = BorderStroke(0.5.dp, color.copy(alpha = 0.35f))) {
                             Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1150,10 +1547,21 @@ fun HybridComparisonPanel(hybridAiResult: com.lexipopup.utils.ai.HybridAiResult)
                             }
                         }
                     }
-                    AiColumn("🤖", "Groq",      Color(0xFFFF9800), hybridAiResult.groqEntry?.shortMeaning)
-                    AiColumn("📱", "On-Device", Color(0xFFE91E63), hybridAiResult.onDeviceEntry?.shortMeaning)
+                    AiCol("🤖", "Groq",      Color(0xFFFF9800), hybridAiResult.groqEntry?.shortMeaning)
+                    AiCol("📱", "On-Device", Color(0xFFE91E63), hybridAiResult.onDeviceEntry?.shortMeaning)
                 }
             }
         }
     }
+}
+
+// ── ActionButton (kept for backward compat with any external call sites) ──────
+
+@Composable
+fun ActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    GridActionButton(icon = icon, label = label, onClick = onClick)
 }

@@ -1,5 +1,6 @@
 package com.lexipopup.data.local.database
 
+import android.util.Log
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
 
@@ -11,30 +12,78 @@ import org.json.JSONArray
  */
 object DatabaseSeeder {
 
+    data class SeedResult(
+        val total: Int,
+        val inserted: Int,
+        val failed: Int,
+        val errors: List<String>
+    )
+
+    private const val TAG = "DatabaseSeeder"
+
+    private val INSERT_SQL = """
+        INSERT OR IGNORE INTO dictionary_cache
+        (word, pronunciation, part_of_speech, short_meaning, detailed_meaning,
+         hindi_meaning, hindi_pronunciation, example_sentence, synonyms, antonyms,
+         etymology, difficulty_level, frequency_rating, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """.trimIndent()
+
+    /**
+     * Called from LexiDatabase.onCreate / onOpen.
+     * Delegates to seedSafely and logs the result.
+     */
     fun seed(db: SupportSQLiteDatabase) {
+        val result = seedSafely(db)
+        Log.i(TAG, "seed() complete: ${result.inserted}/${result.total} inserted, ${result.failed} failed")
+        if (result.failed > 0) {
+            result.errors.take(5).forEach { Log.w(TAG, "  ✗ $it") }
+        }
+    }
+
+    /**
+     * Resilient seed: each word is inserted individually inside a single transaction.
+     * If one word fails, it is skipped and logged — the rest continue.
+     * The transaction is committed at the end (partial success is committed, not rolled back).
+     *
+     * @return SeedResult with counts and any per-word error messages.
+     */
+    fun seedSafely(db: SupportSQLiteDatabase): SeedResult {
+        val words = getSeedWords()
+        var inserted = 0
+        var failed = 0
+        val errors = mutableListOf<String>()
+
         val needsTransaction = !db.inTransaction()
         if (needsTransaction) db.beginTransaction()
         try {
-            val words = getSeedWords()
             for (w in words) {
-                db.execSQL(
-                    """INSERT OR IGNORE INTO dictionary_cache
-                    (word, pronunciation, part_of_speech, short_meaning, detailed_meaning,
-                     hindi_meaning, hindi_pronunciation, example_sentence, synonyms, antonyms,
-                     etymology, difficulty_level, frequency_rating, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    arrayOf(
-                        w.word, w.pronunciation, w.pos, w.shortMeaning, w.detailed,
-                        w.hindi, w.hindiPron, w.example,
-                        JSONArray(w.synonyms).toString(), JSONArray(w.antonyms).toString(),
-                        w.etymology, w.difficulty, w.frequency, "seed"
+                try {
+                    db.execSQL(
+                        INSERT_SQL,
+                        arrayOf(
+                            w.word, w.pronunciation, w.pos, w.shortMeaning, w.detailed,
+                            w.hindi, w.hindiPron, w.example,
+                            JSONArray(w.synonyms).toString(), JSONArray(w.antonyms).toString(),
+                            w.etymology, w.difficulty, w.frequency, "seed"
+                        )
                     )
-                )
+                    inserted++
+                } catch (e: Exception) {
+                    failed++
+                    val msg = "[${w.word}] ${e.javaClass.simpleName}: ${e.message}"
+                    errors.add(msg)
+                    Log.w(TAG, "Insert failed — $msg")
+                }
             }
+            // Commit whatever succeeded — partial success is better than zero words
             if (needsTransaction) db.setTransactionSuccessful()
         } finally {
             if (needsTransaction) db.endTransaction()
         }
+
+        Log.i(TAG, "seedSafely: $inserted/${words.size} inserted, $failed failed")
+        return SeedResult(total = words.size, inserted = inserted, failed = failed, errors = errors)
     }
 
     private data class SeedWord(

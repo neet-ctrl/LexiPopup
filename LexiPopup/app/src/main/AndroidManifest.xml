@@ -167,6 +167,47 @@
             </intent-filter>
         </receiver>
 
+        <!-- ── Home-screen Widgets ─────────────────────────────────────────── -->
+
+        <!-- Widget 1: Word of the Day -->
+        <receiver
+            android:name=".presentation.widget.WotdWidgetReceiver"
+            android:exported="true"
+            android:label="Word of the Day">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/wotd_widget_info" />
+        </receiver>
+
+        <!-- Widget 2: Favourites -->
+        <receiver
+            android:name=".presentation.widget.FavoritesWidgetReceiver"
+            android:exported="true"
+            android:label="Favourites">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/favorites_widget_info" />
+        </receiver>
+
+        <!-- Widget 3: Recent Words -->
+        <receiver
+            android:name=".presentation.widget.RecentWordsWidgetReceiver"
+            android:exported="true"
+            android:label="Recent Words">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/recent_widget_info" />
+        </receiver>
+
         <!-- FileProvider for file sharing -->
         <provider
             android:name="androidx.core.content.FileProvider"

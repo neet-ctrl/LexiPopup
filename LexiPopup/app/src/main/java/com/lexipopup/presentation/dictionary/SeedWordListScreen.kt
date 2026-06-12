@@ -2,8 +2,11 @@ package com.lexipopup.presentation.dictionary
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,6 +15,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,6 +27,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,11 +57,17 @@ fun SeedWordListScreen(
     val words by viewModel.words.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val focusRequester = remember { FocusRequester() }
+    val isForcingReseed by viewModel.isForcingReseed.collectAsState()
+    val forceSeedMessage by viewModel.forceSeedMessage.collectAsState()
+    val diagnostics by viewModel.diagnostics.collectAsState()
 
+    val focusRequester = remember { FocusRequester() }
     val isFiltered = searchQuery.isNotBlank()
     val primaryColor = MaterialTheme.colorScheme.primary
     val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
+
+    var showDiagnostics by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -68,8 +81,11 @@ fun SeedWordListScreen(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                if (totalCount > 0) "$totalCount seed words · offline ready"
-                                else "Loading…",
+                                when {
+                                    isForcingReseed -> "Re-seeding…"
+                                    totalCount > 0  -> "$totalCount seed words · offline ready"
+                                    else            -> "Loading…"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -80,12 +96,42 @@ fun SeedWordListScreen(
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     },
+                    actions = {
+                        IconButton(
+                            onClick = { viewModel.forceSeed() },
+                            enabled = !isForcingReseed
+                        ) {
+                            if (isForcingReseed) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = primaryColor
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Force re-seed database",
+                                    tint = primaryColor
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            showDiagnostics = !showDiagnostics
+                            if (showDiagnostics) viewModel.refreshDiagnostics()
+                        }) {
+                            Icon(
+                                if (showDiagnostics) Icons.Default.ExpandLess else Icons.Default.Info,
+                                contentDescription = "Database diagnostics",
+                                tint = if (showDiagnostics) primaryColor
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     )
                 )
 
-                // Gradient accent line
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -109,6 +155,177 @@ fun SeedWordListScreen(
                 .padding(padding)
         ) {
 
+            // ── Force-seed result banner ─────────────────────────────────────
+            AnimatedVisibility(
+                visible = forceSeedMessage != null,
+                enter = slideInVertically() + fadeIn(),
+                exit = slideOutVertically() + fadeOut()
+            ) {
+                forceSeedMessage?.let { msg ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (msg.startsWith("✓"))
+                                Color(0xFF1B5E20).copy(alpha = 0.12f)
+                            else
+                                MaterialTheme.colorScheme.errorContainer
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                if (msg.startsWith("✓")) Icons.Default.CheckCircle else Icons.Default.Error,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp).padding(top = 1.dp),
+                                tint = if (msg.startsWith("✓")) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                msg,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { viewModel.clearForceSeedMessage() },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Diagnostic panel ─────────────────────────────────────────────
+            AnimatedVisibility(
+                visible = showDiagnostics,
+                enter = slideInVertically() + fadeIn(),
+                exit = slideOutVertically() + fadeOut()
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .animateContentSize(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.BugReport,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = primaryColor
+                                )
+                                Text(
+                                    "Deep Diagnostics",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryColor
+                                )
+                            }
+                            Row {
+                                IconButton(
+                                    onClick = { viewModel.refreshDiagnostics() },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = "Refresh diagnostics",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(diagnostics))
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = "Copy diagnostics",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = primaryColor
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider(thickness = 0.5.dp)
+                        Spacer(Modifier.height(8.dp))
+
+                        SelectionContainer {
+                            Text(
+                                text = diagnostics,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 17.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(diagnostics))
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Copy all", fontSize = 12.sp)
+                            }
+                            Button(
+                                onClick = { viewModel.forceSeed() },
+                                enabled = !isForcingReseed,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                if (isForcingReseed) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(12.dp),
+                                        strokeWidth = 1.5.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp))
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    if (isForcingReseed) "Re-seeding…" else "Force Re-seed",
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // ── Search bar ──────────────────────────────────────────────────
             Surface(
                 shadowElevation = 2.dp,
@@ -129,24 +346,12 @@ fun SeedWordListScreen(
                             )
                         },
                         leadingIcon = {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = null,
-                                tint = primaryColor
-                            )
+                            Icon(Icons.Default.Search, contentDescription = null, tint = primaryColor)
                         },
                         trailingIcon = {
-                            AnimatedVisibility(
-                                visible = searchQuery.isNotBlank(),
-                                enter = fadeIn(),
-                                exit = fadeOut()
-                            ) {
+                            AnimatedVisibility(visible = searchQuery.isNotBlank(), enter = fadeIn(), exit = fadeOut()) {
                                 IconButton(onClick = viewModel::clearSearch) {
-                                    Icon(
-                                        Icons.Default.Clear,
-                                        contentDescription = "Clear",
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
                                 }
                             }
                         },
@@ -157,10 +362,7 @@ fun SeedWordListScreen(
             }
 
             // ── Stats banner ────────────────────────────────────────────────
-            AnimatedContent(
-                targetState = Pair(isFiltered, words.size),
-                label = "stats"
-            ) { (filtered, count) ->
+            AnimatedContent(targetState = Pair(isFiltered, words.size), label = "stats") { (filtered, count) ->
                 if (!isLoading || count > 0) {
                     Row(
                         modifier = Modifier
@@ -203,10 +405,7 @@ fun SeedWordListScreen(
             // ── Word list ───────────────────────────────────────────────────
             Box(modifier = Modifier.fillMaxSize()) {
                 if (isLoading && words.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -221,7 +420,9 @@ fun SeedWordListScreen(
                     }
                 } else if (words.isEmpty()) {
                     Box(
-                        modifier = Modifier.fillMaxSize().padding(40.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
@@ -234,20 +435,55 @@ fun SeedWordListScreen(
                                 modifier = Modifier.size(56.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.3f)
                             )
-                            Text(
-                                "No results for \"$searchQuery\"",
-                                fontWeight = FontWeight.SemiBold,
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                "Try a different word or partial spelling",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            OutlinedButton(onClick = viewModel::clearSearch) {
-                                Icon(Icons.Default.Clear, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Clear search")
+                            if (isFiltered) {
+                                Text(
+                                    "No results for \"$searchQuery\"",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    "Try a different word or partial spelling",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedButton(onClick = viewModel::clearSearch) {
+                                    Icon(Icons.Default.Clear, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Clear search")
+                                }
+                            } else {
+                                Text(
+                                    "No built-in words found",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    "Tap ↺ in the toolbar to load words",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "Tap ⓘ for detailed diagnostics & copy",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Button(
+                                    onClick = { viewModel.forceSeed() },
+                                    enabled = !isForcingReseed
+                                ) {
+                                    if (isForcingReseed) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (isForcingReseed) "Re-seeding…" else "Load Built-in Words")
+                                }
                             }
                         }
                     }
@@ -269,10 +505,7 @@ fun SeedWordListScreen(
                     }
                 }
 
-                // Floating scroll-to-top button
-                val showScrollTop by remember {
-                    derivedStateOf { listState.firstVisibleItemIndex > 5 }
-                }
+                val showScrollTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 5 } }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -284,9 +517,7 @@ fun SeedWordListScreen(
                         exit = fadeOut()
                     ) {
                         SmallFloatingActionButton(
-                            onClick = {
-                                coroutineScope.launch { listState.animateScrollToItem(0) }
-                            },
+                            onClick = { coroutineScope.launch { listState.animateScrollToItem(0) } },
                             containerColor = primaryColor,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ) {
@@ -320,7 +551,6 @@ private fun SeedWordCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Index badge
         Box(
             modifier = Modifier
                 .size(34.dp)
@@ -337,7 +567,6 @@ private fun SeedWordCard(
             )
         }
 
-        // Word content
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -396,7 +625,6 @@ private fun SeedWordCard(
             }
         }
 
-        // Difficulty dot + chevron
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)

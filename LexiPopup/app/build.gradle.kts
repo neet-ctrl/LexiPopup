@@ -109,6 +109,9 @@ dependencies {
     // Gson
     implementation(libs.gson)
 
+    // Glance App Widgets
+    implementation(libs.glance.appwidget)
+
     // WorkManager
     implementation(libs.work.runtime.ktx)
     implementation(libs.hilt.work)

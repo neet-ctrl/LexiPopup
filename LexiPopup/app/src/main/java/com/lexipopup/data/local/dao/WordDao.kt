@@ -34,8 +34,14 @@ interface WordDao {
     @Query("SELECT * FROM dictionary_cache WHERE is_favorite = 1 ORDER BY last_accessed DESC")
     fun getFavorites(): Flow<List<WordEntity>>
 
+    @Query("SELECT * FROM dictionary_cache WHERE is_favorite = 1 ORDER BY last_accessed DESC")
+    suspend fun getFavoritesList(): List<WordEntity>
+
     @Query("SELECT * FROM dictionary_cache ORDER BY last_accessed DESC LIMIT :limit")
     fun getRecentWords(limit: Int): Flow<List<WordEntity>>
+
+    @Query("SELECT * FROM dictionary_cache ORDER BY last_accessed DESC LIMIT :limit")
+    suspend fun getRecentWordsList(limit: Int): List<WordEntity>
 
     @Query("SELECT COUNT(*) FROM dictionary_cache")
     suspend fun getTotalCount(): Int

@@ -1,0 +1,51 @@
+
+Generate Dictionary Packs #3
+generate
+failed 2 minutes ago in 22s
+0s
+1s
+0s
+4s
+1s
+13s
+Run python LexiPopup/scripts/generate_dicts.py
+  
+  Downloading NLTK 'wordnet'…
+  Downloading NLTK 'omw-1.4'…
+=================================================================
+LexiPopup Dictionary Pack Generator v2
+=================================================================
+[CMU] Loading pronunciation dictionary…
+  123,455 CMU entries loaded
+[WordNet] Building word index…
+WordNet synsets:   0%|          | 0/117659 [00:00<?, ?it/s]
+WordNet synsets:   6%|▌         | 7161/117659 [00:00<00:01, 71605.97it/s]
+WordNet synsets:  13%|█▎        | 14977/117659 [00:00<00:01, 75448.11it/s]
+WordNet synsets:  20%|██        | 23748/117659 [00:00<00:01, 81041.56it/s]
+WordNet synsets:  27%|██▋       | 31853/117659 [00:00<00:01, 79797.92it/s]
+WordNet synsets:  34%|███▍      | 39836/117659 [00:00<00:00, 78399.60it/s]
+WordNet synsets:  41%|████      | 48376/117659 [00:00<00:00, 80729.37it/s]
+WordNet synsets:  48%|████▊     | 56457/117659 [00:00<00:00, 79673.46it/s]
+WordNet synsets:  55%|█████▌    | 64859/117659 [00:00<00:00, 81030.09it/s]
+WordNet synsets:  62%|██████▏   | 73400/117659 [00:00<00:00, 82376.55it/s]
+WordNet synsets:  69%|██████▉   | 81645/117659 [00:01<00:00, 80642.60it/s]
+WordNet synsets:  76%|███████▋  | 89721/117659 [00:01<00:00, 72118.98it/s]
+WordNet synsets:  83%|████████▎ | 97313/117659 [00:01<00:00, 73169.42it/s]
+WordNet synsets:  89%|████████▉ | 104754/117659 [00:02<00:00, 24651.36it/s]
+WordNet synsets:  96%|█████████▌| 113057/117659 [00:02<00:00, 31627.22it/s]
+WordNet synsets: 100%|██████████| 117659/117659 [00:02<00:00, 53141.19it/s]
+Traceback (most recent call last):
+  WordNet: 146,240 entries
+  File "/home/runner/work/LexiPopup/LexiPopup/LexiPopup/scripts/generate_dicts.py", line 710, in <module>
+  WordNet ranked: 146,240 words
+    main()
+  File "/home/runner/work/LexiPopup/LexiPopup/LexiPopup/scripts/generate_dicts.py", line 618, in main
+    _stream_download(KAIKKI_URL, wikt_raw)
+  File "/home/runner/work/LexiPopup/LexiPopup/LexiPopup/scripts/generate_dicts.py", line 294, in _stream_download
+    r.raise_for_status()
+  File "/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/requests/models.py", line 1167, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 404 Client Error: Not Found for url: https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.json
+  Downloading https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.json
+  → output/kaikki-en.json
+Error: Process completed with exit code

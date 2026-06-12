@@ -265,7 +265,8 @@ def rank_wordnet(word_map: dict) -> list:
 # ── Wiktionary via kaikki.org ─────────────────────────────────────────────────
 #
 # kaikki.org provides pre-parsed Wiktionary as JSONL (one JSON object per line).
-# English section URL: https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.json
+# English section URL (updated 2025 — file extension changed from .json → .jsonl):
+#   https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl
 # Each line example:
 # {
 #   "word": "procrastinate", "pos": "verb", "lang": "English", "lang_code": "en",
@@ -279,8 +280,13 @@ def rank_wordnet(word_map: dict) -> list:
 # We filter: lang_code == "en"  (English words only)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Primary URL — post-processed JSONL (~2.7 GB uncompressed)
 KAIKKI_URL = ("https://kaikki.org/dictionary/English/"
-              "kaikki.org-dictionary-English.json")
+              "kaikki.org-dictionary-English.jsonl")
+
+# Fallback URL in case the primary moves again
+KAIKKI_URL_FALLBACK = ("https://kaikki.org/dictionary/English/"
+                       "kaikki.org-dictionary-English-all.jsonl")
 
 def _stream_download(url: str, dest: str):
     """Download url to dest with progress. Uses requests if available."""
@@ -311,6 +317,41 @@ def _stream_download(url: str, dest: str):
     size_mb = os.path.getsize(dest) / (1 << 20)
     elapsed = time.time() - t0
     print(f"\n  Done: {size_mb:.1f} MB in {elapsed:.0f}s")
+
+
+def _download_wiktionary(dest: str):
+    """
+    Try primary URL, then fallback URL.
+    Raises SystemExit with a clear message if both fail — the Full pack
+    is not optional; the workflow must fail so the user re-runs it.
+    """
+    last_error = None
+    for url in [KAIKKI_URL, KAIKKI_URL_FALLBACK]:
+        try:
+            _stream_download(url, dest)
+            return  # success
+        except Exception as e:
+            last_error = e
+            print(f"\n  ⚠️  {url} failed: {e}")
+            if os.path.exists(dest):
+                os.remove(dest)
+
+    print("\n" + "="*65)
+    print("❌  FATAL: Wiktionary download failed from all known URLs.")
+    print()
+    print("   Primary URL tried:")
+    print(f"     {KAIKKI_URL}")
+    print("   Fallback URL tried:")
+    print(f"     {KAIKKI_URL_FALLBACK}")
+    print()
+    print("   The Full pack (~700K+ words) requires this file.")
+    print("   The workflow will now FAIL so you can re-run it once")
+    print("   kaikki.org is reachable again.")
+    print()
+    print("   To check the current URL, visit:")
+    print("     https://kaikki.org/dictionary/English/index.html")
+    print("="*65)
+    sys.exit(1)
 
 
 def parse_wiktionary(path: str, wordnet_map: dict, cmu: dict) -> dict:
@@ -612,18 +653,19 @@ def main():
     wn_ordered  = rank_wordnet(wordnet_map)
     print(f"  WordNet ranked: {len(wn_ordered):,} words")
 
-    # ── Step 3: Download + parse Wiktionary ──────────────────────────────────
-    wikt_raw = "output/kaikki-en.json"
-    if not os.path.exists(wikt_raw):
-        _stream_download(KAIKKI_URL, wikt_raw)
-    else:
+    # ── Step 3: Download + parse Wiktionary (required for Full pack) ─────────────
+    wikt_raw = "output/kaikki-en.jsonl"
+    # Accept old cached filename from previous runs too
+    if not os.path.exists(wikt_raw) and os.path.exists("output/kaikki-en.json"):
+        wikt_raw = "output/kaikki-en.json"
+
+    if os.path.exists(wikt_raw):
         size_mb = os.path.getsize(wikt_raw) / (1 << 20)
         print(f"\n[Wiktionary] Using cached {wikt_raw} ({size_mb:.0f} MB)")
-
-    wikt_map = parse_wiktionary(wikt_raw, wordnet_map, cmu)
-
-    # ── Step 4: Merged map (Wiktionary + WordNet) ─────────────────────────────
-    merged_map = merge_maps(wordnet_map, wikt_map, wn_ordered)
+    else:
+        wikt_raw = "output/kaikki-en.jsonl"
+        print("\n[Wiktionary] Downloading (~2.7 GB — required for Full pack)…")
+        _download_wiktionary(wikt_raw)   # exits with code 1 if both URLs fail
 
     checksums = {}
 
@@ -654,8 +696,13 @@ def main():
     print(f"  SHA-256: {checksums['STANDARD']}")
 
     # ── FULL pack (Wiktionary + WordNet + Hindi OMW) ──────────────────────────
+    # NOTE: If we reach here, wikt_raw is guaranteed to exist (download succeeded
+    # or was cached). _download_wiktionary() calls sys.exit(1) on failure so
+    # the workflow always fails rather than silently skipping this pack.
     print("\n" + "="*65)
     print("=== FULL pack (Wiktionary + WordNet + Hindi WordNet) ===")
+    wikt_map   = parse_wiktionary(wikt_raw, wordnet_map, cmu)
+    merged_map = merge_maps(wordnet_map, wikt_map, wn_ordered)
     print(f"  Total entries to write: {len(merged_map):,}")
     # Sort full pack by frequency descending so most-common words are inserted first
     # (helps if DB is truncated/interrupted mid-run)
@@ -669,6 +716,11 @@ def main():
     checksums["FULL"] = sha256(gz)
     os.remove(db)
     print(f"  SHA-256: {checksums['FULL']}")
+
+    # Clean up large download cache to free runner disk space
+    if os.path.exists(wikt_raw):
+        print(f"\n[Cleanup] Removing {wikt_raw}…")
+        os.remove(wikt_raw)
 
     # ── Checksums file ────────────────────────────────────────────────────────
     lines = [
@@ -684,12 +736,18 @@ def main():
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print("\n" + "="*65)
-    print("ALL DONE! Files in output/:")
+    print("ALL DONE! All 3 packs built successfully. Files in output/:")
+    skip_files = {"kaikki-en.json", "kaikki-en.jsonl"}
     for fname in sorted(os.listdir("output")):
-        if fname == "kaikki-en.json":
+        if fname in skip_files:
             continue
         sz = os.path.getsize(f"output/{fname}") / (1 << 20)
         print(f"  {fname:<40} {sz:>7.1f} MB")
+    print()
+    print("Word counts per pack:")
+    print(f"  MINIMAL   10,000 words  (top WordNet by frequency)")
+    print(f"  STANDARD  ~{len(wn_ordered):,} words  (all WordNet)")
+    print(f"  FULL      ~{len(merged_map):,} words  (Wiktionary + WordNet merged)")
     print()
     print("Checksums:")
     for k, v in checksums.items():
@@ -699,11 +757,6 @@ def main():
     print("The generate-dicts workflow will auto-patch them into")
     print("DictionaryDownloadWorker.kt and commit the change.")
     print("="*65)
-
-    # Clean up the large download cache to free runner disk space
-    if os.path.exists(wikt_raw):
-        print(f"\n[Cleanup] Removing {wikt_raw}…")
-        os.remove(wikt_raw)
 
 
 if __name__ == "__main__":

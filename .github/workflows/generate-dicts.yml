@@ -20,6 +20,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install Python dependencies
         run: pip install nltk tqdm requests
@@ -57,16 +58,16 @@ jobs:
           body: |
             ## LexiPopup Dictionary Packs
 
-            Auto-generated from Wiktionary + WordNet 3.1 + Hindi WordNet (OMW).
+            Auto-generated from Wiktionary + WordNet 3.1 + CMU Pronouncing Dictionary + Hindi WordNet (OMW).
 
             | Pack | Words | Size | Contents |
             |------|-------|------|----------|
-            | `dict_minimal_v1.db.gz` | ~10,000 | ~15 MB | Most common English + Hindi (OMW) |
-            | `dict_standard_v1.db.gz` | ~155,000 | ~80 MB | All WordNet (single + compound) + Hindi |
-            | `dict_full_v1.db.gz` | ~700K–1M+ | ~200 MB | Wiktionary English + WordNet + Hindi WordNet |
+            | `dict_minimal_v1.db.gz` | 10,000 | ~15 MB | Top WordNet words by frequency + Hindi |
+            | `dict_standard_v1.db.gz` | ~146,000 | ~80 MB | All WordNet (single + compound) + Hindi |
+            | `dict_full_v1.db.gz` | ~700K–900K | ~200 MB | Wiktionary + WordNet merged + Hindi |
 
             ### Data sources (all free / open)
-            - **Wiktionary English** (kaikki.org pre-parsed JSONL) — CC BY-SA 3.0
+            - **Wiktionary English** (kaikki.org JSONL) — CC BY-SA 3.0
             - **WordNet 3.1** (Princeton University) — free for all use
             - **CMU Pronouncing Dictionary** — Public Domain
             - **Hindi WordNet / OMW 1.4** (Open Multilingual WordNet) — CC BY 3.0
@@ -100,6 +101,7 @@ jobs:
           sed -i "s|DatabasePack.STANDARD.name to \"[^\"]*\"|DatabasePack.STANDARD.name to \"${STANDARD_SHA}\"|" "$FILE"
           sed -i "s|DatabasePack.FULL.name     to \"[^\"]*\"|DatabasePack.FULL.name     to \"${FULL_SHA}\"|"     "$FILE"
 
+          echo "✅ All 3 checksums patched."
           echo "--- Patched PACK_CHECKSUMS section ---"
           grep -A5 "PACK_CHECKSUMS" "$FILE"
 

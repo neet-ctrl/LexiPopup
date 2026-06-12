@@ -1,65 +1,57 @@
 # LexiPopup
 
-An advanced Android popup dictionary that integrates with Moon+ Reader via PROCESS_TEXT intent, featuring offline-first lookup, Groq AI fallback, on-device AI, Hindi meanings, flashcards with SM-2 spaced repetition, and a glassmorphism Material 3 UI.
+Android popup dictionary app — instant word definitions as a floating overlay when text is selected in Moon+ Reader or any app via PROCESS_TEXT intent.
 
 ## Run & Operate
 
-This is an Android project — it is not run via pnpm. The app is built with Gradle.
-
-- Build debug APK: push to GitHub → Actions auto-build (see SETUP_COMPLETE.md)
-- OR locally: `cd LexiPopup && ./gradlew assembleDebug`
-- Generate dictionary packs: GitHub Actions → "Generate Dictionary Packs" → Run workflow
-- Required: JDK 17, Android SDK API 29+
-
-## Stack
-
-- **Language**: Kotlin
-- **UI**: Jetpack Compose + Material 3
-- **Architecture**: MVVM + Clean Architecture + Hilt DI
-- **Database**: Room (SQLite) + WAL mode, DataStore Preferences
-- **Networking**: Retrofit + OkHttp
-- **AI Cloud**: Groq API (llama-3.3-70b-versatile, free tier)
-- **AI Device**: MediaPipe LLM (Gemma 2B / Phi-2 .task models)
-- **Background**: WorkManager (dictionary downloads, flashcard reminders)
+- Build APK: push to GitHub, run "Debug APK" or "Release APK" workflow in GitHub Actions
+- Generate dict packs: run "Generate Dictionary Packs" workflow in GitHub Actions
+- Local Android build: `cd LexiPopup && ./gradlew assembleDebug`
+- `pnpm run typecheck` — typecheck TypeScript workspace packages
 
 ## Where things live
 
-- Android project root: `LexiPopup/`
-- App source: `LexiPopup/app/src/main/java/com/lexipopup/`
-- Dictionary download worker: `data/download/DictionaryDownloadWorker.kt`
-- AI providers: `utils/ai/` (AiProvider, GroqAiProvider, OnDeviceAiProvider, AiProviderManager)
-- AI settings UI: `presentation/ai/` (AiSettingsScreen, AiSettingsViewModel)
-- Database schema (Room entity): `data/local/entities/WordEntity.kt`
-- Settings keys: `utils/SettingsDataStore.kt`
-- Dictionary generator Python script: `LexiPopup/scripts/generate_dicts.py`
-- GitHub Actions workflows: `LexiPopup/.github/workflows/`
+- `LexiPopup/` — Android project root (Gradle)
+- `LexiPopup/app/src/main/java/com/lexipopup/` — all Kotlin source
+- `LexiPopup/scripts/generate_dicts.py` — dictionary pack generator (WordNet + Wiktionary)
+- `.github/workflows/` — CI/CD workflows (root only — GitHub only reads here)
+- `lib/api-spec/openapi.yaml` — OpenAPI spec for any backend routes
+
+## Stack
+
+- **Android**: Kotlin, Jetpack Compose, Material 3, Hilt, Room, WorkManager, DataStore, Retrofit
+- **AI**: Groq Cloud (llama-3.3-70b, free) + MediaPipe On-Device (Gemma 2B / Phi-2)
+- **Dict data**: WordNet 3.1 + Wiktionary (kaikki.org JSONL) + CMU Pronouncing + Hindi OMW
+- **Build**: Gradle 8.6, JDK 17, Android SDK API 29+
+- **CI/CD**: GitHub Actions (3 manual workflows)
+- **TypeScript workspace**: pnpm, Node.js 24, Express 5, Drizzle ORM
 
 ## Architecture decisions
 
-- **5-layer word lookup**: LRU cache → Room SQLite → FreeDictionaryAPI → Groq AI → On-Device AI
-- **State-based navigation**: sealed class `AppDestination` (no Jetpack Nav component); overlays via early return
-- **AI is last resort**: AI is only called when offline DB + online API both fail
-- **Dictionary packs**: gzipped SQLite databases hosted on GitHub Releases; downloaded via WorkManager with resume support and SHA-256 verification
-- **Dual AI system**: Groq Cloud (free, fast) + MediaPipe on-device (offline) + Hybrid mode that runs both in parallel
-
-## Product
-
-LexiPopup is a floating popup dictionary for Android. Long-press any word in Moon+ Reader (or any app) to get instant English definitions, Hindi meanings, synonyms, antonyms, etymology, IPA pronunciation, and AI explanations — all in a beautiful glassmorphism popup. Includes flashcards, vocabulary tracking, and full offline support.
-
-## User preferences
-
-_Populate as you build._
+- 5-layer word lookup: LRU cache → Room DB → FreeDictionaryAPI → Groq AI → On-Device AI
+- Dictionary packs are gzipped SQLite files downloaded at runtime (not bundled)
+- SHA-256 checksums auto-patched into `DictionaryDownloadWorker.kt` by the generate-dicts workflow
+- Workflows live only at repo root `.github/workflows/` — `LexiPopup/.github/` was deleted (was dead code)
+- Wiktionary download is optional: Minimal + Standard packs always build; Full pack skipped if kaikki.org is unavailable
 
 ## Gotchas
 
-- Dictionary pack URLs in `DictionaryDownloadWorker.kt` point to `github.com/neet-ctrl/LexiPopup/releases/download/dict-v1/`. Run the "Generate Dictionary Packs" GitHub Actions workflow first to create that release, then update the SHA-256 checksums in the same file.
-- Checksums set to `"SKIP"` during development — update to real SHA-256 values before shipping.
-- `@file:OptIn(ExperimentalMaterial3Api::class)` is needed in `AiSettingsScreen.kt` because `ExposedDropdownMenuBox` and `menuAnchor()` are still experimental in Material3 1.2.x.
-- MediaPipe `tasks-genai:0.10.14` uses `.task` model files (not `.gguf`) — model files go in `filesDir`, not `assets`.
-- Hilt requires `hilt-work` for `@HiltWorker`-annotated WorkManager workers — both `hilt-work` and `hilt.work.compiler` (KSP) must be in `build.gradle.kts`.
+- **kaikki.org URL**: changed from `.json` → `.jsonl` in 2025. Current URL: `kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl`
+- Checksums in `DictionaryDownloadWorker.kt` default to `"SKIP"` (dev mode). Run Generate Dictionary Packs workflow to get real checksums.
+- Release APK uses a hardcoded keystore embedded in `release.yml` — no GitHub secrets needed
+- GitHub Actions only reads `.github/workflows/` at the repo root, never inside subdirectories
 
-## Pointers
+## User preferences
 
-- Full user-facing setup guide: `LexiPopup/SETUP_COMPLETE.md`
-- User guide: `LexiPopup/USER_GUIDE.md`
-- Project README: `LexiPopup/README.md`
+_Populate as you build — explicit user instructions worth remembering across sessions._
+
+## Product
+
+LexiPopup provides:
+- Instant popup definitions (<150ms) from Moon+ Reader or any app
+- Offline-first: 1,000 seed words built-in; Minimal/Standard/Full packs downloadable
+- Hindi meanings (Devanagari + transliteration)
+- Synonyms, antonyms, etymology, IPA pronunciation, TTS
+- Glassmorphism 3D UI with parallax tilt and spring animations
+- SM-2 flashcard system + vocabulary dashboard with heatmap
+- CSV / JSON / Anki TSV export

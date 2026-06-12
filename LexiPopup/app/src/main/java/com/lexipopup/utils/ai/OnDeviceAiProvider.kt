@@ -149,7 +149,7 @@ class OnDeviceAiProvider(
             FileOutputStream(dest, appendMode).use { out ->
                 body.byteStream().use { inp ->
                     val buf = ByteArray(64 * 1024)
-                    var n: Int
+                    var n: Int = -1
                     while (isActive && inp.read(buf).also { n = it } != -1) {
                         out.write(buf, 0, n)
                         received += n

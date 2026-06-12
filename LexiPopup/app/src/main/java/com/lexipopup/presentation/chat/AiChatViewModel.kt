@@ -12,6 +12,7 @@ import com.lexipopup.data.local.entities.ChatSessionEntity
 import com.lexipopup.domain.models.AppMode
 import com.lexipopup.domain.models.AppSettings
 import com.lexipopup.domain.models.WordEntry
+import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.utils.ModeManager
 import com.lexipopup.utils.SettingsDataStore
 import com.lexipopup.utils.ai.AiChatClient
@@ -59,6 +60,7 @@ sealed class WordLookupState {
 class AiChatViewModel @Inject constructor(
     private val chatDao: ChatDao,
     private val wordDao: WordDao,
+    private val vocabularyRepository: VocabularyRepository,
     private val aiChatClient: AiChatClient,
     private val aiProviderManager: AiProviderManager,
     private val settingsDataStore: SettingsDataStore,
@@ -330,7 +332,8 @@ Use precise scientific language. When mentioning a biological term, briefly note
                 return@launch
             }
 
-            val currentModeId = modeManager.currentMode.value.id
+            val currentMode   = modeManager.currentMode.value
+            val currentModeId = currentMode.id
             var saved = 0
             var skipped = 0
             words.forEach { word ->
@@ -339,9 +342,12 @@ Use precise scientific language. When mentioning a biological term, briefly note
                     try {
                         wordDao.insertWord(word.toEntity(gson))
                         wordDao.updateAccess(word.word, currentModeId)
+                        vocabularyRepository.recordSearch(word.word, "LexiPopup AI Chat", currentMode)
                         saved++
                     } catch (_: Exception) { skipped++ }
                 } else {
+                    wordDao.updateAccess(word.word, currentModeId)
+                    vocabularyRepository.recordSearch(word.word, "LexiPopup AI Chat", currentMode)
                     skipped++
                 }
             }
@@ -360,29 +366,35 @@ Use precise scientific language. When mentioning a biological term, briefly note
     fun lookupWord(word: String) {
         _wordLookup.value = WordLookupState.Loading(word)
         viewModelScope.launch(Dispatchers.IO) {
-            val currentModeId = modeManager.currentMode.value.id
+            val currentMode   = modeManager.currentMode.value
+            val currentModeId = currentMode.id
             val local = wordDao.findWord(word, currentModeId)
             if (local != null) {
+                wordDao.updateAccess(word, currentModeId)
+                vocabularyRepository.recordSearch(word, "LexiPopup AI Chat", currentMode)
                 _wordLookup.value = WordLookupState.Found(word, local.toDomain(gson))
                 return@launch
             }
             val entry = aiProviderManager.explain(word)
-            _wordLookup.value = if (entry != null) {
-                WordLookupState.Found(word, entry)
+            if (entry != null) {
+                vocabularyRepository.recordSearch(word, "LexiPopup AI Chat", currentMode)
+                _wordLookup.value = WordLookupState.Found(word, entry)
             } else {
-                WordLookupState.NotFound(word)
+                _wordLookup.value = WordLookupState.NotFound(word)
             }
         }
     }
 
     fun saveWordToHistory(entry: WordEntry) {
         viewModelScope.launch(Dispatchers.IO) {
-            val currentModeId = modeManager.currentMode.value.id
+            val currentMode   = modeManager.currentMode.value
+            val currentModeId = currentMode.id
             val existing = wordDao.findWord(entry.word, currentModeId)
             if (existing == null) {
                 wordDao.insertWord(entry.toEntity(gson))
             }
             wordDao.updateAccess(entry.word, currentModeId)
+            vocabularyRepository.recordSearch(entry.word, "LexiPopup AI Chat", currentMode)
         }
     }
 

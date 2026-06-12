@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.domain.repositories.DictionaryRepository
+import com.lexipopup.domain.repositories.VocabularyRepository
 import com.lexipopup.domain.usecases.LookupWordUseCase
 import com.lexipopup.utils.ModeManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,6 +18,7 @@ import javax.inject.Inject
 class WordDetailViewModel @Inject constructor(
     private val lookupWord: LookupWordUseCase,
     private val repo: DictionaryRepository,
+    private val vocabularyRepository: VocabularyRepository,
     private val modeManager: ModeManager
 ) : ViewModel() {
 
@@ -42,8 +44,13 @@ class WordDetailViewModel @Inject constructor(
         if (_wordEntry.value?.word == word) return
         viewModelScope.launch {
             _isLoading.value = true
-            _wordEntry.value = lookupWord(word, modeManager.currentMode.value).getOrNull()
+            val currentMode = modeManager.currentMode.value
+            val entry = lookupWord(word, currentMode).getOrNull()
+            _wordEntry.value = entry
             _isLoading.value = false
+            if (entry != null) {
+                vocabularyRepository.recordSearch(word, "LexiPopup", currentMode)
+            }
         }
     }
 

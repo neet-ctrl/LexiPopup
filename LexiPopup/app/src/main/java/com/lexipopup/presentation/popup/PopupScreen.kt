@@ -27,11 +27,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -41,8 +45,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.lexipopup.domain.models.AppSettings
@@ -1792,7 +1799,7 @@ fun BubbleMode(uiState: PopupUiState, onExpand: () -> Unit, modifier: Modifier) 
     }
 }
 
-// ── Manual search ─────────────────────────────────────────────────────────────
+// ── Manual search — full glassmorphic redesign ────────────────────────────────
 
 @Composable
 fun ManualSearchContent(
@@ -1802,43 +1809,433 @@ fun ManualSearchContent(
     onSearch: (String) -> Unit,
     onVoiceSearch: () -> Unit = {}
 ) {
+    val primary   = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary  = MaterialTheme.colorScheme.tertiary
+    val surface   = MaterialTheme.colorScheme.surface
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val surfVar   = MaterialTheme.colorScheme.surfaceVariant
+
+    val inf = rememberInfiniteTransition(label = "ms_inf")
+
+    // Shimmer sweep on accent bar
+    val shimmerX by inf.animateFloat(
+        initialValue = -1f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
+        label = "ms_shimmer"
+    )
+
+    // Floating glow pulse on icon
+    val iconPulse by inf.animateFloat(
+        initialValue = 0.90f, targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "ms_icon_pulse"
+    )
+
+    // Glow intensity when search box is focused
+    var isFocused by remember { mutableStateOf(false) }
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isFocused) 0.85f else 0.28f,
+        animationSpec = tween(280),
+        label = "ms_glow"
+    )
+    val borderWidth by animateDpAsState(
+        targetValue = if (isFocused) 2.dp else 1.dp,
+        animationSpec = tween(280),
+        label = "ms_border"
+    )
+    val searchShadowElev by animateDpAsState(
+        targetValue = if (isFocused) 12.dp else 4.dp,
+        animationSpec = tween(280),
+        label = "ms_shadow"
+    )
+
+    // Curated quick-search words shown when no suggestions yet
+    val quickWords = remember {
+        listOf("ephemeral", "serendipity", "eloquent", "resilient", "whimsical",
+               "ponder", "aesthetic", "profound", "ethereal", "melancholy")
+    }
+
     Column(
-        Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+
+        // ── Hero / branding section ──────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(listOf(
+                        primary.copy(alpha = 0.13f),
+                        primary.copy(alpha = 0.05f),
+                        Color.Transparent
+                    ))
+                )
+                .padding(horizontal = 20.dp, top = 18.dp, bottom = 14.dp)
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Search any word…") },
-                leadingIcon  = { Icon(Icons.Default.Search, null) },
-                trailingIcon = {
-                    IconButton(onClick = onVoiceSearch) {
-                        Icon(Icons.Default.Mic, "Voice search", tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(50)
-            )
-            Button(
-                onClick = { if (query.isNotBlank()) onSearch(query.trim().split(" ").first()) },
-                shape = RoundedCornerShape(50)
-            ) { Text("GO") }
-        }
-        if (suggestions.isNotEmpty()) {
-            Text("Suggestions:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            suggestions.take(5).forEach { suggestion ->
-                Surface(
-                    onClick = { onSearch(suggestion) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                // Animated shimmer accent bar
+                Box(
+                    Modifier
+                        .width(44.dp).height(3.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    primary.copy(alpha = 0.9f),
+                                    secondary.copy(alpha = 0.85f),
+                                    Color.Transparent
+                                ),
+                                startX = shimmerX * 300f,
+                                endX   = (shimmerX + 1f) * 300f
+                            )
+                        )
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(suggestion, modifier = Modifier.padding(12.dp, 8.dp), style = MaterialTheme.typography.bodyMedium)
+                    // Glassmorphic icon bubble
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .scale(iconPulse)
+                            .shadow(8.dp, CircleShape,
+                                spotColor = primary.copy(alpha = 0.30f),
+                                ambientColor = primary.copy(alpha = 0.15f))
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                                    primary.copy(alpha = 0.80f)
+                                ))
+                            )
+                            .border(
+                                1.5.dp,
+                                Brush.sweepGradient(listOf(
+                                    Color.White.copy(alpha = 0.55f),
+                                    primary.copy(alpha = 0.25f),
+                                    Color.White.copy(alpha = 0.55f)
+                                )),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("📖", fontSize = 22.sp)
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "LexiPopup",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = onSurface
+                        )
+                        Text(
+                            "Instant word dictionary",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onSurface.copy(alpha = 0.52f),
+                            letterSpacing = 0.2.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Search box + content ─────────────────────────────────────────────
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+
+            // Glassmorphic animated search bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation  = searchShadowElev,
+                        shape      = RoundedCornerShape(20.dp),
+                        spotColor  = primary.copy(alpha = glowAlpha * 0.40f),
+                        ambientColor = primary.copy(alpha = glowAlpha * 0.15f)
+                    )
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                            surface.copy(alpha = 0.88f)
+                        else
+                            surfVar.copy(alpha = 0.70f)
+                    )
+                    .border(
+                        width = borderWidth,
+                        brush = Brush.linearGradient(listOf(
+                            primary.copy(alpha = glowAlpha),
+                            secondary.copy(alpha = glowAlpha * 0.60f),
+                            primary.copy(alpha = glowAlpha * 0.40f)
+                        )),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+            ) {
+                BasicTextField(
+                    value            = query,
+                    onValueChange    = onQueryChange,
+                    modifier         = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { isFocused = it.isFocused },
+                    singleLine       = true,
+                    textStyle        = TextStyle(
+                        color      = onSurface,
+                        fontSize   = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    keyboardOptions  = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions  = KeyboardActions(onSearch = {
+                        if (query.isNotBlank()) onSearch(query.trim().split(" ").first())
+                    }),
+                    decorationBox = { innerField ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 15.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Search icon with animated tint
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = primary.copy(alpha = if (isFocused) 1f else 0.55f),
+                                modifier = Modifier.size(20.dp)
+                            )
+
+                            // Input field with placeholder
+                            Box(Modifier.weight(1f)) {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        "Search any word…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = onSurface.copy(alpha = 0.38f)
+                                    )
+                                }
+                                innerField()
+                            }
+
+                            // Mic button
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(primary.copy(alpha = 0.10f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onVoiceSearch() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Mic, "Voice search",
+                                    tint = primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            // GO button — only visible when query is non-empty
+                            AnimatedVisibility(
+                                visible = query.isNotBlank(),
+                                enter = fadeIn(tween(160)) + scaleIn(tween(160), 0.7f),
+                                exit  = fadeOut(tween(120)) + scaleOut(tween(120), 0.7f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(primary)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onSearch(query.trim().split(" ").first()) }
+                                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "GO",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+
+            // ── Autocomplete suggestions (appear as user types) ───────────────
+            if (suggestions.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .width(3.dp).height(12.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(primary)
+                        )
+                        Text(
+                            "Suggestions",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = primary
+                        )
+                    }
+                    suggestions.take(6).forEach { word ->
+                        val src = remember { MutableInteractionSource() }
+                        val pressed by src.collectIsPressedAsState()
+                        val sc by animateFloatAsState(
+                            if (pressed) 0.97f else 1f, label = "sug_sc_$word"
+                        )
+                        Surface(
+                            onClick = { onSearch(word) },
+                            modifier = Modifier.fillMaxWidth().scale(sc),
+                            shape = RoundedCornerShape(14.dp),
+                            color = surfVar.copy(alpha = 0.45f),
+                            border = BorderStroke(
+                                0.6.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+                            ),
+                            interactionSource = src
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Search, null,
+                                    tint = primary.copy(alpha = 0.55f),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    word,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    Icons.Default.NorthWest, null,
+                                    tint = onSurface.copy(alpha = 0.30f),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Quick-explore words (shown when no active suggestions) ─────────
+            if (suggestions.isEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .width(3.dp).height(12.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(secondary)
+                        )
+                        Text(
+                            "Quick explore",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = secondary
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "tap any word",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = onSurface.copy(alpha = 0.35f)
+                        )
+                    }
+
+                    // Two-row chip grid
+                    val row1 = quickWords.take(5)
+                    val row2 = quickWords.drop(5)
+                    listOf(row1, row2).forEachIndexed { rowIdx, rowWords ->
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            items(rowWords) { word ->
+                                val src = remember { MutableInteractionSource() }
+                                val pressed by src.collectIsPressedAsState()
+                                val sc by animateFloatAsState(
+                                    if (pressed) 0.90f else 1f, label = "qw_sc_$rowIdx$word"
+                                )
+                                val chipColors = listOf(
+                                    primary.copy(alpha = 0.12f),
+                                    secondary.copy(alpha = 0.12f),
+                                    tertiary.copy(alpha = 0.12f)
+                                )
+                                val chipBorderColors = listOf(
+                                    primary.copy(alpha = 0.35f),
+                                    secondary.copy(alpha = 0.35f),
+                                    tertiary.copy(alpha = 0.35f)
+                                )
+                                val colorIdx = (word.length + rowIdx) % 3
+                                Surface(
+                                    onClick = { onSearch(word) },
+                                    modifier = Modifier.scale(sc),
+                                    shape = RoundedCornerShape(50),
+                                    color = chipColors[colorIdx],
+                                    border = BorderStroke(0.8.dp, chipBorderColors[colorIdx]),
+                                    interactionSource = src
+                                ) {
+                                    Text(
+                                        word,
+                                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = onSurface.copy(alpha = 0.82f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Tip card ─────────────────────────────────────────────────
+                Spacer(Modifier.height(4.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = tertiary.copy(alpha = 0.08f),
+                    border = BorderStroke(0.7.dp, tertiary.copy(alpha = 0.22f))
+                ) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("💡", fontSize = 16.sp)
+                        Text(
+                            "Select any word in Moon+ Reader or any app — LexiPopup pops up instantly.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onSurface.copy(alpha = 0.60f),
+                            lineHeight = 17.sp
+                        )
+                    }
                 }
             }
         }

@@ -53,9 +53,14 @@ abstract class LexiDatabase : RoomDatabase() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         // SQLite optimizations per spec:
-                        // page_size=4096, WAL, NORMAL sync, 2MB cache
-                        db.execSQL("PRAGMA page_size = 4096")
-                        db.execSQL("PRAGMA journal_mode = WAL")
+                        // WAL, NORMAL sync, 2MB cache
+                        // Note: page_size must be set before DB creation — it has
+                        // no effect in onCreate and is omitted here.
+                        //
+                        // journal_mode returns a result row, so it must be run
+                        // via query() not execSQL() to avoid the
+                        // "Queries can be performed using query/rawQuery only" crash.
+                        db.query("PRAGMA journal_mode = WAL", null).close()
                         db.execSQL("PRAGMA synchronous = NORMAL")
                         db.execSQL("PRAGMA cache_size = -2000")
                         db.execSQL("PRAGMA mmap_size = 268435456")

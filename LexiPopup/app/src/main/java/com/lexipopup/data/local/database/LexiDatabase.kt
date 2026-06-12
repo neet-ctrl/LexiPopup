@@ -76,6 +76,29 @@ abstract class LexiDatabase : RoomDatabase() {
                             db.execSQL("PRAGMA cache_size = -2000")
                             db.execSQL("PRAGMA mmap_size = 268435456")
                         } catch (_: Exception) { /* non-fatal — defaults are fine */ }
+
+                        // ── Lazy re-seed guard ─────────────────────────────────────
+                        // onCreate only fires on a fresh install. Users who installed
+                        // before the seeder existed (or who had the DB recreated via
+                        // fallbackToDestructiveMigration without a fresh install) will
+                        // have 0 seed words. Detect and fix that here on every open.
+                        // DatabaseSeeder uses INSERT OR IGNORE so this is idempotent —
+                        // if words already exist nothing changes.
+                        try {
+                            val cursor = db.query(
+                                "SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed'",
+                                null
+                            )
+                            val seedCount = if (cursor.moveToFirst()) cursor.getInt(0) else 0
+                            cursor.close()
+                            if (seedCount == 0) {
+                                Log.i("LexiDatabase", "No seed words found on open — running seeder now")
+                                DatabaseSeeder.seed(db)
+                                Log.i("LexiDatabase", "Re-seed on open completed successfully")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("LexiDatabase", "Re-seed on open failed", e)
+                        }
                     }
                 })
                 .fallbackToDestructiveMigration()

@@ -164,6 +164,13 @@ jobs:
             --print-certs app/build/outputs/apk/release/LexiPopup-${{ env.APK_VER }}-signed.apk \
             && echo "✅ APK signature verified"
 
+      - name: Upload Signed APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LexiPopup-Release-${{ github.sha }}
+          path: LexiPopup/app/build/outputs/apk/release/LexiPopup-*-signed.apk
+          retention-days: 30
+
       - name: Shred Keystore from Runner
         if: always()
         run: shred -u keystore.jks 2>/dev/null || rm -f keystore.jks

@@ -117,6 +117,13 @@
             android:exported="false"
             android:theme="@style/Theme.LexiPopup" />
 
+        <!-- Crash Log Activity — launched by CrashHandler on uncaught exception -->
+        <activity
+            android:name=".presentation.crash.CrashLogActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.LexiPopup" />
+
         <!-- Popup Foreground Service -->
         <service
             android:name=".presentation.popup.PopupService"

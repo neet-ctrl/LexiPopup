@@ -145,19 +145,24 @@ jobs:
             -Pandroid.injected.signing.key.password='Sh@090609' \
             --no-daemon --stacktrace
 
+      - name: Resolve version tag
+        run: |
+          # workflow_dispatch → use the tag input; tag push → use ref_name
+          RAW="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${RAW#v}"
+          echo "RELEASE_TAG=${RAW}" >> $GITHUB_ENV
+          echo "APK_VER=${VER}"     >> $GITHUB_ENV
+          echo "Resolved tag: ${RAW}  version: ${VER}"
+
       - name: Rename & Verify Signed APK
         run: |
-          VERSION=${{ github.ref_name }}
-          VER=${VERSION#v}
           cp app/build/outputs/apk/release/app-release.apk \
-             app/build/outputs/apk/release/LexiPopup-${VER}-signed.apk
+             app/build/outputs/apk/release/LexiPopup-${{ env.APK_VER }}-signed.apk
 
           BUILD_TOOLS=$(ls ${ANDROID_SDK_ROOT}/build-tools | sort -V | tail -n1)
           ${ANDROID_SDK_ROOT}/build-tools/${BUILD_TOOLS}/apksigner verify \
-            --print-certs app/build/outputs/apk/release/LexiPopup-${VER}-signed.apk \
+            --print-certs app/build/outputs/apk/release/LexiPopup-${{ env.APK_VER }}-signed.apk \
             && echo "✅ APK signature verified"
-
-          echo "APK_VER=${VER}" >> $GITHUB_ENV
 
       - name: Shred Keystore from Runner
         if: always()
@@ -166,10 +171,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "🚀 LexiPopup ${{ github.ref_name }}"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "🚀 LexiPopup ${{ env.RELEASE_TAG }}"
           body: |
-            ## LexiPopup ${{ github.ref_name }}
+            ## LexiPopup ${{ env.RELEASE_TAG }}
 
             ### Installation
             1. Download `LexiPopup-${{ env.APK_VER }}-signed.apk` below

@@ -104,6 +104,16 @@ fun PopupScreen(
     val bubbleY = remember { Animatable(100f) }
     var edgeTabOffsetY by remember { mutableStateOf(0f) }
 
+    // ── Window collapse mode ──────────────────────────────────────────────────
+    var windowMode by remember { mutableStateOf(PopupWindowState.FULL) }
+    // EDGE states take priority over BUBBLE to prevent full-screen touch blocking
+    val effectiveWindowState = when {
+        windowMode == PopupWindowState.EDGE_LEFT  -> PopupWindowState.EDGE_LEFT
+        windowMode == PopupWindowState.EDGE_RIGHT -> PopupWindowState.EDGE_RIGHT
+        isBubble                              -> PopupWindowState.BUBBLE
+        else                                  -> PopupWindowState.FULL
+    }
+
     // Snap the bubble/collapsed handle to the nearest screen edge (left or right).
     // This sets windowMode to EDGE_* so the window shrinks to WRAP_CONTENT and
     // touches outside the handle pass through to the underlying app.
@@ -135,16 +145,6 @@ fun PopupScreen(
     // ── Window size state ─────────────────────────────────────────────────────
     var widthFraction  by remember { mutableStateOf(settings.popupWidthFraction.coerceIn(0.50f, 0.95f)) }
     var heightFraction by remember { mutableStateOf(settings.popupHeightFraction.coerceIn(0.35f, 0.92f)) }
-
-    // ── Window collapse mode ──────────────────────────────────────────────────
-    var windowMode by remember { mutableStateOf(PopupWindowState.FULL) }
-    // EDGE states take priority over BUBBLE to prevent full-screen touch blocking
-    val effectiveWindowState = when {
-        windowMode == PopupWindowState.EDGE_LEFT  -> PopupWindowState.EDGE_LEFT
-        windowMode == PopupWindowState.EDGE_RIGHT -> PopupWindowState.EDGE_RIGHT
-        isBubble                              -> PopupWindowState.BUBBLE
-        else                                  -> PopupWindowState.FULL
-    }
 
     // ── Pass touches through to underlying app in bubble/edge modes ─────────────
     val activity = LocalContext.current as? androidx.activity.ComponentActivity

@@ -27,4 +27,6 @@ interface DictionaryRepository {
     fun getWordHistory(): Flow<List<WordEntry>>
     fun getWordHistoryCount(): Flow<Int>
     suspend fun markAccessed(word: String)
+    suspend fun getSeedWords(query: String = "", limit: Int = 1000): List<WordEntry>
+    suspend fun getSeedWordCount(): Int
 }

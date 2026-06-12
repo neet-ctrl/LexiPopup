@@ -154,6 +154,25 @@ interface WordDao {
         WHERE access_count > 0 OR source IN ('online', 'groq', 'openai', 'on_device')
     """)
     fun getHistoryWordCountFlow(): Flow<Int>
+
+    // ── Seed word list queries ──────────────────────────────────────────────
+
+    @Query("""
+        SELECT * FROM dictionary_cache
+        WHERE source = 'seed'
+          AND (:query = '' OR LOWER(word) LIKE '%' || LOWER(:query) || '%'
+               OR LOWER(short_meaning) LIKE '%' || LOWER(:query) || '%'
+               OR LOWER(part_of_speech) LIKE '%' || LOWER(:query) || '%')
+        ORDER BY
+            CASE WHEN :query != '' AND LOWER(word) LIKE LOWER(:query) || '%' THEN 0 ELSE 1 END,
+            frequency_rating DESC,
+            word ASC
+        LIMIT :limit
+    """)
+    suspend fun getSeedWords(query: String, limit: Int): List<WordEntity>
+
+    @Query("SELECT COUNT(*) FROM dictionary_cache WHERE source = 'seed'")
+    suspend fun getSeedWordCount(): Int
 }
 
 data class DifficultyCountRow(

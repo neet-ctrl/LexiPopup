@@ -37,6 +37,8 @@ import com.lexipopup.domain.models.WordEntry
 import com.lexipopup.presentation.about.AboutScreen
 import com.lexipopup.presentation.dictionary.DictionaryBrowserScreen
 import com.lexipopup.presentation.dictionary.DictionaryBrowserViewModel
+import com.lexipopup.presentation.dictionary.SeedWordListScreen
+import com.lexipopup.presentation.dictionary.SeedWordListViewModel
 import com.lexipopup.presentation.dictionary.WordDetailScreen
 import com.lexipopup.presentation.flashcards.FlashcardsScreen
 import com.lexipopup.presentation.flashcards.FlashcardsViewModel
@@ -63,6 +65,7 @@ sealed class AppDestination {
     object AiSettings : AppDestination()
     object Backup : AppDestination()
     object WordHistory : AppDestination()
+    object SeedWordList : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,6 +138,7 @@ fun DashboardScreen(
             AppDestination.AiSettings   -> AppDestination.Settings
             AppDestination.Backup        -> AppDestination.Settings
             AppDestination.WordHistory   -> AppDestination.Flashcards
+            AppDestination.SeedWordList  -> AppDestination.Dictionary
             else -> AppDestination.Home
         }
     }
@@ -173,6 +177,15 @@ fun DashboardScreen(
                 onBack = { destination = AppDestination.Flashcards },
                 onWordSelected = { word -> destination = AppDestination.WordDetail(word) },
                 viewModel = historyVm
+            )
+            return
+        }
+        AppDestination.SeedWordList -> {
+            val seedVm: SeedWordListViewModel = hiltViewModel()
+            SeedWordListScreen(
+                viewModel = seedVm,
+                onWordSelected = { word -> destination = AppDestination.WordDetail(word) },
+                onBack = { destination = AppDestination.Dictionary }
             )
             return
         }
@@ -249,7 +262,8 @@ fun DashboardScreen(
                 )
                 AppDestination.Dictionary -> DictionaryBrowserScreen(
                     viewModel = browserVm,
-                    onWordSelected = onWordSelected
+                    onWordSelected = onWordSelected,
+                    onOpenSeedList = { destination = AppDestination.SeedWordList }
                 )
                 AppDestination.Flashcards -> {
                     val flashVm: FlashcardsViewModel = hiltViewModel()

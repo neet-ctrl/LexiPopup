@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,7 +42,8 @@ private val SORT_OPTIONS = listOf("alpha" to "A–Z", "frequency" to "Frequency"
 @Composable
 fun DictionaryBrowserScreen(
     viewModel: DictionaryBrowserViewModel = hiltViewModel(),
-    onWordSelected: (String) -> Unit
+    onWordSelected: (String) -> Unit,
+    onOpenSeedList: () -> Unit = {}
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
@@ -133,6 +135,11 @@ fun DictionaryBrowserScreen(
                 // Word of the Day
                 item {
                     WordOfDayCard(wordOfDay = wordOfDay, onClick = { wordOfDay?.let { onWordSelected(it.word) } })
+                }
+
+                // Built-in seed word list button
+                item {
+                    SeedWordListBannerCard(onClick = onOpenSeedList)
                 }
 
                 // Alphabet quick-jump bar
@@ -416,6 +423,75 @@ private fun SearchResultsContent(
                     )
                 }
                 item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeedWordListBannerCard(onClick: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            primary.copy(alpha = 0.12f),
+                            tertiary.copy(alpha = 0.08f)
+                        )
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.LibraryBooks,
+                        contentDescription = null,
+                        tint = primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "Browse 1,000 Built-in Words",
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Offline · searchable · meanings, IPA & Hindi",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

@@ -5,7 +5,11 @@ name: Debug APK → Pre-Release
 #   push:
 #     branches: ["**"]
 on:
-  workflow_dispatch:
+ push:
+  branches: [ main, master ]
+ pull_request:
+  branches: [ main, master ]
+ workflow_dispatch:
 
 permissions:
   contents: write

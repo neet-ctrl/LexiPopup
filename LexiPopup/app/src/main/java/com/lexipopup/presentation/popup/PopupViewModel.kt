@@ -112,7 +112,24 @@ class PopupViewModel @Inject constructor(
                         vocabularyRepository.recordSearch(clean, sourceApp, effectiveMode)
                     }
                     if (settings.value.autoGenerateFlashcards) {
-                        vocabularyRepository.createFlashcard(clean, clean, entry.shortMeaning.take(100))
+                        val s = settings.value
+                        val isBio = effectiveMode == AppMode.BIOLOGY
+                        val front = if (isBio && s.bioCardShowCategory && entry.partOfSpeech.isNotBlank())
+                            "${clean.replaceFirstChar { it.uppercase() }}  [${entry.partOfSpeech}]"
+                        else clean
+                        val back = buildString {
+                            append(entry.shortMeaning.take(150))
+                            if (isBio) {
+                                if (s.bioCardShowHindi && entry.hindiMeaning.isNotBlank())
+                                    append("\n\n🇮🇳 ${entry.hindiMeaning.take(80)}")
+                                if (s.bioCardShowExample && entry.exampleSentence.isNotBlank())
+                                    append("\n\n📝 ${entry.exampleSentence.take(120)}")
+                                val bioData = entry.biologyData()
+                                if (s.bioCardShowFunction && bioData.hasFunctions)
+                                    append("\n\n⚙️ ${bioData.functions.first().take(100)}")
+                            }
+                        }
+                        vocabularyRepository.createFlashcard(clean, front, back, effectiveMode.id)
                     }
                     scheduleAutoClose()
                 },
@@ -266,13 +283,26 @@ class PopupViewModel @Inject constructor(
         val state = _uiState.value
         if (state is PopupUiState.Success) {
             viewModelScope.launch {
-                val mode = if (state.entry.isBiology()) AppMode.BIOLOGY.id else AppMode.ENGLISH.id
-                vocabularyRepository.createFlashcard(
-                    state.entry.word,
-                    state.entry.word,
-                    state.entry.shortMeaning.take(100),
-                    mode
-                )
+                val entry = state.entry
+                val isBio = entry.isBiology()
+                val modeId = if (isBio) AppMode.BIOLOGY.id else AppMode.ENGLISH.id
+                val s = settings.value
+                val front = if (isBio && s.bioCardShowCategory && entry.partOfSpeech.isNotBlank())
+                    "${entry.word.replaceFirstChar { it.uppercase() }}  [${entry.partOfSpeech}]"
+                else entry.word
+                val back = buildString {
+                    append(entry.shortMeaning.take(150))
+                    if (isBio) {
+                        if (s.bioCardShowHindi && entry.hindiMeaning.isNotBlank())
+                            append("\n\n🇮🇳 ${entry.hindiMeaning.take(80)}")
+                        if (s.bioCardShowExample && entry.exampleSentence.isNotBlank())
+                            append("\n\n📝 ${entry.exampleSentence.take(120)}")
+                        val bioData = entry.biologyData()
+                        if (s.bioCardShowFunction && bioData.hasFunctions)
+                            append("\n\n⚙️ ${bioData.functions.first().take(100)}")
+                    }
+                }
+                vocabularyRepository.createFlashcard(entry.word, front, back, modeId)
             }
         }
     }

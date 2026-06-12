@@ -102,5 +102,15 @@ data class AppSettings(
 
     // Biology Term of Day
     val totdNotificationEnabled: Boolean = true,
-    val totdNotificationHour: Int = 9
+    val totdNotificationHour: Int = 9,
+
+    // ── Biology Flashcard Card-Display Settings ────────────────────────────────
+    /** Show [Category] tag on the front of new biology flashcards */
+    val bioCardShowCategory: Boolean = true,
+    /** Include example sentence on the back of new biology flashcards */
+    val bioCardShowExample: Boolean = true,
+    /** Include primary function on the back of new biology flashcards */
+    val bioCardShowFunction: Boolean = true,
+    /** Include Hindi meaning on the back of new biology flashcards */
+    val bioCardShowHindi: Boolean = false
 )

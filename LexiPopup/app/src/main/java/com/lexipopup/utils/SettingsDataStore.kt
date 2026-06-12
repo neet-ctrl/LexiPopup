@@ -106,6 +106,12 @@ class SettingsDataStore @Inject constructor(
         // ── Biology Term of Day ────────────────────────────────────────────────
         val TOTD_NOTIFICATION_ENABLED = booleanPreferencesKey("totd_notification_enabled")
         val TOTD_NOTIFICATION_HOUR    = intPreferencesKey("totd_notification_hour")
+
+        // ── Biology Flashcard Card-Display Settings ────────────────────────────
+        val BIO_CARD_SHOW_CATEGORY  = booleanPreferencesKey("bio_card_show_category")
+        val BIO_CARD_SHOW_EXAMPLE   = booleanPreferencesKey("bio_card_show_example")
+        val BIO_CARD_SHOW_FUNCTION  = booleanPreferencesKey("bio_card_show_function")
+        val BIO_CARD_SHOW_HINDI     = booleanPreferencesKey("bio_card_show_hindi")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -182,7 +188,12 @@ class SettingsDataStore @Inject constructor(
             bioShowSearchWebButton      = prefs[BIO_SHOW_SEARCH_WEB_BTN] ?: true,
             // TOTD
             totdNotificationEnabled     = prefs[TOTD_NOTIFICATION_ENABLED] ?: true,
-            totdNotificationHour        = prefs[TOTD_NOTIFICATION_HOUR] ?: 9
+            totdNotificationHour        = prefs[TOTD_NOTIFICATION_HOUR] ?: 9,
+            // Biology flashcard card-display
+            bioCardShowCategory         = prefs[BIO_CARD_SHOW_CATEGORY] ?: true,
+            bioCardShowExample          = prefs[BIO_CARD_SHOW_EXAMPLE]  ?: true,
+            bioCardShowFunction         = prefs[BIO_CARD_SHOW_FUNCTION]  ?: true,
+            bioCardShowHindi            = prefs[BIO_CARD_SHOW_HINDI]    ?: false
         )
     }
 

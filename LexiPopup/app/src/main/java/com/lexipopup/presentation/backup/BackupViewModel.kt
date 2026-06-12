@@ -153,7 +153,7 @@ class BackupViewModel @Inject constructor(
 
                 flashcardWords.forEach { word ->
                     runCatching {
-                        vocabularyRepository.createFlashcard(word, word, "")
+                        vocabularyRepository.createFlashcard(word, word, "", "english")
                         flashcardsRestored++
                     }
                 }

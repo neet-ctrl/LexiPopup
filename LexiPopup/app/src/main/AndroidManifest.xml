@@ -12,6 +12,8 @@
     <!-- ── Foreground service (install-time, no runtime dialog needed) ──────── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Required on Android 14+ for WorkManager expedited workers using dataSync type -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- ── Notifications (runtime dialog on API 33+) ────────────────────────── -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

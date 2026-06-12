@@ -166,11 +166,12 @@ private fun PackDownloadCard(
         DatabasePack.FULL     -> Color(0xFF9C27B0)
     }
 
-    // Log tray expanded state — auto-expand when downloading starts
+    // Log tray — auto-expand as soon as anything is happening
     var logExpanded by remember { mutableStateOf(false) }
     val hasLog = state.downloadLog.isNotBlank()
     val isActive = state.status in listOf(
-        DownloadStatus.DOWNLOADING, DownloadStatus.VERIFYING, DownloadStatus.IMPORTING
+        DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING,
+        DownloadStatus.VERIFYING, DownloadStatus.IMPORTING
     )
     LaunchedEffect(isActive) {
         if (isActive) logExpanded = true
@@ -360,10 +361,11 @@ private fun PackDownloadCard(
                 }
             }
 
-            // ── Advanced Download Log tray ───────────────────────────────────
+            // ── Advanced Download Log tray (visible whenever active or has history) ──
             if (hasLog || isActive) {
                 DownloadLogTray(
                     log = state.downloadLog,
+                    status = state.status,
                     expanded = logExpanded,
                     onToggle = { logExpanded = !logExpanded }
                 )
@@ -375,6 +377,7 @@ private fun PackDownloadCard(
 @Composable
 private fun DownloadLogTray(
     log: String,
+    status: DownloadStatus,
     expanded: Boolean,
     onToggle: () -> Unit
 ) {
@@ -382,7 +385,6 @@ private fun DownloadLogTray(
 
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-    // Tray header / toggle row
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -421,7 +423,6 @@ private fun DownloadLogTray(
         }
     }
 
-    // Collapsible log content
     AnimatedVisibility(
         visible = expanded,
         enter = expandVertically() + fadeIn(),
@@ -434,7 +435,6 @@ private fun DownloadLogTray(
         ) {
             val scrollState = rememberScrollState()
 
-            // Auto-scroll to bottom when log updates
             LaunchedEffect(log) {
                 scrollState.animateScrollTo(scrollState.maxValue)
             }
@@ -442,29 +442,34 @@ private fun DownloadLogTray(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 80.dp, max = 240.dp)
+                    .heightIn(min = 80.dp, max = 280.dp)
                     .verticalScroll(scrollState)
                     .horizontalScroll(rememberScrollState())
                     .padding(10.dp)
             ) {
-                if (log.isBlank()) {
-                    Text(
-                        "Waiting for download to start…",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                } else {
-                    Text(
-                        log,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            lineHeight = 16.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                val displayText = when {
+                    log.isNotBlank() -> log
+                    status == DownloadStatus.QUEUED ->
+                        "Worker enqueued — starting immediately (no network constraint).\n" +
+                        "If this stays here >5 seconds, the device may be blocking background tasks.\n\n" +
+                        "Tips:\n" +
+                        "• Disable battery optimisation for LexiPopup in device Settings\n" +
+                        "• On Xiaomi/OPPO/Vivo: allow 'Background autostart' for LexiPopup\n" +
+                        "• Make sure mobile data / Wi-Fi is active"
+                    else -> "Waiting for download to start…"
                 }
+                Text(
+                    displayText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        lineHeight = 16.sp
+                    ),
+                    color = if (log.isBlank())
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

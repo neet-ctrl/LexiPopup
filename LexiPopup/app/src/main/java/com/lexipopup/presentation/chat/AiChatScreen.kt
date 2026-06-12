@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.gson.Gson
 import com.lexipopup.data.local.entities.ChatMessageEntity
@@ -57,7 +59,9 @@ private val ErrorText        = Color(0xFFB71C1C)
 @Composable
 fun AiChatScreen(
     viewModel: AiChatViewModel = hiltViewModel(),
-    onWordSelected: (String) -> Unit = {}
+    onWordSelected: (String) -> Unit = {},
+    isFullscreenMode: Boolean = false,
+    onExitFullscreen: () -> Unit = {}
 ) {
     val sessions         by viewModel.sessions.collectAsState()
     val currentSession   by viewModel.currentSession.collectAsState()
@@ -78,6 +82,7 @@ fun AiChatScreen(
     var inputText         by remember { mutableStateOf("") }
     var showSessions      by remember { mutableStateOf(false) }
     var longPressedWord   by remember { mutableStateOf<Pair<String, Long>?>(null) }  // word, messageId
+    var isFullscreen      by remember { mutableStateOf(false) }
 
     // Auto-scroll to latest message
     LaunchedEffect(messages.size, typingText.length) {
@@ -162,6 +167,17 @@ fun AiChatScreen(
                                 tint = Color(0xFFFF6F00)
                             )
                         }
+                    }
+                    IconButton(
+                        onClick = if (isFullscreenMode) onExitFullscreen else ({ isFullscreen = true }),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            if (isFullscreenMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            if (isFullscreenMode) "Exit fullscreen" else "Open fullscreen",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -288,6 +304,27 @@ fun AiChatScreen(
             },
             onDismiss = viewModel::clearExtractionResult
         )
+    }
+
+    // ── Fullscreen dialog ────────────────────────────────────────────────────
+    if (isFullscreen && !isFullscreenMode) {
+        Dialog(
+            onDismissRequest = { isFullscreen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                AiChatScreen(
+                    viewModel = viewModel,
+                    onWordSelected = onWordSelected,
+                    isFullscreenMode = true,
+                    onExitFullscreen = { isFullscreen = false }
+                )
+            }
+        }
     }
 }
 

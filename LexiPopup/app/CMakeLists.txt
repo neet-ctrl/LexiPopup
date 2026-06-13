@@ -25,8 +25,7 @@ set(GGML_NATIVE   OFF CACHE BOOL "" FORCE)
 include(FetchContent)
 FetchContent_Declare(
     llama_cpp
-    URL      https://github.com/ggml-org/llama.cpp/archive/refs/tags/b9620.zip
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b9620.zip
 )
 FetchContent_MakeAvailable(llama_cpp)
 

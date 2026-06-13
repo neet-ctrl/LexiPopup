@@ -50,6 +50,14 @@ class AiSettingsViewModel @Inject constructor(
 
     private var currentDownloadJob: Job? = null
 
+    init {
+        // If the model is already on disk when the app starts, load it into
+        // native memory now so the very first inference call is fast.
+        viewModelScope.launch {
+            aiProviderManager.onDeviceProvider.warmUpModel()
+        }
+    }
+
     // ── Provider selection ──────────────────────────────────────────────────
 
     fun selectProvider(type: AiProviderType) {
@@ -107,6 +115,8 @@ class AiSettingsViewModel @Inject constructor(
         currentDownloadJob?.cancel()
         currentDownloadJob = viewModelScope.launch {
             aiProviderManager.onDeviceProvider.downloadModel(model)
+            // Warm up immediately after download so the first inference is fast
+            aiProviderManager.onDeviceProvider.warmUpModel()
         }
     }
 
@@ -122,6 +132,8 @@ class AiSettingsViewModel @Inject constructor(
         currentDownloadJob?.cancel()
         currentDownloadJob = viewModelScope.launch {
             aiProviderManager.onDeviceProvider.importFromUri(uri, model)
+            // Warm up after import too
+            aiProviderManager.onDeviceProvider.warmUpModel()
         }
     }
 

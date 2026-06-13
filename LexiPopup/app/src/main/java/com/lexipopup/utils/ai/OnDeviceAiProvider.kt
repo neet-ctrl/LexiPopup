@@ -370,7 +370,24 @@ class OnDeviceAiProvider(
         stripped.substring(0, cutOff).trim()
     }
 
+    /**
+     * Pre-loads the model into native memory so the first real inference call
+     * is fast. Safe to call multiple times — the native side is a no-op if the
+     * same model is already loaded.
+     *
+     * Call this after download completes or when the app starts with a ready model.
+     */
+    suspend fun warmUpModel() = withContext(Dispatchers.IO) {
+        if (!isModelReady()) return@withContext
+        log("Warming up model (loading into memory)…")
+        val ok = LlamaJni.loadModelNative(modelFile().absolutePath)
+        if (ok) log("Model warm-up complete — inference will be fast")
+        else    log("Model warm-up failed — will retry on first inference")
+    }
+
     fun deleteModel() {
+        // Free native memory before deleting the file
+        LlamaJni.unloadModelNative()
         modelFile().delete()
         _downloadLogs.value = emptyList()
         _modelStatus.value = OnDeviceModelStatus.NotDownloaded

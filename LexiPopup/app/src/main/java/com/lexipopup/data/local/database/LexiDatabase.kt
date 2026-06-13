@@ -37,7 +37,7 @@ import kotlinx.coroutines.CoroutineScope
         ChatMessageEntity::class,
         RandomWordEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -123,6 +123,35 @@ abstract class LexiDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 5 → 6: Recreate random_words with a schema that exactly matches
+         * the Room entity (no DEFAULT clauses on TEXT columns, no DEFAULT on is_seen,
+         * no index).  The table is a pure AI-fetch cache so dropping it loses nothing
+         * the user cares about — it will be refilled by RandomWordWorker on next use.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `random_words`")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `random_words` (
+                        `id`             INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `word`           TEXT    NOT NULL,
+                        `teaser`         TEXT    NOT NULL,
+                        `part_of_speech` TEXT    NOT NULL,
+                        `pronunciation`  TEXT    NOT NULL,
+                        `definition`     TEXT    NOT NULL,
+                        `example`        TEXT    NOT NULL,
+                        `etymology`      TEXT    NOT NULL,
+                        `difficulty`     TEXT    NOT NULL,
+                        `topic`          TEXT    NOT NULL,
+                        `provider`       TEXT    NOT NULL,
+                        `is_seen`        INTEGER NOT NULL,
+                        `fetched_at`     INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
@@ -134,7 +163,7 @@ abstract class LexiDatabase : RoomDatabase() {
                 // what Callback.onCreate receives) is illegal on Android 16 / SQLite 3.46+
                 // and causes the "Safety level may not be changed inside a transaction" crash.
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

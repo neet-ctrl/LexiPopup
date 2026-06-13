@@ -44,11 +44,16 @@ class AiChatClient @Inject constructor(
 
     // ── Multi-turn chat ───────────────────────────────────────────────────────
 
+    /**
+     * @param onDeviceProvider Required when [provider] is [AiProviderType.ON_DEVICE].
+     *   Pass [AiProviderManager.onDeviceProvider] from the ViewModel.
+     */
     suspend fun chat(
         messages: List<Message>,
         provider: AiProviderType,
         groqApiKey: String,
-        openAiApiKey: String
+        openAiApiKey: String,
+        onDeviceProvider: OnDeviceAiProvider? = null
     ): ChatApiResult = withContext(Dispatchers.IO) {
         when (provider) {
             AiProviderType.GROQ -> {
@@ -71,9 +76,31 @@ class AiChatClient @Inject constructor(
                     else -> ChatApiResult.NoKey("Groq or OpenAI")
                 }
             }
-            AiProviderType.ON_DEVICE -> {
-                ChatApiResult.Error("On-device AI doesn't support free-form chat yet.\nSwitch to Groq (free) or OpenAI in provider selector.")
-            }
+            AiProviderType.ON_DEVICE -> onDeviceChat(messages, onDeviceProvider)
+        }
+    }
+
+    private suspend fun onDeviceChat(
+        messages: List<Message>,
+        provider: OnDeviceAiProvider?
+    ): ChatApiResult {
+        if (provider == null) {
+            return ChatApiResult.Error("On-device AI is not available. Restart the app and try again.")
+        }
+        if (!provider.isModelReady()) {
+            return ChatApiResult.Error(
+                "⚠️ On-device model not downloaded yet.\nGo to Settings → AI Assistant and tap Download to get the model."
+            )
+        }
+        val chatMessages = messages.map { OnDeviceAiProvider.ChatMessage(it.role, it.content) }
+        val response = provider.chat(chatMessages)
+        return if (response.isNullOrBlank()) {
+            // modelStatus will have the actual error detail logged by generateText()
+            val errDetail = (provider.modelStatus.value as? OnDeviceModelStatus.Error)?.message
+                ?: "Inference returned no output"
+            ChatApiResult.Error("On-device AI failed: $errDetail")
+        } else {
+            ChatApiResult.Success(response)
         }
     }
 

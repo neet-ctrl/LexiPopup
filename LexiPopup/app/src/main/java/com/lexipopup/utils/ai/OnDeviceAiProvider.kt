@@ -98,6 +98,16 @@ class OnDeviceAiProvider(
 
         // Resume support
         val existingBytes = if (dest.exists()) dest.length() else 0L
+
+        // ── Pre-check: already fully downloaded? ─────────────────────────────
+        // Allow up to 15 MB slack for gzip/header overhead differences.
+        val expectedBytes = (model.sizeGb * 1024L * 1024L * 1024L).toLong()
+        if (existingBytes > 0L && existingBytes >= expectedBytes - 15_000_000L) {
+            log("✓ File already fully downloaded (${existingBytes / (1024 * 1024)} MB — expected ~${expectedBytes / (1024 * 1024)} MB)")
+            _modelStatus.value = OnDeviceModelStatus.Downloaded
+            return@withContext
+        }
+
         val requestBuilder = Request.Builder().url(model.downloadUrl)
         if (existingBytes > 0) {
             requestBuilder.header("Range", "bytes=$existingBytes-")
@@ -115,6 +125,20 @@ class OnDeviceAiProvider(
 
             when (response.code) {
                 200, 206 -> log("Connection OK — beginning transfer")
+                // 416 = Range Not Satisfiable: our resume offset is >= server file size,
+                // which means the local file already contains the full content.
+                416 -> {
+                    response.close()
+                    if (existingBytes > 100_000L) {
+                        log("HTTP 416: range start is beyond file end — local copy is already complete (${existingBytes / (1024 * 1024)} MB)")
+                        _modelStatus.value = OnDeviceModelStatus.Downloaded
+                    } else {
+                        val msg = "HTTP 416 — server rejected range request (file may have moved or changed)."
+                        log("ERROR: $msg")
+                        _modelStatus.value = OnDeviceModelStatus.Error(msg)
+                    }
+                    return@withContext
+                }
                 401, 403 -> {
                     val msg = "HTTP ${response.code} — server denied access.\nTry the manual browser download link shown below."
                     log("ERROR: $msg"); response.close()
@@ -248,31 +272,60 @@ class OnDeviceAiProvider(
 
     // ── Inference ─────────────────────────────────────────────────────────────
 
-    suspend fun explainWord(word: String): WordEntry? = withContext(Dispatchers.Default) {
-        if (!isModelReady()) return@withContext null
-        try {
-            _modelStatus.value = OnDeviceModelStatus.Loading
-            val options = com.google.mediapipe.tasks.genai.llminference.LlmInference
-                .LlmInferenceOptions.builder()
-                .setModelPath(modelFile().absolutePath)
-                .setMaxTokens(400)
-                .setTopK(40)
-                .setTemperature(0.2f)
-                .setRandomSeed(42)
-                .build()
-            val llm = com.google.mediapipe.tasks.genai.llminference.LlmInference
-                .createFromOptions(context, options)
-            val response = llm.generateResponse(buildPrompt(word))
-            llm.close()
-            _modelStatus.value = OnDeviceModelStatus.Ready
-            val start = response.indexOf('{')
-            val end   = response.lastIndexOf('}')
-            if (start < 0 || end < 0 || end <= start) return@withContext null
-            parseWordEntryFromJson(word, response.substring(start, end + 1), "on_device", gson)
-        } catch (e: Exception) {
-            _modelStatus.value = OnDeviceModelStatus.Error(e.message ?: "Inference failed")
-            null
+    /**
+     * Low-level text generation.  Creates and destroys the LlmInference session per
+     * call so we don't hold a large model resident between lookups.
+     *
+     * Errors are logged into [downloadLogs] (visible in AI Settings) **and** surfaced
+     * via [modelStatus] so users can see what went wrong rather than a silent "not found".
+     */
+    suspend fun generateText(prompt: String, maxTokens: Int = 600): String? =
+        withContext(Dispatchers.Default) {
+            if (!isModelReady()) return@withContext null
+            try {
+                _modelStatus.value = OnDeviceModelStatus.Loading
+                val options = com.google.mediapipe.tasks.genai.llminference.LlmInference
+                    .LlmInferenceOptions.builder()
+                    .setModelPath(modelFile().absolutePath)
+                    .setMaxTokens(maxTokens)
+                    .setTopK(40)
+                    .setTemperature(0.4f)
+                    .setRandomSeed(42)
+                    .build()
+                val llm = com.google.mediapipe.tasks.genai.llminference.LlmInference
+                    .createFromOptions(context, options)
+                val response = llm.generateResponse(prompt)
+                llm.close()
+                _modelStatus.value = OnDeviceModelStatus.Ready
+                response.trim()
+            } catch (e: Exception) {
+                val detail = "${e.javaClass.simpleName}: ${e.message}"
+                log("INFERENCE ERROR: $detail")
+                _modelStatus.value = OnDeviceModelStatus.Error("Inference failed — $detail")
+                null
+            }
         }
+
+    suspend fun explainWord(word: String): WordEntry? = withContext(Dispatchers.Default) {
+        val response = generateText(buildWordPrompt(word), maxTokens = 400) ?: return@withContext null
+        val start = response.indexOf('{')
+        val end   = response.lastIndexOf('}')
+        if (start < 0 || end < 0 || end <= start) return@withContext null
+        parseWordEntryFromJson(word, response.substring(start, end + 1), "on_device", gson)
+    }
+
+    /**
+     * Multi-turn free-form chat.  Formats the conversation history into a simple
+     * Instruct/Output prompt that works for both Phi-2 and Gemma instruction-tuned models.
+     */
+    suspend fun chat(messages: List<ChatMessage>): String? = withContext(Dispatchers.Default) {
+        val prompt = buildChatPrompt(messages)
+        val raw = generateText(prompt, maxTokens = 1024) ?: return@withContext null
+        // Strip any repeated prompt echo or "Assistant:" prefix that leaks into output
+        val stripped = raw.removePrefix("Assistant:").trimStart()
+        // Cut off at a second "User:" or "Human:" turn if the model generates extra
+        val cutOff = Regex("(?m)^(User|Human):\\s").find(stripped)?.range?.first ?: stripped.length
+        stripped.substring(0, cutOff).trim()
     }
 
     fun deleteModel() {
@@ -281,7 +334,26 @@ class OnDeviceAiProvider(
         _modelStatus.value = OnDeviceModelStatus.NotDownloaded
     }
 
-    private fun buildPrompt(word: String) =
+    // ── Prompt builders ───────────────────────────────────────────────────────
+
+    private fun buildWordPrompt(word: String) =
         """Explain the English word "$word". Reply with ONLY this JSON object (no markdown):
 {"part_of_speech":"noun/verb/etc","meaning":"1-2 sentence definition","hindi_meaning":"Devanagari or empty string","example":"Natural example sentence","synonyms":["s1","s2"],"antonyms":["a1"],"etymology":"Brief origin or empty string"}"""
+
+    private fun buildChatPrompt(messages: List<ChatMessage>): String = buildString {
+        // Inject a brief system context as a preamble (keep short — small context window)
+        val sys = messages.firstOrNull { it.role == "system" }
+        if (sys != null) {
+            append("Context: ${sys.content.take(400)}\n\n")
+        }
+        messages.filter { it.role != "system" }.forEach { msg ->
+            when (msg.role) {
+                "user"      -> append("User: ${msg.content}\n")
+                "assistant" -> append("Assistant: ${msg.content}\n")
+            }
+        }
+        append("Assistant:")
+    }
+
+    data class ChatMessage(val role: String, val content: String)
 }

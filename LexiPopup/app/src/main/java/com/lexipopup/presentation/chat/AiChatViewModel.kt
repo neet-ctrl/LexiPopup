@@ -218,10 +218,11 @@ Be conversational, educational, accurate, and concise. When you mention an inter
             _typingText.value = ""
 
             val result = aiChatClient.chat(
-                messages     = history,
-                provider     = _selectedProvider.value,
-                groqApiKey   = cfg.groqApiKey,
-                openAiApiKey = cfg.openAiApiKey
+                messages         = history,
+                provider         = _selectedProvider.value,
+                groqApiKey       = cfg.groqApiKey,
+                openAiApiKey     = cfg.openAiApiKey,
+                onDeviceProvider = aiProviderManager.onDeviceProvider
             )
 
             _isTyping.value = false

@@ -44,6 +44,10 @@ class OnDeviceAiProvider(
     private val _downloadLogs = MutableStateFlow<List<String>>(emptyList())
     val downloadLogs: StateFlow<List<String>> = _downloadLogs.asStateFlow()
 
+    /** Stores the most recent inference exception message so callers can surface it in chat. */
+    var lastInferenceError: String? = null
+        private set
+
     var selectedModel: OnDeviceModel = OnDeviceModel.TINY
         private set
 
@@ -316,9 +320,9 @@ class OnDeviceAiProvider(
             } catch (e: Exception) {
                 val detail = "${e.javaClass.simpleName}: ${e.message}"
                 log("INFERENCE ERROR: $detail")
-                // Bug fix: reset status to Downloaded so the model card doesn't stay in
-                // "Error" state permanently — the file is fine, inference just failed.
-                // The error detail is visible in the log panel below.
+                lastInferenceError = detail
+                // Reset status to Downloaded — file is intact, inference just failed.
+                // Real error detail is in downloadLogs (AI Settings log panel) and lastInferenceError.
                 _modelStatus.value = OnDeviceModelStatus.Downloaded
                 null
             } finally {

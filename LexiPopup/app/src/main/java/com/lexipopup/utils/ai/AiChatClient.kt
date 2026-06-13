@@ -106,8 +106,9 @@ class AiChatClient @Inject constructor(
         val chatMessages = messages.map { OnDeviceAiProvider.ChatMessage(it.role, it.content) }
         val response = provider.chat(chatMessages)
         return if (response.isNullOrBlank()) {
-            val errDetail = (provider.modelStatus.value as? OnDeviceModelStatus.Error)?.message
-                ?: "Inference returned no output"
+            // lastInferenceError is set by generateText on exception (status resets to Downloaded,
+            // not Error, so we can't read it from modelStatus anymore).
+            val errDetail = provider.lastInferenceError ?: "Inference returned no output"
             ChatApiResult.Error("On-device AI failed: $errDetail")
         } else {
             ChatApiResult.Success(response)

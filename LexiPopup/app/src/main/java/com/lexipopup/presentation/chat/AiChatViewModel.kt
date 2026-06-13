@@ -399,7 +399,9 @@ Be conversational, educational, accurate, and concise. When you mention an inter
                 }
                 if (quotedMessage != null) {
                     val who = if (quotedMessage.role == "assistant") "AI" else "Me"
-                    append("↩ $who: \"${quotedMessage.content.take(80).trimEnd()}…\"\n")
+                    val excerpt = quotedMessage.content.take(80)
+                    val ellipsis = if (quotedMessage.content.length > 80) "…" else ""
+                    append("↩ $who: \"${excerpt.trimEnd()}$ellipsis\"\n")
                 }
                 if (text.isNotBlank()) append(text)
             }.trim()

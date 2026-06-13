@@ -43,6 +43,13 @@
 -keep interface com.google.mediapipe.** { *; }
 -keepclassmembers class com.google.mediapipe.** { *; }
 
+# MediaPipe proto classes — these are only present as native (JNI) code inside
+# libllm_inference_engine_jni.so and are NOT bundled as Java classes in the AAR.
+# R8 sees references to them from GraphProfiler/Graph but cannot resolve them;
+# without -dontwarn this becomes a hard build error.  Safe to ignore because the
+# app never calls those framework methods directly.
+-dontwarn com.google.mediapipe.proto.**
+
 # TensorFlow Lite (pulled in transitively by tasks-genai)
 -keep class org.tensorflow.** { *; }
 -keepclassmembers class org.tensorflow.** { *; }

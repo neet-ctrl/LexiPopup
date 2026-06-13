@@ -43,12 +43,26 @@
 -keep interface com.google.mediapipe.** { *; }
 -keepclassmembers class com.google.mediapipe.** { *; }
 
-# MediaPipe proto classes — these are only present as native (JNI) code inside
-# libllm_inference_engine_jni.so and are NOT bundled as Java classes in the AAR.
-# R8 sees references to them from GraphProfiler/Graph but cannot resolve them;
-# without -dontwarn this becomes a hard build error.  Safe to ignore because the
-# app never calls those framework methods directly.
+# MediaPipe classes not bundled in tasks-genai AAR — referenced but not shipped:
+#
+#  com.google.mediapipe.proto.**          — native-only proto classes (GraphProfiler etc.)
+#  com.google.mediapipe.framework.image.** — vision/MPImage classes added in 0.10.22;
+#                                            only needed if app calls addImage(); we don't.
+#
+# All are safe to ignore — our code never calls the methods that reference them.
 -dontwarn com.google.mediapipe.proto.**
+-dontwarn com.google.mediapipe.framework.image.**
+
+# Protobuf annotation classes used by tasks-genai 0.10.22 generated proto code.
+# These annotation types (ProtoField, ProtoPresenceBits, etc.) are compile-time
+# markers only; they are NOT present in the lite protobuf runtime shipped on Android.
+# R8's -keep class com.google.mediapipe.** forces it to resolve their references,
+# which fails without this dontwarn.
+-dontwarn com.google.protobuf.Internal$ProtoMethodMayReturnNull
+-dontwarn com.google.protobuf.Internal$ProtoNonnullApi
+-dontwarn com.google.protobuf.ProtoField
+-dontwarn com.google.protobuf.ProtoPresenceBits
+-dontwarn com.google.protobuf.ProtoPresenceCheckedField
 
 # TensorFlow Lite (pulled in transitively by tasks-genai)
 -keep class org.tensorflow.** { *; }

@@ -236,7 +236,8 @@ class AiChatClient @Inject constructor(
         conversationText: String,
         provider: AiProviderType,
         groqApiKey: String,
-        openAiApiKey: String
+        openAiApiKey: String,
+        onDeviceProvider: OnDeviceAiProvider? = null
     ): List<WordEntry> = withContext(Dispatchers.IO) {
         val prompt = buildString {
             append("From this conversation, extract all valuable English vocabulary words worth learning ")
@@ -252,7 +253,7 @@ class AiChatClient @Inject constructor(
             Message("user", prompt)
         )
 
-        val result = chat(extractMessages, provider, groqApiKey, openAiApiKey)
+        val result = chat(extractMessages, provider, groqApiKey, openAiApiKey, onDeviceProvider)
         if (result !is ChatApiResult.Success) return@withContext emptyList()
 
         parseVocabJson(result.content)

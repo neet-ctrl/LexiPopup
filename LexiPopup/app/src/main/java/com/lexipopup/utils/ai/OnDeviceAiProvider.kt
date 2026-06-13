@@ -326,10 +326,32 @@ class OnDeviceAiProvider(
 
     suspend fun explainWord(word: String): WordEntry? = withContext(Dispatchers.Default) {
         val response = generateText(buildWordPrompt(word), maxTokens = 400) ?: return@withContext null
-        val start = response.indexOf('{')
-        val end   = response.lastIndexOf('}')
-        if (start < 0 || end < 0 || end <= start) return@withContext null
-        parseWordEntryFromJson(word, response.substring(start, end + 1), "on_device", gson)
+        val trimmed  = response.removePrefix("Assistant:").trimStart()
+
+        // 1. Try to find and parse JSON in the response
+        val start = trimmed.indexOf('{')
+        val end   = trimmed.lastIndexOf('}')
+        if (start >= 0 && end > start) {
+            val parsed = parseWordEntryFromJson(word, trimmed.substring(start, end + 1), "on_device", gson)
+            if (parsed != null) return@withContext parsed
+        }
+
+        // 2. Fallback — model produced text but not valid JSON.
+        //    Use the raw output as the meaning so the popup still shows something.
+        val plain = trimmed.trim()
+        if (plain.isNotBlank()) {
+            WordEntry(
+                word            = word,
+                partOfSpeech    = "",
+                shortMeaning    = plain.take(300),
+                hindiMeaning    = "",
+                exampleSentence = "",
+                synonyms        = emptyList(),
+                antonyms        = emptyList(),
+                etymology       = "",
+                source          = "on_device"
+            )
+        } else null
     }
 
     /**
@@ -357,8 +379,11 @@ class OnDeviceAiProvider(
     // ── Prompt builders ───────────────────────────────────────────────────────
 
     private fun buildWordPrompt(word: String) =
-        """Explain the English word "$word". Reply with ONLY this JSON object (no markdown):
-{"part_of_speech":"noun/verb/etc","meaning":"1-2 sentence definition","hindi_meaning":"Devanagari or empty string","example":"Natural example sentence","synonyms":["s1","s2"],"antonyms":["a1"],"etymology":"Brief origin or empty string"}"""
+        // Use the same User:/Assistant: instruct format that works in chat.
+        // Small models need this wrapper to know they should reply as an assistant.
+        "User: Explain the English word \"$word\". Reply with ONLY this JSON object (no markdown, no extra text):\n" +
+        "{\"part_of_speech\":\"noun/verb/adj/adv\",\"meaning\":\"1-2 sentence definition\",\"hindi_meaning\":\"Devanagari translation or empty\",\"example\":\"Example sentence using the word\",\"synonyms\":[\"word1\",\"word2\"],\"antonyms\":[\"word1\"],\"etymology\":\"Brief origin or empty\"}\n" +
+        "Assistant:"
 
     private fun buildChatPrompt(messages: List<ChatMessage>): String = buildString {
         // Context-window budget for on-device models:

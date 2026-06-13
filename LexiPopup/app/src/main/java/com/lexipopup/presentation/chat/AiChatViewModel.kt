@@ -530,7 +530,8 @@ Be conversational, educational, accurate, and concise. When you mention an inter
                 conversationText = conversationText,
                 provider         = _selectedProvider.value,
                 groqApiKey       = cfg.groqApiKey,
-                openAiApiKey     = cfg.openAiApiKey
+                openAiApiKey     = cfg.openAiApiKey,
+                onDeviceProvider = aiProviderManager.onDeviceProvider
             )
 
             if (words.isEmpty()) {

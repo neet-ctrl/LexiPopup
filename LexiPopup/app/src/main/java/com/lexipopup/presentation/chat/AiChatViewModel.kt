@@ -380,6 +380,10 @@ Be conversational, educational, accurate, and concise. When you mention an inter
     private val _ttsActive        = MutableStateFlow(false)
     val ttsActive: StateFlow<Boolean> = _ttsActive.asStateFlow()
 
+    // Separate flag for silent auto-speak — does NOT trigger the controller bar
+    private val _isAutoSpeaking   = MutableStateFlow(false)
+    val isAutoSpeaking: StateFlow<Boolean> = _isAutoSpeaking.asStateFlow()
+
     private val _speakingMessageId = MutableStateFlow<Long?>(-1L)
     val speakingMessageId: StateFlow<Long?> = _speakingMessageId.asStateFlow()
 
@@ -415,6 +419,7 @@ Be conversational, educational, accurate, and concise. When you mention an inter
                         if (idx >= speakQueue.size - 1) {
                             _isSpeaking.value        = false
                             _ttsActive.value         = false
+                            _isAutoSpeaking.value    = false
                             _speakingMessageId.value = null
                         }
                     }
@@ -435,6 +440,7 @@ Be conversational, educational, accurate, and concise. When you mention an inter
     fun speakMessage(message: ChatMessageEntity) {
         initTts()
         rawStop()
+        _isAutoSpeaking.value = false   // manual take-over: clear auto flag first
         speakQueue    = listOf(message)
         pausedAtIndex = 0
         _speakTotal.value = 1
@@ -451,13 +457,14 @@ Be conversational, educational, accurate, and concise. When you mention an inter
     fun autoSpeakMessage(message: ChatMessageEntity) {
         if (message.role != "assistant" || message.isError) return
         initTts()
-        // Don't interrupt if the user is already listening to something they started
+        // Don't interrupt if the user is already listening to something they started manually
         if (_ttsActive.value) return
         rawStop()
-        speakQueue    = listOf(message)
-        pausedAtIndex = 0
-        _speakTotal.value = 1
-        _ttsActive.value  = true
+        speakQueue         = listOf(message)
+        pausedAtIndex      = 0
+        _speakTotal.value  = 1
+        // Deliberately NOT setting _ttsActive so the playback controller bar never appears
+        _isAutoSpeaking.value = true
         enqueueFrom(0)
     }
 
@@ -491,6 +498,7 @@ Be conversational, educational, accurate, and concise. When you mention an inter
         speakQueue               = emptyList()
         _isSpeaking.value        = false
         _ttsActive.value         = false
+        _isAutoSpeaking.value    = false
         _speakingMessageId.value = null
         _speakingIndex.value     = 0
         _speakTotal.value        = 0

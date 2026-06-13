@@ -76,6 +76,7 @@ fun AiChatScreen(
     // TTS state
     val isSpeaking       by viewModel.isSpeaking.collectAsState()
     val ttsActive        by viewModel.ttsActive.collectAsState()
+    val isAutoSpeaking   by viewModel.isAutoSpeaking.collectAsState()
     val speakingMsgId    by viewModel.speakingMessageId.collectAsState()
     val speakingIndex    by viewModel.speakingIndex.collectAsState()
     val speakTotal       by viewModel.speakTotal.collectAsState()
@@ -107,8 +108,6 @@ fun AiChatScreen(
         val latest = messages.lastOrNull { it.role == "assistant" && !it.isError }
             ?: return@LaunchedEffect
         if (latest.id == lastAutoSpokenId.value) return@LaunchedEffect
-        // Wait briefly in case the typing animation is still finishing
-        kotlinx.coroutines.delay(300)
         lastAutoSpokenId.value = latest.id
         viewModel.autoSpeakMessage(latest)
     }
@@ -284,8 +283,9 @@ fun AiChatScreen(
         }
 
         // ── TTS playback controller ──────────────────────────────────────────
+        // Hidden during auto-speak — only shows when the user manually starts playback
         AnimatedVisibility(
-            visible = ttsActive,
+            visible = ttsActive && !isAutoSpeaking,
             enter = slideInVertically { it } + fadeIn(),
             exit  = slideOutVertically { it } + fadeOut()
         ) {

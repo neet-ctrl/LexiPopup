@@ -303,18 +303,14 @@ class OnDeviceAiProvider(
             try {
                 _modelStatus.value = OnDeviceModelStatus.Loading
                 // GGUF models (Phi-2, Gemma GGUF) require the CPU backend.
-                // The default GPU backend expects MediaPipe's own .task flatbuffer format
-                // and crashes with "Error building tflite model" when given a GGUF file.
+                // In tasks-genai 0.10.22: setTopK/setTemperature/setRandomSeed were removed
+                // from LlmInferenceOptions; Backend moved from LlmInferenceOptions to LlmInference.
                 val options = com.google.mediapipe.tasks.genai.llminference.LlmInference
                     .LlmInferenceOptions.builder()
                     .setModelPath(modelFile().absolutePath)
                     .setMaxTokens(maxTokens)
-                    .setTopK(40)
-                    .setTemperature(0.4f)
-                    .setRandomSeed(42)
                     .setPreferredBackend(
-                        com.google.mediapipe.tasks.genai.llminference.LlmInference
-                            .LlmInferenceOptions.Backend.CPU
+                        com.google.mediapipe.tasks.genai.llminference.LlmInference.Backend.CPU
                     )
                     .build()
                 llm = com.google.mediapipe.tasks.genai.llminference.LlmInference

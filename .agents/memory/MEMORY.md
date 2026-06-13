@@ -3,4 +3,5 @@
 - [LexiPopup Gson TypeToken R8 crash](lexipopup-typetoken.md) — never use anonymous TypeToken<List<String>>() {} in release builds; use getParameterized() instead.
 - [Glance widget color API](glance-widget-colors.md) — stable Glance has no DayNightColorProvider; use @Composable helper reading LocalContext uiMode instead.
 - [Room dynamic-default INSERT trap](room-dynamic-default-insert.md) — columns with System.currentTimeMillis() defaults have NO SQLite DEFAULT; raw execSQL omitting them → INSERT OR IGNORE silently drops the row.
-- [Glance widget PendingIntent MIME strip](glance-pendingintent-mime.md) — Glance PendingIntents can strip the MIME type from ACTION_SEND intents; use a custom String extra ("lookup_word") instead of relying on intent.type.
+- [Glance widget PendingIntent MIME strip](glance-pendingintent-mime.md) — Glama PendingIntents can strip the MIME type from ACTION_SEND intents; use a custom String extra ("lookup_word") instead of relying on intent.type.
+- [MediaPipe GGUF incompatibility](mediapipe-gguf.md) — tasks-genai cannot load any HuggingFace GGUF; solution is llama.cpp via CMake/NDK.

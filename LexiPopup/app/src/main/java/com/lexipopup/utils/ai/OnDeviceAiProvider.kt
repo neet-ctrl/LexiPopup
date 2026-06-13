@@ -4,12 +4,10 @@ import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
 import com.lexipopup.domain.models.WordEntry
-import io.shubham0204.llama_android.LLamaAndroid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.reduce
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -301,22 +299,28 @@ class OnDeviceAiProvider(
     suspend fun generateText(prompt: String, maxTokens: Int = 600): String? =
         withContext(Dispatchers.IO) {
             if (!isModelReady()) return@withContext null
-            val llama = LLamaAndroid.instance()
             try {
                 _modelStatus.value = OnDeviceModelStatus.Loading
-                llama.load(modelFile().absolutePath)
-                val response = llama.send(prompt)
-                    .reduce { acc, token -> acc + token }
-                _modelStatus.value = OnDeviceModelStatus.Ready
-                response.trim()
+                // LlamaJni calls into libllama_jni.so — built from llama.cpp source via NDK.
+                // Returns "ERROR: ..." on failure, plain text on success.
+                val raw = LlamaJni.runInferenceNative(
+                    modelFile().absolutePath, prompt, maxTokens
+                )
+                if (raw.startsWith("ERROR:")) {
+                    log("INFERENCE ERROR: $raw")
+                    lastInferenceError = raw
+                    _modelStatus.value = OnDeviceModelStatus.Downloaded
+                    null
+                } else {
+                    _modelStatus.value = OnDeviceModelStatus.Ready
+                    raw.trim()
+                }
             } catch (e: Exception) {
                 val detail = "${e.javaClass.simpleName}: ${e.message}"
                 log("INFERENCE ERROR: $detail")
                 lastInferenceError = detail
                 _modelStatus.value = OnDeviceModelStatus.Downloaded
                 null
-            } finally {
-                try { llama.unload() } catch (_: Exception) {}
             }
         }
 

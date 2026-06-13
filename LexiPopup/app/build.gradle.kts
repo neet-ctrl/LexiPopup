@@ -22,6 +22,36 @@ android {
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
         }
+
+        // llama.cpp native build — only arm64 needed (all modern Android phones)
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                // CPU-only build: no GPU, no BLAS, no metal
+                arguments(
+                    "-DGGML_NATIVE=OFF",
+                    "-DGGML_METAL=OFF",
+                    "-DGGML_CUDA=OFF",
+                    "-DGGML_VULKAN=OFF",
+                    "-DGGML_BLAS=OFF",
+                    "-DLLAMA_BUILD_TESTS=OFF",
+                    "-DLLAMA_BUILD_EXAMPLES=OFF",
+                    "-DLLAMA_BUILD_SERVER=OFF"
+                )
+            }
+        }
+    }
+
+    // Link to the CMakeLists.txt that downloads and builds llama.cpp
+    externalNativeBuild {
+        cmake {
+            path = file("CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {
@@ -117,10 +147,9 @@ dependencies {
     implementation(libs.hilt.work)
     ksp(libs.hilt.work.compiler)
 
-    // On-Device AI — llama.cpp Android (supports any GGUF model from HuggingFace)
-    // MediaPipe tasks-genai only supports Google's proprietary .task format from Kaggle;
-    // it cannot load standard GGUF files. llama.cpp is the industry-standard GGUF runtime.
-    implementation("com.github.shubham0204:llama.android:0.0.6")
+    // On-Device AI — llama.cpp built natively via CMakeLists.txt + NDK.
+    // No third-party AAR needed: llama.cpp source is fetched at build time and compiled
+    // directly into libllama_jni.so, which supports any standard GGUF model file.
 
     // Testing
     testImplementation(libs.junit)

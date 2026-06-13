@@ -44,10 +44,13 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.*
+import android.graphics.Rect as AndroidRect
+import android.view.ViewTreeObserver
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -196,6 +199,52 @@ fun PopupScreen(
                 attrs.y = 0
                 win.attributes = attrs
             }
+        }
+    }
+
+    // ── Touchable-region: pass all touches outside the collapsed tab through ─────
+    // FLAG_NOT_TOUCH_MODAL alone is insufficient for cross-app touch-through on
+    // Activity windows because the Activity's window frame may still measure as
+    // full-screen internally.  OnComputeInternalInsetsListener with
+    // TOUCHABLE_INSETS_REGION explicitly tells Android's input dispatcher: "only
+    // deliver touches inside this rectangle to this window; everything else passes
+    // to the app below". Combined with FLAG_NOT_TOUCH_MODAL this reliably allows
+    // the underlying app to receive all touches outside the 44×84dp tab.
+    val localView = LocalView.current
+    // Stable refs so the listener always reads the latest values without being
+    // removed/re-added on every drag frame.
+    val windowStateRef = remember { androidx.compose.runtime.mutableStateOf(effectiveWindowState) }
+    val edgeOffsetRef  = remember { androidx.compose.runtime.mutableStateOf(0f) }
+    SideEffect {
+        windowStateRef.value = effectiveWindowState
+        edgeOffsetRef.value  = edgeTabOffsetY
+    }
+    DisposableEffect(localView) {
+        val dm = localView.resources.displayMetrics
+        val listener = ViewTreeObserver.OnComputeInternalInsetsListener { insets ->
+            val state   = windowStateRef.value
+            val isEdge  = state == PopupWindowState.EDGE_LEFT ||
+                          state == PopupWindowState.EDGE_RIGHT
+            if (isEdge) {
+                val tabW    = (44f * dm.density).toInt()
+                val tabH    = (84f * dm.density).toInt()
+                val screenW = dm.widthPixels
+                val screenH = dm.heightPixels
+                val centreY = (screenH - tabH) / 2
+                val offsetY = edgeOffsetRef.value.toInt()
+                val top     = (centreY + offsetY).coerceIn(0, screenH - tabH)
+                val left    = if (state == PopupWindowState.EDGE_LEFT) 0 else screenW - tabW
+                insets.touchableInsets = ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION
+                insets.touchableRegion.set(left, top, left + tabW, top + tabH)
+            } else {
+                insets.touchableInsets = ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME
+                insets.touchableRegion.setEmpty()
+            }
+        }
+        localView.viewTreeObserver.addOnComputeInternalInsetsListener(listener)
+        onDispose {
+            if (localView.viewTreeObserver.isAlive)
+                localView.viewTreeObserver.removeOnComputeInternalInsetsListener(listener)
         }
     }
 

@@ -59,10 +59,11 @@ private val KEY_SLOT_1 = longPreferencesKey("rw_slot_1")
 private val KEY_SLOT_2 = longPreferencesKey("rw_slot_2")
 
 // ── ActionParameters keys ─────────────────────────────────────────────────────
-val PARAM_WORD_ID = ActionParameters.Key<Long>("word_id")
-val PARAM_SLOT    = ActionParameters.Key<Int>("slot")
-val PARAM_OTHER_A = ActionParameters.Key<Long>("other_a")
-val PARAM_OTHER_B = ActionParameters.Key<Long>("other_b")
+val PARAM_WORD_ID   = ActionParameters.Key<Long>("word_id")
+val PARAM_SLOT      = ActionParameters.Key<Int>("slot")
+val PARAM_OTHER_A   = ActionParameters.Key<Long>("other_a")
+val PARAM_OTHER_B   = ActionParameters.Key<Long>("other_b")
+val PARAM_WORD_TEXT = ActionParameters.Key<String>("word_text")
 
 class RandomWordWidget : GlanceAppWidget() {
 
@@ -230,19 +231,21 @@ private fun WordSlotRow(
     val ctx = LocalContext.current
     val bg = if (slot % 2 == 0) BgDeep else BgAlt
 
-    // Outer box: tap word area → replace this word (no app open)
+    // Tap word card → opens PopupActivity with this word AND instantly replaces
+    // it in the background with the next unseen word from the queue.
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
             .background(bg)
             .clickable(
-                if (wordId != 0L)
-                    actionRunCallback<ReplaceWordCallback>(
+                if (wordId != 0L && word != null)
+                    actionRunCallback<OpenAndReplaceCallback>(
                         actionParametersOf(
-                            PARAM_SLOT    to slot,
-                            PARAM_WORD_ID to wordId,
-                            PARAM_OTHER_A to otherA,
-                            PARAM_OTHER_B to otherB
+                            PARAM_SLOT      to slot,
+                            PARAM_WORD_ID   to wordId,
+                            PARAM_OTHER_A   to otherA,
+                            PARAM_OTHER_B   to otherB,
+                            PARAM_WORD_TEXT to word.word
                         )
                     )
                 else
@@ -288,35 +291,40 @@ private fun WordSlotRow(
                     Text("—", style = TextStyle(color = White40, fontSize = 14.sp))
                 }
             }
-
-            // → button: opens PopupActivity with this word
-            if (word != null) {
-                Spacer(GlanceModifier.width(8.dp))
-                Box(
-                    modifier = GlanceModifier
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .clickable(actionStartActivity(popupIntent(ctx, word.word))),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("→", style = TextStyle(color = AccentCyan, fontSize = 16.sp))
-                }
-            }
+            // Visual cue that the card is tappable
+            Spacer(GlanceModifier.width(8.dp))
+            Text("→", style = TextStyle(color = AccentCyan, fontSize = 16.sp))
         }
     }
 }
 
 // ── Action Callbacks ──────────────────────────────────────────────────────────
 
-/** Tap a word card → mark it seen and replace with next unseen word (no app opened) */
-class ReplaceWordCallback : ActionCallback {
+/**
+ * Tap a word card → simultaneously:
+ *  1. Opens PopupActivity with the tapped word (foreground, instant)
+ *  2. Marks the word as seen and replaces it in the widget with the next
+ *     unseen word from the queue (background, no extra user interaction)
+ */
+class OpenAndReplaceCallback : ActionCallback {
     override suspend fun onAction(
         context: Context, glanceId: GlanceId, parameters: ActionParameters
     ) {
-        val slot   = parameters[PARAM_SLOT]    ?: return
-        val wordId = parameters[PARAM_WORD_ID] ?: return
-        val otherA = parameters[PARAM_OTHER_A] ?: 0L
-        val otherB = parameters[PARAM_OTHER_B] ?: 0L
+        val slot     = parameters[PARAM_SLOT]      ?: return
+        val wordId   = parameters[PARAM_WORD_ID]   ?: return
+        val wordText = parameters[PARAM_WORD_TEXT] ?: return
+        val otherA   = parameters[PARAM_OTHER_A]   ?: 0L
+        val otherB   = parameters[PARAM_OTHER_B]   ?: 0L
 
+        // 1 ── Open popup immediately (startActivity is safe from a callback)
+        context.startActivity(
+            Intent(context, PopupActivity::class.java).apply {
+                putExtra("lookup_word", wordText)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+        )
+
+        // 2 ── Replace this slot with a fresh word in the background
         val dao = try {
             EntryPointAccessors
                 .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)

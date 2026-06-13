@@ -116,9 +116,11 @@ class AiSettingsViewModel @Inject constructor(
         currentDownloadJob = null
     }
 
-    /** Imports a model file the user picked via the system file picker (SAF). */
+    /** Imports a model file the user picked via the system file picker (SAF).
+     *  Bug fix: assigned to currentDownloadJob so cancelDownload() works during import too. */
     fun importModelFromUri(uri: Uri, model: OnDeviceModel = aiProviderManager.onDeviceProvider.selectedModel) {
-        viewModelScope.launch {
+        currentDownloadJob?.cancel()
+        currentDownloadJob = viewModelScope.launch {
             aiProviderManager.onDeviceProvider.importFromUri(uri, model)
         }
     }

@@ -227,8 +227,18 @@ class OnDeviceAiProvider(
         log("Importing model from local storage…")
         log("Saving to: ${dest.absolutePath}")
 
+        // Bug fix: query the file size first so we can show real progress (not just indeterminate)
+        val fileSize: Long = try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (idx >= 0 && cursor.moveToFirst()) cursor.getLong(idx) else -1L
+            } ?: -1L
+        } catch (_: Exception) { -1L }
+
+        if (fileSize > 0) log("File size: ${fileSize / (1024 * 1024)} MB")
+
         try {
-            _modelStatus.value = OnDeviceModelStatus.Downloading(0f, 0L, -1L)
+            _modelStatus.value = OnDeviceModelStatus.Downloading(0f, 0L, fileSize)
             context.contentResolver.openInputStream(uri)?.use { inp ->
                 FileOutputStream(dest).use { out ->
                     val buf = ByteArray(64 * 1024)
@@ -238,10 +248,11 @@ class OnDeviceAiProvider(
                     while (inp.read(buf).also { n = it } != -1) {
                         out.write(buf, 0, n)
                         received += n
-                        _modelStatus.value = OnDeviceModelStatus.Downloading(0f, received, -1L)
+                        val progress = if (fileSize > 0) received.toFloat() / fileSize else 0f
+                        _modelStatus.value = OnDeviceModelStatus.Downloading(progress, received, fileSize)
                         val mb = received / (1024 * 1024)
                         if (mb >= lastLoggedMb + 100) {
-                            log("Copied ${mb} MB so far…")
+                            log("Copied ${mb} MB${if (fileSize > 0) " / ${fileSize / (1024 * 1024)} MB (${(progress * 100).toInt()}%)" else ""}…")
                             lastLoggedMb = mb
                         }
                     }
@@ -258,13 +269,15 @@ class OnDeviceAiProvider(
                 _modelStatus.value = OnDeviceModelStatus.Downloaded
             } else {
                 dest.delete()
-                val msg = "File too small (${size / 1024} KB) — not a valid model. Select the correct .bin or .task file."
+                val msg = "File too small (${size / 1024} KB) — not a valid model. Select the .gguf file you downloaded."
                 log("ERROR: $msg")
                 _modelStatus.value = OnDeviceModelStatus.Error(msg)
             }
         } catch (e: Exception) {
-            dest.delete()
-            val msg = "Import failed: ${e.message}"
+            // Bug fix: keep partial file on exception (same as URL download) so a re-import
+            // only needs to re-copy from the user's file, not re-download anything.
+            val savedMb = if (dest.exists()) dest.length() / (1024 * 1024) else 0L
+            val msg = "Import failed: ${e.message}${if (savedMb > 0) " (${savedMb} MB partially copied — try again)" else ""}"
             log("ERROR: $msg")
             _modelStatus.value = OnDeviceModelStatus.Error(msg)
         }
@@ -282,6 +295,7 @@ class OnDeviceAiProvider(
     suspend fun generateText(prompt: String, maxTokens: Int = 600): String? =
         withContext(Dispatchers.Default) {
             if (!isModelReady()) return@withContext null
+            var llm: com.google.mediapipe.tasks.genai.llminference.LlmInference? = null
             try {
                 _modelStatus.value = OnDeviceModelStatus.Loading
                 val options = com.google.mediapipe.tasks.genai.llminference.LlmInference
@@ -292,17 +306,24 @@ class OnDeviceAiProvider(
                     .setTemperature(0.4f)
                     .setRandomSeed(42)
                     .build()
-                val llm = com.google.mediapipe.tasks.genai.llminference.LlmInference
+                llm = com.google.mediapipe.tasks.genai.llminference.LlmInference
                     .createFromOptions(context, options)
                 val response = llm.generateResponse(prompt)
                 llm.close()
+                llm = null
                 _modelStatus.value = OnDeviceModelStatus.Ready
                 response.trim()
             } catch (e: Exception) {
                 val detail = "${e.javaClass.simpleName}: ${e.message}"
                 log("INFERENCE ERROR: $detail")
-                _modelStatus.value = OnDeviceModelStatus.Error("Inference failed — $detail")
+                // Bug fix: reset status to Downloaded so the model card doesn't stay in
+                // "Error" state permanently — the file is fine, inference just failed.
+                // The error detail is visible in the log panel below.
+                _modelStatus.value = OnDeviceModelStatus.Downloaded
                 null
+            } finally {
+                // Ensure the LLM session is always closed even if generateResponse throws.
+                try { llm?.close() } catch (_: Exception) {}
             }
         }
 
@@ -320,7 +341,9 @@ class OnDeviceAiProvider(
      */
     suspend fun chat(messages: List<ChatMessage>): String? = withContext(Dispatchers.Default) {
         val prompt = buildChatPrompt(messages)
-        val raw = generateText(prompt, maxTokens = 1024) ?: return@withContext null
+        // Log prompt length for debugging context-window issues.
+        log("Chat prompt: ${prompt.length} chars → sending to model…")
+        val raw = generateText(prompt, maxTokens = 512) ?: return@withContext null
         // Strip any repeated prompt echo or "Assistant:" prefix that leaks into output
         val stripped = raw.removePrefix("Assistant:").trimStart()
         // Cut off at a second "User:" or "Human:" turn if the model generates extra
@@ -341,18 +364,43 @@ class OnDeviceAiProvider(
 {"part_of_speech":"noun/verb/etc","meaning":"1-2 sentence definition","hindi_meaning":"Devanagari or empty string","example":"Natural example sentence","synonyms":["s1","s2"],"antonyms":["a1"],"etymology":"Brief origin or empty string"}"""
 
     private fun buildChatPrompt(messages: List<ChatMessage>): String = buildString {
-        // Inject a brief system context as a preamble (keep short — small context window)
+        // Context-window budget for on-device models:
+        //   Phi-2  — 2048 tokens total.  With maxTokens=512 output, input budget ≈ 1536 tokens ≈ 6000 chars.
+        //   Gemma 2B — 8192 tokens total.  Much more headroom.
+        // We use 3500 chars as the safe hard cap (fits both models with room to spare).
+        val PROMPT_CHAR_LIMIT = 3500
+
+        // 1. System context — very short, always included first.
         val sys = messages.firstOrNull { it.role == "system" }
         if (sys != null) {
-            append("Context: ${sys.content.take(400)}\n\n")
+            append("Context: ${sys.content.take(300)}\n\n")
         }
-        messages.filter { it.role != "system" }.forEach { msg ->
-            when (msg.role) {
-                "user"      -> append("User: ${msg.content}\n")
-                "assistant" -> append("Assistant: ${msg.content}\n")
+
+        // 2. Conversation turns — newest turns take priority.
+        //    We build in reverse so we always keep the latest exchange, then prepend
+        //    older turns as space allows.
+        val turns = messages.filter { it.role != "system" }
+        val suffix = "Assistant:"
+        val reserved = length + suffix.length + 4   // existing header + suffix
+        val budget = PROMPT_CHAR_LIMIT - reserved
+
+        // Collect lines from newest → oldest, then reverse to chronological order.
+        val lines = mutableListOf<String>()
+        var used = 0
+        for (msg in turns.asReversed()) {
+            val line = when (msg.role) {
+                "user"      -> "User: ${msg.content}"
+                "assistant" -> "Assistant: ${msg.content}"
+                else        -> continue
             }
+            // Truncate very long individual messages (e.g. file-attachment text)
+            val truncated = if (line.length > 1200) line.take(1200) + "…" else line
+            if (used + truncated.length + 1 > budget) break
+            lines.add(0, truncated)
+            used += truncated.length + 1
         }
-        append("Assistant:")
+        lines.forEach { append(it); append('\n') }
+        append(suffix)
     }
 
     data class ChatMessage(val role: String, val content: String)

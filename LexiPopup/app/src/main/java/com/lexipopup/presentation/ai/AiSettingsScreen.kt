@@ -663,7 +663,7 @@ private fun OnDeviceSettingsCard(
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold)
                             SetupStep(1, "Choose a model above (Gemma 2B = smaller & faster, Phi-2 = smarter)")
-                            SetupStep(2, "Tap Download — comes from Google's servers, no account needed")
+                            SetupStep(2, "Tap Download — comes from HuggingFace, no account needed")
                             SetupStep(3, "Wait for the ${selectedModel.sizeGb} GB download to finish (keep screen on, Wi-Fi recommended)")
                             SetupStep(4, "Done — AI works fully offline forever after this")
                         }

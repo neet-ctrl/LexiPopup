@@ -3,6 +3,7 @@ package com.lexipopup.presentation.chat
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -11,15 +12,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -87,10 +95,19 @@ fun AiChatScreen(
     val clipboard  = LocalClipboardManager.current
     val haptic     = LocalHapticFeedback.current
 
+    val pendingAttachment  by viewModel.pendingAttachment.collectAsState()
+    val attachmentLoading  by viewModel.attachmentLoading.collectAsState()
+
     var inputText         by remember { mutableStateOf("") }
     var showSessions      by remember { mutableStateOf(false) }
     var longPressedWord   by remember { mutableStateOf<Pair<String, Long>?>(null) }  // word, messageId
     var isFullscreen      by remember { mutableStateOf(false) }
+    var quotedMessage     by remember { mutableStateOf<ChatMessageEntity?>(null) }
+
+    // SAF file picker — accepts images, PDFs, text files (no video)
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { viewModel.attachFile(it) } }
 
     // Auto-scroll to latest message
     LaunchedEffect(messages.size, typingText.length) {
@@ -236,17 +253,31 @@ fun AiChatScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(messages, key = { it.id }) { msg ->
-                        ChatBubble(
-                            message             = msg,
-                            isCurrentlySpeaking = msg.id == speakingMsgId,
-                            isAutoSpeakingThis  = isAutoSpeaking && msg.id == speakingMsgId,
-                            onSpeak             = { viewModel.speakMessage(msg) },
-                            onWordLongPress   = { word ->
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                longPressedWord = word to msg.id
-                            },
-                            onWordTap = { word -> onWordSelected(word) }
-                        )
+                        val bubble: @Composable () -> Unit = {
+                            ChatBubble(
+                                message             = msg,
+                                isCurrentlySpeaking = msg.id == speakingMsgId,
+                                isAutoSpeakingThis  = isAutoSpeaking && msg.id == speakingMsgId,
+                                onSpeak             = { viewModel.speakMessage(msg) },
+                                onWordLongPress   = { word ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    longPressedWord = word to msg.id
+                                },
+                                onWordTap = { word -> onWordSelected(word) }
+                            )
+                        }
+                        // Only swipeable for AI messages — not user messages or errors
+                        if (msg.role == "assistant" && !msg.isError) {
+                            SwipeableMessageWrapper(
+                                onQuote = {
+                                    quotedMessage = msg
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                content = bubble
+                            )
+                        } else {
+                            bubble()
+                        }
                     }
 
                     // Live typing animation bubble
@@ -309,16 +340,42 @@ fun AiChatScreen(
             )
         }
 
+        // ── Quote bar (shown when user swiped a message) ─────────────────
+        AnimatedVisibility(
+            visible = quotedMessage != null,
+            enter = slideInVertically { it } + fadeIn(),
+            exit  = slideOutVertically { it } + fadeOut()
+        ) {
+            quotedMessage?.let { qm ->
+                QuoteBar(
+                    message   = qm,
+                    onDismiss = { quotedMessage = null }
+                )
+            }
+        }
+
         // ── Input bar ────────────────────────────────────────────────────────
         InputBar(
-            value = inputText,
-            isTyping = isTyping,
-            onValueChange = { inputText = it },
+            value              = inputText,
+            isTyping           = isTyping,
+            pendingAttachment  = pendingAttachment,
+            attachmentLoading  = attachmentLoading,
+            onValueChange      = { inputText = it },
+            onAttach           = {
+                filePickerLauncher.launch(
+                    arrayOf("image/*", "application/pdf", "text/*",
+                            "text/plain", "text/csv", "text/markdown",
+                            "application/json")
+                )
+            },
+            onClearAttachment  = viewModel::clearAttachment,
             onSend = {
                 val txt = inputText.trim()
-                if (txt.isNotBlank()) {
-                    viewModel.sendMessage(txt)
-                    inputText = ""
+                val hasAttachment = pendingAttachment != null
+                if (txt.isNotBlank() || hasAttachment) {
+                    viewModel.sendMessage(txt, quotedMessage)
+                    inputText     = ""
+                    quotedMessage = null
                 }
             }
         )
@@ -790,52 +847,285 @@ private fun ThinkingIndicator() {
 private fun InputBar(
     value: String,
     isTyping: Boolean,
+    pendingAttachment: AttachedFile?,
+    attachmentLoading: Boolean,
     onValueChange: (String) -> Unit,
+    onAttach: () -> Unit,
+    onClearAttachment: () -> Unit,
     onSend: () -> Unit
 ) {
+    val canSend = (value.isNotBlank() || pendingAttachment != null) && !isTyping
+
     Surface(shadowElevation = 8.dp) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .navigationBarsPadding()
-                .imePadding(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .imePadding()
         ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Ask anything… vocabulary, translation, grammar…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f)) },
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 5,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Default),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                )
-            )
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (value.isNotBlank() && !isTyping) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                    .clickable(enabled = value.isNotBlank() && !isTyping, onClick = onSend),
-                contentAlignment = Alignment.Center
+            // ── Attachment chip (shown while a file is pending) ────────────
+            AnimatedVisibility(
+                visible = pendingAttachment != null || attachmentLoading,
+                enter = expandVertically() + fadeIn(),
+                exit  = shrinkVertically() + fadeOut()
             ) {
-                if (isTyping) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (attachmentLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text("Reading file…", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else if (pendingAttachment != null) {
+                        val icon = when {
+                            pendingAttachment.mimeType.startsWith("image/") -> Icons.Default.Image
+                            pendingAttachment.mimeType == "application/pdf" -> Icons.Default.PictureAsPdf
+                            else                                             -> Icons.Default.InsertDriveFile
+                        }
+                        val typeLabel = when {
+                            pendingAttachment.mimeType.startsWith("image/") -> "Image"
+                            pendingAttachment.mimeType == "application/pdf" -> "PDF"
+                            else                                             -> "Text file"
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            tonalElevation = 2.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(icon, null, modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.secondary)
+                                Text(
+                                    "$typeLabel: ${pendingAttachment.name.take(28)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                // Show text size or image badge
+                                val badge = when {
+                                    pendingAttachment.imageBase64 != null -> "📷"
+                                    pendingAttachment.extractedText != null -> {
+                                        val chars = pendingAttachment.extractedText.length
+                                        if (chars > 1000) "${chars / 1000}k chars" else "$chars chars"
+                                    }
+                                    else -> ""
+                                }
+                                if (badge.isNotEmpty()) {
+                                    Text(badge, style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f))
+                                }
+                                IconButton(
+                                    onClick = onClearAttachment,
+                                    modifier = Modifier.size(18.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, "Remove attachment",
+                                        modifier = Modifier.size(12.dp),
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Main input row ─────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // + Attach button
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (pendingAttachment != null) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .clickable(enabled = !isTyping, onClick = onAttach),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        Icons.Default.Send, "Send",
-                        modifier = Modifier.size(20.dp),
-                        tint = if (value.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        Icons.Default.Add, "Attach file",
+                        modifier = Modifier.size(22.dp),
+                        tint = if (pendingAttachment != null) MaterialTheme.colorScheme.secondary
+                               else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Ask anything… vocabulary, translation, grammar…",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f)) },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 5,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Default
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    )
+                )
+
+                // Send button
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (canSend) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .clickable(enabled = canSend, onClick = onSend),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isTyping) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Default.Send, "Send",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (canSend) MaterialTheme.colorScheme.onPrimary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Swipeable wrapper for AI messages (WhatsApp-style reply) ─────────────────
+
+@Composable
+private fun SwipeableMessageWrapper(
+    onQuote: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val density   = LocalDensity.current
+    val threshold = with(density) { 62.dp.toPx() }
+    val maxDrag   = with(density) { 88.dp.toPx() }
+    val offsetX   = remember { Animatable(0f) }
+    val scope     = rememberCoroutineScope()
+    var triggered by remember { mutableStateOf(false) }
+
+    // Derive reply-icon visibility from offset
+    val replyAlpha = (offsetX.value / threshold).coerceIn(0f, 1f)
+    val replyScale = 0.6f + replyAlpha * 0.4f
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart  = { triggered = false },
+                    onDragEnd    = {
+                        scope.launch {
+                            offsetX.animateTo(
+                                0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness    = Spring.StiffnessLow
+                                )
+                            )
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch { offsetX.animateTo(0f) }
+                    },
+                    onHorizontalDrag = { _, dragAmount ->
+                        val next = (offsetX.value + dragAmount).coerceIn(0f, maxDrag)
+                        scope.launch { offsetX.snapTo(next) }
+                        if (next >= threshold && !triggered) {
+                            triggered = true
+                            onQuote()
+                        }
+                    }
+                )
+            }
+    ) {
+        // Reply icon hint that slides in from the left
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 4.dp)
+                .size(30.dp)
+                .alpha(replyAlpha)
+                .scale(replyScale)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Reply,
+                contentDescription = "Quote this message",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        // Message content slides right
+        Box(modifier = Modifier.offset { IntOffset(offsetX.value.roundToInt(), 0) }) {
+            content()
+        }
+    }
+}
+
+// ── Quote bar (shown above InputBar after swipe) ───────────────────────────────
+
+@Composable
+private fun QuoteBar(message: ChatMessageEntity, onDismiss: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Accent bar
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (message.role == "assistant") "AI" else "You",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = message.content.take(130).trimEnd()
+                        .let { if (message.content.length > 130) "$it…" else it },
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
+                Icon(Icons.Default.Close, "Dismiss quote",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

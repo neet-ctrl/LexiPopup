@@ -46,22 +46,28 @@ class AiChatClient @Inject constructor(
 
     /**
      * @param onDeviceProvider Required when [provider] is [AiProviderType.ON_DEVICE].
-     *   Pass [AiProviderManager.onDeviceProvider] from the ViewModel.
+     * @param imageBase64      Optional base64-encoded image (JPEG/PNG/WebP). Only used for
+     *                         OpenAI (vision). Groq and on-device providers receive a text note.
+     * @param imageMimeType    MIME type of the image, e.g. "image/jpeg".
      */
     suspend fun chat(
         messages: List<Message>,
         provider: AiProviderType,
         groqApiKey: String,
         openAiApiKey: String,
-        onDeviceProvider: OnDeviceAiProvider? = null
+        onDeviceProvider: OnDeviceAiProvider? = null,
+        imageBase64: String? = null,
+        imageMimeType: String = "image/jpeg"
     ): ChatApiResult = withContext(Dispatchers.IO) {
         when (provider) {
             AiProviderType.GROQ -> {
                 if (groqApiKey.isBlank()) ChatApiResult.NoKey("Groq")
                 else groqChat(messages, groqApiKey)
+                // Groq doesn't support vision — image note already injected into message text
             }
             AiProviderType.OPENAI -> {
                 if (openAiApiKey.isBlank()) ChatApiResult.NoKey("OpenAI")
+                else if (imageBase64 != null) openAiVisionChat(messages, openAiApiKey, imageBase64, imageMimeType)
                 else openAiChat(messages, openAiApiKey)
             }
             AiProviderType.HYBRID -> {
@@ -69,10 +75,15 @@ class AiChatClient @Inject constructor(
                     groqApiKey.isNotBlank() -> {
                         val r = groqChat(messages, groqApiKey)
                         if (r is ChatApiResult.Success) r
-                        else if (openAiApiKey.isNotBlank()) openAiChat(messages, openAiApiKey)
-                        else r
+                        else if (openAiApiKey.isNotBlank()) {
+                            if (imageBase64 != null) openAiVisionChat(messages, openAiApiKey, imageBase64, imageMimeType)
+                            else openAiChat(messages, openAiApiKey)
+                        } else r
                     }
-                    openAiApiKey.isNotBlank() -> openAiChat(messages, openAiApiKey)
+                    openAiApiKey.isNotBlank() -> {
+                        if (imageBase64 != null) openAiVisionChat(messages, openAiApiKey, imageBase64, imageMimeType)
+                        else openAiChat(messages, openAiApiKey)
+                    }
                     else -> ChatApiResult.NoKey("Groq or OpenAI")
                 }
             }
@@ -95,7 +106,6 @@ class AiChatClient @Inject constructor(
         val chatMessages = messages.map { OnDeviceAiProvider.ChatMessage(it.role, it.content) }
         val response = provider.chat(chatMessages)
         return if (response.isNullOrBlank()) {
-            // modelStatus will have the actual error detail logged by generateText()
             val errDetail = (provider.modelStatus.value as? OnDeviceModelStatus.Error)?.message
                 ?: "Inference returned no output"
             ChatApiResult.Error("On-device AI failed: $errDetail")
@@ -119,6 +129,64 @@ class AiChatClient @Inject constructor(
         val request = Request.Builder()
             .url("https://api.openai.com/v1/chat/completions")
             .post(body.toRequestBody(JSON_TYPE))
+            .addHeader("Authorization", "Bearer $apiKey")
+            .build()
+        return execute(request, "OpenAI")
+    }
+
+    /**
+     * OpenAI vision call — last user message gets an image_url part alongside its text.
+     * Earlier messages (system, history) remain text-only.
+     */
+    private fun openAiVisionChat(
+        messages: List<Message>,
+        apiKey: String,
+        imageBase64: String,
+        mimeType: String
+    ): ChatApiResult {
+        val jsonMessages = JsonArray()
+
+        // All messages except the last go through as plain text
+        messages.dropLast(1).forEach { m ->
+            val obj = JsonObject()
+            obj.addProperty("role", m.role)
+            obj.addProperty("content", m.content)
+            jsonMessages.add(obj)
+        }
+
+        // Last message (user) gets multimodal content: text + image
+        val lastMsg = messages.lastOrNull()
+        if (lastMsg != null) {
+            val obj = JsonObject()
+            obj.addProperty("role", lastMsg.role)
+
+            val contentArr = JsonArray()
+
+            val textPart = JsonObject()
+            textPart.addProperty("type", "text")
+            textPart.addProperty("text", lastMsg.content)
+            contentArr.add(textPart)
+
+            val imgPart = JsonObject()
+            imgPart.addProperty("type", "image_url")
+            val imgUrl = JsonObject()
+            imgUrl.addProperty("url", "data:$mimeType;base64,$imageBase64")
+            imgUrl.addProperty("detail", "auto")
+            imgPart.add("image_url", imgUrl)
+            contentArr.add(imgPart)
+
+            obj.add("content", contentArr)
+            jsonMessages.add(obj)
+        }
+
+        val bodyObj = JsonObject()
+        bodyObj.addProperty("model", "gpt-4o-mini")
+        bodyObj.add("messages", jsonMessages)
+        bodyObj.addProperty("max_tokens", 2048)
+
+        val request = Request.Builder()
+            .url("https://api.openai.com/v1/chat/completions")
+            .post(gson.toJson(bodyObj).toRequestBody(JSON_TYPE))
             .addHeader("Authorization", "Bearer $apiKey")
             .build()
         return execute(request, "OpenAI")

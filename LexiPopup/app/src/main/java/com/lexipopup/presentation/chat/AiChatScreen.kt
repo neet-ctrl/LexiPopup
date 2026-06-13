@@ -237,9 +237,10 @@ fun AiChatScreen(
                 ) {
                     items(messages, key = { it.id }) { msg ->
                         ChatBubble(
-                            message           = msg,
+                            message             = msg,
                             isCurrentlySpeaking = msg.id == speakingMsgId,
-                            onSpeak           = { viewModel.speakMessage(msg) },
+                            isAutoSpeakingThis  = isAutoSpeaking && msg.id == speakingMsgId,
+                            onSpeak             = { viewModel.speakMessage(msg) },
                             onWordLongPress   = { word ->
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 longPressedWord = word to msg.id
@@ -476,6 +477,7 @@ private fun ProviderChip(
 private fun ChatBubble(
     message: ChatMessageEntity,
     isCurrentlySpeaking: Boolean = false,
+    isAutoSpeakingThis: Boolean = false,
     onSpeak: () -> Unit = {},
     onWordLongPress: (String) -> Unit,
     onWordTap: (String) -> Unit
@@ -622,6 +624,34 @@ private fun ChatBubble(
                             modifier = Modifier.size(13.dp)
                         )
                     }
+                }
+            }
+
+            // Silent auto-speak indicator — small pulsing dot, no controller bar
+            if (isAutoSpeakingThis && !isUser) {
+                val dotInf = rememberInfiniteTransition(label = "autospeak_dot")
+                val dotAlpha by dotInf.animateFloat(
+                    initialValue = 0.4f, targetValue = 1.0f,
+                    animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+                    label = "dot_alpha"
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = dotAlpha))
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "speaking…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = dotAlpha),
+                        fontSize = 10.sp
+                    )
                 }
             }
         }

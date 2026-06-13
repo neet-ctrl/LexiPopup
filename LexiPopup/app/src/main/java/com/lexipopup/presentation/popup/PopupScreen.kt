@@ -172,12 +172,15 @@ fun PopupScreen(
                 val handlePx = (84f * (metrics?.density ?: 3f)).toInt()
                 // Gravity.TOP + attrs.y: y=0 is top of screen; we start centred
                 // and let edgeTabOffsetY (updated while the user drags) shift it.
-                val centreY  = (screenH - handlePx) / 2
-                val attrs    = win.attributes
-                attrs.gravity = (if (effectiveWindowState == PopupWindowState.EDGE_LEFT)
-                    android.view.Gravity.START else android.view.Gravity.END) or
-                    android.view.Gravity.TOP
-                attrs.x = 0
+                val centreY    = (screenH - handlePx) / 2
+                val screenW    = metrics?.widthPixels ?: 1080
+                val handleWPx  = (44f * (metrics?.density ?: 3f)).toInt()
+                val attrs      = win.attributes
+                // Always use START|TOP with an explicit x so Gravity.END quirks on
+                // Activity windows can never position the right-edge tab incorrectly.
+                attrs.gravity  = android.view.Gravity.START or android.view.Gravity.TOP
+                attrs.x = if (effectiveWindowState == PopupWindowState.EDGE_LEFT) 0
+                          else (screenW - handleWPx)
                 attrs.y = (centreY + edgeTabOffsetY.toInt())
                     .coerceIn(0, maxOf(0, screenH - handlePx))
                 win.attributes = attrs

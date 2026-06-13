@@ -93,6 +93,7 @@ sealed class AppDestination {
     object LookupLayers : AppDestination()
     object AiChat : AppDestination()
     object RandomWordSettings : AppDestination()
+    object DataControl : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -171,6 +172,7 @@ fun DashboardScreen(
             AppDestination.SeedWordList  -> AppDestination.Dictionary
             AppDestination.LookupLayers -> AppDestination.Settings
             AppDestination.RandomWordSettings -> AppDestination.Settings
+            AppDestination.DataControl       -> AppDestination.Settings
             else -> AppDestination.Home
         }
     }
@@ -238,6 +240,14 @@ fun DashboardScreen(
             val randomVm: com.lexipopup.presentation.random.RandomWordSettingsViewModel = hiltViewModel()
             com.lexipopup.presentation.random.RandomWordSettingsScreen(
                 viewModel = randomVm,
+                onBack = { destination = AppDestination.Settings }
+            )
+            return
+        }
+        AppDestination.DataControl -> {
+            val dataVm: com.lexipopup.presentation.datacontrol.DataControlViewModel = hiltViewModel()
+            com.lexipopup.presentation.datacontrol.DataControlScreen(
+                viewModel = dataVm,
                 onBack = { destination = AppDestination.Settings }
             )
             return
@@ -353,7 +363,8 @@ fun DashboardScreen(
                     onOpenAiSettings = { destination = AppDestination.AiSettings },
                     onOpenBackup = { destination = AppDestination.Backup },
                     onOpenLookupLayers = { destination = AppDestination.LookupLayers },
-                    onOpenRandomWordSettings = { destination = AppDestination.RandomWordSettings }
+                    onOpenRandomWordSettings = { destination = AppDestination.RandomWordSettings },
+                    onOpenDataControl = { destination = AppDestination.DataControl }
                 )
                 else -> Unit
             }
@@ -926,7 +937,8 @@ fun SettingsScreen(
     onOpenAiSettings: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenLookupLayers: () -> Unit = {},
-    onOpenRandomWordSettings: () -> Unit = {}
+    onOpenRandomWordSettings: () -> Unit = {},
+    onOpenDataControl: () -> Unit = {}
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -1229,6 +1241,38 @@ fun SettingsScreen(
                 Icon(Icons.Default.CloudUpload, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Backup & Restore Vocabulary Data")
+            }
+        }
+
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+        item { SectionHeader("🗄 Data & Storage") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Data Control",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Delete history · flashcards · AI model · packs · cache",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    FilledTonalButton(onClick = onOpenDataControl) {
+                        Icon(Icons.Default.Storage, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Manage")
+                    }
+                }
             }
         }
 

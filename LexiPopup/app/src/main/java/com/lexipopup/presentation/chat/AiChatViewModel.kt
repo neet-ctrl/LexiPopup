@@ -68,7 +68,7 @@ sealed class WordLookupState {
  * @param name          Display name (filename)
  * @param mimeType      Resolved MIME type
  * @param extractedText Readable text content — set for text files and PDFs
- * @param imageBase64   Base64-encoded image bytes — set for image/* MIMEs
+ * @param imageBase64   Base64-encoded image bytes — set for image/jpeg and image/png MIMEs
  */
 data class AttachedFile(
     val uri: Uri,

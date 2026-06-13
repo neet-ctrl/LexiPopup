@@ -64,6 +64,9 @@ object AppModule {
     fun provideChatDao(db: LexiDatabase): ChatDao = db.chatDao()
 
     @Provides
+    fun provideRandomWordDao(db: LexiDatabase) = db.randomWordDao()
+
+    @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)

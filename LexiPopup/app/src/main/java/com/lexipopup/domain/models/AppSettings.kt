@@ -77,5 +77,13 @@ data class AppSettings(
     val wotdNotificationHour: Int = 9,
 
     // AI Chat — auto-speak each new AI response via TTS
-    val autoSpeakAiResponse: Boolean = false
+    val autoSpeakAiResponse: Boolean = false,
+
+    // ── Random Word Widget ────────────────────────────────────────────────────
+    val randomWordProvider: String = "groq",
+    val randomWordDifficulty: String = "advanced",
+    val randomWordTopics: String = "general",
+    val randomWordPrefetchCount: Int = 5,
+    val randomWordAutoRefresh: Boolean = true,
+    val randomWordShowHindi: Boolean = false
 )

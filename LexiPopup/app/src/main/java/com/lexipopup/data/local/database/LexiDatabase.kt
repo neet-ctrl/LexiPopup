@@ -9,6 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lexipopup.data.local.dao.ChatDao
 import com.lexipopup.data.local.dao.FavoriteWordDao
 import com.lexipopup.data.local.dao.FlashcardDao
+import com.lexipopup.data.local.dao.RandomWordDao
 import com.lexipopup.data.local.dao.UserNoteDao
 import com.lexipopup.data.local.dao.VocabularyDao
 import com.lexipopup.data.local.dao.WordDao
@@ -16,6 +17,7 @@ import com.lexipopup.data.local.entities.ChatMessageEntity
 import com.lexipopup.data.local.entities.ChatSessionEntity
 import com.lexipopup.data.local.entities.FavoriteWordEntity
 import com.lexipopup.data.local.entities.FlashcardEntity
+import com.lexipopup.data.local.entities.RandomWordEntity
 import com.lexipopup.data.local.entities.UserNoteEntity
 import com.lexipopup.data.local.entities.UserSettingsEntity
 import com.lexipopup.data.local.entities.VocabularyHistoryEntity
@@ -32,9 +34,10 @@ import kotlinx.coroutines.CoroutineScope
         UserNoteEntity::class,
         UserSettingsEntity::class,
         ChatSessionEntity::class,
-        ChatMessageEntity::class
+        ChatMessageEntity::class,
+        RandomWordEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class LexiDatabase : RoomDatabase() {
@@ -44,6 +47,7 @@ abstract class LexiDatabase : RoomDatabase() {
     abstract fun favoriteWordDao(): FavoriteWordDao
     abstract fun userNoteDao(): UserNoteDao
     abstract fun chatDao(): ChatDao
+    abstract fun randomWordDao(): RandomWordDao
 
     companion object {
         const val DATABASE_NAME = "lexi_dictionary.db"
@@ -93,6 +97,32 @@ abstract class LexiDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 4 → 5: Add random_words table for the Random Word Widget queue.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `random_words` (
+                        `id`           INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `word`         TEXT    NOT NULL,
+                        `teaser`       TEXT    NOT NULL DEFAULT '',
+                        `part_of_speech` TEXT  NOT NULL DEFAULT '',
+                        `pronunciation` TEXT   NOT NULL DEFAULT '',
+                        `definition`   TEXT    NOT NULL DEFAULT '',
+                        `example`      TEXT    NOT NULL DEFAULT '',
+                        `etymology`    TEXT    NOT NULL DEFAULT '',
+                        `difficulty`   TEXT    NOT NULL DEFAULT 'advanced',
+                        `topic`        TEXT    NOT NULL DEFAULT 'general',
+                        `provider`     TEXT    NOT NULL DEFAULT 'groq',
+                        `is_seen`      INTEGER NOT NULL DEFAULT 0,
+                        `fetched_at`   INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_random_words_is_seen` ON `random_words` (`is_seen`)")
+            }
+        }
+
         fun create(context: Context, scope: CoroutineScope): LexiDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
@@ -104,7 +134,7 @@ abstract class LexiDatabase : RoomDatabase() {
                 // what Callback.onCreate receives) is illegal on Android 16 / SQLite 3.46+
                 // and causes the "Safety level may not be changed inside a transaction" crash.
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

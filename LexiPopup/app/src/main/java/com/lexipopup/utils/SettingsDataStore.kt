@@ -84,6 +84,14 @@ class SettingsDataStore @Inject constructor(
         // AI Chat — auto-speak each new AI response
         val AUTO_SPEAK_AI_RESPONSE = booleanPreferencesKey("auto_speak_ai_response")
 
+        // Random Word Widget
+        val RANDOM_WORD_PROVIDER      = stringPreferencesKey("random_word_provider")
+        val RANDOM_WORD_DIFFICULTY    = stringPreferencesKey("random_word_difficulty")
+        val RANDOM_WORD_TOPICS        = stringPreferencesKey("random_word_topics")
+        val RANDOM_WORD_PREFETCH_COUNT = intPreferencesKey("random_word_prefetch_count")
+        val RANDOM_WORD_AUTO_REFRESH  = booleanPreferencesKey("random_word_auto_refresh")
+        val RANDOM_WORD_SHOW_HINDI    = booleanPreferencesKey("random_word_show_hindi")
+
         // Layer System Config — full config stored as a single JSON blob
         val LAYER_SYSTEM_CONFIG = stringPreferencesKey("layer_system_config")
     }
@@ -138,7 +146,13 @@ class SettingsDataStore @Inject constructor(
             wotdUserLevel = prefs[WOTD_USER_LEVEL] ?: 2,
             wotdNotificationEnabled = prefs[WOTD_NOTIFICATION_ENABLED] ?: true,
             wotdNotificationHour = prefs[WOTD_NOTIFICATION_HOUR] ?: 9,
-            autoSpeakAiResponse = prefs[AUTO_SPEAK_AI_RESPONSE] ?: false
+            autoSpeakAiResponse       = prefs[AUTO_SPEAK_AI_RESPONSE] ?: false,
+            randomWordProvider        = prefs[RANDOM_WORD_PROVIDER] ?: "groq",
+            randomWordDifficulty      = prefs[RANDOM_WORD_DIFFICULTY] ?: "advanced",
+            randomWordTopics          = prefs[RANDOM_WORD_TOPICS] ?: "general",
+            randomWordPrefetchCount   = prefs[RANDOM_WORD_PREFETCH_COUNT] ?: 5,
+            randomWordAutoRefresh     = prefs[RANDOM_WORD_AUTO_REFRESH] ?: true,
+            randomWordShowHindi       = prefs[RANDOM_WORD_SHOW_HINDI] ?: false
         )
     }
 

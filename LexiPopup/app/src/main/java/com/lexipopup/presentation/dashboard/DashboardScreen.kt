@@ -92,6 +92,7 @@ sealed class AppDestination {
     object SeedWordList : AppDestination()
     object LookupLayers : AppDestination()
     object AiChat : AppDestination()
+    object RandomWordSettings : AppDestination()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -169,6 +170,7 @@ fun DashboardScreen(
             AppDestination.WordHistory   -> AppDestination.Flashcards
             AppDestination.SeedWordList  -> AppDestination.Dictionary
             AppDestination.LookupLayers -> AppDestination.Settings
+            AppDestination.RandomWordSettings -> AppDestination.Settings
             else -> AppDestination.Home
         }
     }
@@ -228,6 +230,14 @@ fun DashboardScreen(
             val layersVm: com.lexipopup.presentation.layers.LookupLayersViewModel = hiltViewModel()
             com.lexipopup.presentation.layers.LookupLayersScreen(
                 viewModel = layersVm,
+                onBack = { destination = AppDestination.Settings }
+            )
+            return
+        }
+        AppDestination.RandomWordSettings -> {
+            val randomVm: com.lexipopup.presentation.random.RandomWordSettingsViewModel = hiltViewModel()
+            com.lexipopup.presentation.random.RandomWordSettingsScreen(
+                viewModel = randomVm,
                 onBack = { destination = AppDestination.Settings }
             )
             return
@@ -342,7 +352,8 @@ fun DashboardScreen(
                     onManagePacks = { destination = AppDestination.DownloadPacks },
                     onOpenAiSettings = { destination = AppDestination.AiSettings },
                     onOpenBackup = { destination = AppDestination.Backup },
-                    onOpenLookupLayers = { destination = AppDestination.LookupLayers }
+                    onOpenLookupLayers = { destination = AppDestination.LookupLayers },
+                    onOpenRandomWordSettings = { destination = AppDestination.RandomWordSettings }
                 )
                 else -> Unit
             }
@@ -914,7 +925,8 @@ fun SettingsScreen(
     onManagePacks: () -> Unit = {},
     onOpenAiSettings: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
-    onOpenLookupLayers: () -> Unit = {}
+    onOpenLookupLayers: () -> Unit = {},
+    onOpenRandomWordSettings: () -> Unit = {}
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -1150,6 +1162,38 @@ fun SettingsScreen(
                     }
                     FilledTonalButton(onClick = onOpenAiSettings) {
                         Icon(Icons.Default.Tune, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Configure")
+                    }
+                }
+            }
+        }
+
+        item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+        item { SectionHeader("⚡ Random Word Widget") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "AI Vocabulary Widget",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Advanced words · flip to reveal · save & build your collection",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    FilledTonalButton(onClick = onOpenRandomWordSettings) {
+                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Configure")
                     }

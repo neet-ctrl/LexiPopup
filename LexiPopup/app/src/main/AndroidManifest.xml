@@ -208,6 +208,19 @@
                 android:resource="@xml/recent_widget_info" />
         </receiver>
 
+        <!-- Widget 4: Random Word (AI-powered advanced vocabulary) -->
+        <receiver
+            android:name=".presentation.widget.RandomWordWidgetReceiver"
+            android:exported="true"
+            android:label="Random Word">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/random_word_widget_info" />
+        </receiver>
+
         <!-- FileProvider for file sharing -->
         <provider
             android:name="androidx.core.content.FileProvider"

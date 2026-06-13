@@ -31,8 +31,21 @@
 -dontwarn com.google.auto.value.**
 -dontwarn com.squareup.javapoet.**
 
-# MediaPipe / TensorFlow Lite internal optional integrations
--dontwarn com.google.mediapipe.**
+# MediaPipe LLM Inference — MUST keep all classes and members.
+# LlmInferenceOptions and its proto-generated subclasses access fields like
+# "modelPath_" by name via reflection at runtime.  R8 renames those fields
+# during obfuscation, causing:
+#   RuntimeException: Field modelPath_ for <obfuscated> not found
+# -dontwarn alone suppresses warnings but does NOT prevent renaming.
+# The three rules below together: keep class names, keep every member name,
+# and keep the names of any nested/generated classes inside the package.
+-keep class com.google.mediapipe.** { *; }
+-keep interface com.google.mediapipe.** { *; }
+-keepclassmembers class com.google.mediapipe.** { *; }
+
+# TensorFlow Lite (pulled in transitively by tasks-genai)
+-keep class org.tensorflow.** { *; }
+-keepclassmembers class org.tensorflow.** { *; }
 -dontwarn org.tensorflow.**
 
 # Hilt / Dagger generated code references that R8 may not resolve in all configs

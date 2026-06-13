@@ -18,11 +18,14 @@ set(GGML_SYCL     OFF CACHE BOOL "" FORCE)
 # Don't auto-detect host CPU features — cross-compiling for ARM Android
 set(GGML_NATIVE   OFF CACHE BOOL "" FORCE)
 
-# ── Download llama.cpp source at build time ─────────────────────────────────
+# ── Download llama.cpp at build time (pinned to a specific release) ─────────
+# Using b9620 (2026-06-13) from the new ggml-org organisation.
+# NOTE: llama.cpp moved from ggerganov/llama.cpp → ggml-org/llama.cpp.
+# Pinning to a specific tag (not master) gives a stable, reproducible API.
 include(FetchContent)
 FetchContent_Declare(
     llama_cpp
-    URL      https://github.com/ggerganov/llama.cpp/archive/refs/heads/master.zip
+    URL      https://github.com/ggml-org/llama.cpp/archive/refs/tags/b9620.zip
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(llama_cpp)

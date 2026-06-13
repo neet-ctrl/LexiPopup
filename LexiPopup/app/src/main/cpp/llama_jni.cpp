@@ -27,15 +27,24 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
     LOGD("Loading model: %s", model_path);
 
     // ── Load model (CPU-only, no GPU layers) ────────────────────────────────
+    // llama_model_load_from_file is the current preferred API (b9620+).
     llama_model_params mparams = llama_model_default_params();
     mparams.n_gpu_layers = 0;
 
-    llama_model *model = llama_load_model_from_file(model_path, mparams);
+    llama_model *model = llama_model_load_from_file(model_path, mparams);
     env->ReleaseStringUTFChars(jModelPath, model_path);
 
     if (!model) {
-        LOGE("llama_load_model_from_file failed");
+        LOGE("llama_model_load_from_file failed");
         return env->NewStringUTF("ERROR: Could not load model file — check that the .gguf path is correct");
+    }
+
+    // ── Get the vocab (needed for tokenisation in b9620+ API) ───────────────
+    // All tokenise/detokenise/eog calls take vocab* not model* since ~b8000.
+    const llama_vocab *vocab = llama_model_get_vocab(model);
+    if (!vocab) {
+        llama_model_free(model);
+        return env->NewStringUTF("ERROR: Could not retrieve model vocab");
     }
 
     // ── Create inference context ────────────────────────────────────────────
@@ -45,15 +54,17 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
 
     llama_context *ctx = llama_new_context_with_model(model, cparams);
     if (!ctx) {
-        llama_free_model(model);
+        llama_model_free(model);
         return env->NewStringUTF("ERROR: Could not create inference context");
     }
 
     // ── Tokenise prompt ─────────────────────────────────────────────────────
     const int max_tok = static_cast<int>(prompt.size()) + 64;
     std::vector<llama_token> tokens(max_tok);
+
+    // b9620 API: llama_tokenize(vocab, text, text_len, tokens, n_max, add_special, parse_special)
     int n_tokens = llama_tokenize(
-            model,
+            vocab,
             prompt.c_str(), static_cast<int32_t>(prompt.size()),
             tokens.data(), max_tok,
             /*add_special=*/true,
@@ -62,7 +73,7 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
     if (n_tokens < 0) {
         LOGE("llama_tokenize failed: need %d slots", -n_tokens);
         llama_free(ctx);
-        llama_free_model(model);
+        llama_model_free(model);
         return env->NewStringUTF("ERROR: Prompt too long for context window");
     }
     tokens.resize(n_tokens);
@@ -74,15 +85,15 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
         if (llama_decode(ctx, batch) != 0) {
             LOGE("llama_decode (prompt) failed");
             llama_free(ctx);
-            llama_free_model(model);
+            llama_model_free(model);
             return env->NewStringUTF("ERROR: Prompt evaluation failed");
         }
     }
 
     // ── Auto-regressive generation (greedy decoding) ────────────────────────
-    // We do greedy sampling manually from raw logits — no dependency on
-    // llama.cpp's sampler API which changes between versions.
-    const int n_vocab = llama_n_vocab(model);
+    // Greedy sampling from raw logits — avoids sampler API version churn entirely.
+    // b9620 API: llama_vocab_n_tokens(vocab) replaces llama_n_vocab(model).
+    const int n_vocab = llama_vocab_n_tokens(vocab);
     std::string result;
     result.reserve(1024);
 
@@ -90,7 +101,7 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
         const float *logits = llama_get_logits_ith(ctx, -1);
 
         // Greedy: pick the token with the highest logit
-        llama_token best = 0;
+        llama_token best       = 0;
         float       best_logit = logits[0];
         for (int t = 1; t < n_vocab; ++t) {
             if (logits[t] > best_logit) {
@@ -99,16 +110,17 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
             }
         }
 
-        // Stop on end-of-generation token
-        if (llama_token_is_eog(model, best)) {
+        // b9620 API: llama_vocab_is_eog(vocab, token) replaces llama_token_is_eog(model, token)
+        if (llama_vocab_is_eog(vocab, best)) {
             LOGD("EOS token at step %d", step);
             break;
         }
 
-        // Decode token id → UTF-8 text piece
+        // b9620 API: llama_token_to_piece(vocab, token, buf, len, lstrip, special)
+        // vocab* replaces model* as first argument.
         char piece[256] = {};
         int  piece_len  = llama_token_to_piece(
-                model, best,
+                vocab, best,
                 piece, static_cast<int32_t>(sizeof(piece) - 1),
                 /*lstrip=*/0, /*special=*/false);
         if (piece_len > 0) {
@@ -127,7 +139,7 @@ Java_com_lexipopup_utils_ai_LlamaJni_runInferenceNative(
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
     llama_free(ctx);
-    llama_free_model(model);
+    llama_model_free(model);
 
     return env->NewStringUTF(result.c_str());
 }

@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.*
-import android.graphics.Rect as AndroidRect
 import android.view.ViewTreeObserver
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -232,10 +231,21 @@ fun PopupScreen(
                 val screenH = dm.heightPixels
                 val centreY = (screenH - tabH) / 2
                 val offsetY = edgeOffsetRef.value.toInt()
-                val top     = (centreY + offsetY).coerceIn(0, screenH - tabH)
-                val left    = if (state == PopupWindowState.EDGE_LEFT) 0 else screenW - tabW
+                // Screen-coordinate position of the tab
+                val screenTop  = (centreY + offsetY).coerceIn(0, screenH - tabH)
+                val screenLeft = if (state == PopupWindowState.EDGE_LEFT) 0 else screenW - tabW
+                // Convert to view-local coordinates.
+                // touchableRegion is relative to localView's own (0,0), which may be at
+                // (0,0) if the window is MATCH_PARENT, or at (screenLeft, screenTop) if
+                // the window was shrunk to WRAP_CONTENT via windowIsFloating + gravity.
+                // Using getLocationOnScreen() makes the math correct in both cases.
+                val viewLoc = IntArray(2)
+                localView.getLocationOnScreen(viewLoc)
+                val regionLeft = screenLeft - viewLoc[0]
+                val regionTop  = screenTop  - viewLoc[1]
                 insets.touchableInsets = ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION
-                insets.touchableRegion.set(left, top, left + tabW, top + tabH)
+                insets.touchableRegion.set(regionLeft, regionTop,
+                                           regionLeft + tabW, regionTop + tabH)
             } else {
                 insets.touchableInsets = ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME
                 insets.touchableRegion.setEmpty()

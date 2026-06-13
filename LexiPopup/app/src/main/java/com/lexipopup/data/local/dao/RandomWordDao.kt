@@ -13,6 +13,12 @@ interface RandomWordDao {
     @Query("SELECT * FROM random_words WHERE is_seen = 0 ORDER BY fetched_at ASC LIMIT 1")
     suspend fun getNextUnseen(): RandomWordEntity?
 
+    @Query("SELECT * FROM random_words WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): RandomWordEntity?
+
+    @Query("SELECT * FROM random_words WHERE is_seen = 0 ORDER BY fetched_at ASC LIMIT :n")
+    suspend fun getTopUnseen(n: Int): List<RandomWordEntity>
+
     @Query("SELECT COUNT(*) FROM random_words WHERE is_seen = 0")
     suspend fun getUnseenCount(): Int
 

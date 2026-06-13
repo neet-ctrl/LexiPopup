@@ -6,7 +6,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -22,9 +21,9 @@ import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
-import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -36,76 +35,93 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.state.PreferencesGlanceStateDefinition
-import androidx.glance.text.FontStyle
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.lexipopup.data.local.entities.RandomWordEntity
-import com.lexipopup.presentation.dashboard.MainActivity
+import com.lexipopup.presentation.popup.PopupActivity
 import com.lexipopup.workers.RandomWordWorker
 import dagger.hilt.android.EntryPointAccessors
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
-private val BgDeep      = Color(0xFF0B1D2E)
-private val BgCard      = Color(0xFF132636)
-private val AccentCyan  = ColorProvider(Color(0xFF4FC3F7))
-private val White100    = ColorProvider(Color.White)
-private val White70     = ColorProvider(Color(0xB3FFFFFF))
-private val White40     = ColorProvider(Color(0x66FFFFFF))
-private val GoldColor   = ColorProvider(Color(0xFFFFD54F))
-private val GreenTint   = ColorProvider(Color(0xFF81C784))
-private val RedTint     = ColorProvider(Color(0xFFEF9A9A))
+private val BgDeep    = Color(0xFF0B1D2E)
+private val BgAlt     = Color(0xFF0F1F30)
+private val AccentCyan = ColorProvider(Color(0xFF4FC3F7))
+private val White100  = ColorProvider(Color.White)
+private val White70   = ColorProvider(Color(0xB3FFFFFF))
+private val White40   = ColorProvider(Color(0x66FFFFFF))
+private val GoldColor = ColorProvider(Color(0xFFFFD54F))
 
-// ── Preference keys stored per-widget ─────────────────────────────────────────
-private val KEY_EXPANDED   = booleanPreferencesKey("rw_expanded")
-private val KEY_WORD_ID    = longPreferencesKey("rw_word_id")
+// ── Preference keys (one per slot) ────────────────────────────────────────────
+private val KEY_SLOT_0 = longPreferencesKey("rw_slot_0")
+private val KEY_SLOT_1 = longPreferencesKey("rw_slot_1")
+private val KEY_SLOT_2 = longPreferencesKey("rw_slot_2")
 
 // ── ActionParameters keys ─────────────────────────────────────────────────────
 val PARAM_WORD_ID = ActionParameters.Key<Long>("word_id")
+val PARAM_SLOT    = ActionParameters.Key<Int>("slot")
+val PARAM_OTHER_A = ActionParameters.Key<Long>("other_a")
+val PARAM_OTHER_B = ActionParameters.Key<Long>("other_b")
 
 class RandomWordWidget : GlanceAppWidget() {
 
     override val stateDefinition = PreferencesGlanceStateDefinition
 
     companion object {
-        val TRAY = DpSize(200.dp, 72.dp)
-        val CARD = DpSize(200.dp, 180.dp)
+        val TRAY  = DpSize(200.dp, 72.dp)
+        val MULTI = DpSize(200.dp, 240.dp)
     }
 
-    override val sizeMode = SizeMode.Responsive(setOf(TRAY, CARD))
+    override val sizeMode = SizeMode.Responsive(setOf(TRAY, MULTI))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val word = fetchCurrentWord(context)
-        provideContent {
-            val prefs    = currentState<androidx.datastore.preferences.core.Preferences>()
-            val expanded = prefs[KEY_EXPANDED] ?: false
-            val h        = LocalSize.current.height
+        val dao = try {
+            EntryPointAccessors
+                .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
+                .randomWordDao()
+        } catch (_: Exception) { null }
 
-            if (h < 100.dp) {
-                RandomWordTray(word)
-            } else {
-                if (expanded && word != null) {
-                    RandomWordExpanded(word)
-                } else {
-                    RandomWordCard(word)
+        // Read current slot IDs from state
+        var prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
+        var s0 = prefs[KEY_SLOT_0] ?: 0L
+        var s1 = prefs[KEY_SLOT_1] ?: 0L
+        var s2 = prefs[KEY_SLOT_2] ?: 0L
+
+        // Auto-fill any empty slots on first run
+        if (dao != null && (s0 == 0L || s1 == 0L || s2 == 0L)) {
+            val occupied = setOf(s0, s1, s2).filter { it != 0L }.toSet()
+            val pool = dao.getTopUnseen(10).filter { it.id !in occupied }.iterator()
+            if (s0 == 0L) s0 = pool.nextOrNull()?.id ?: 0L
+            if (s1 == 0L) s1 = pool.nextOrNull()?.id ?: 0L
+            if (s2 == 0L) s2 = pool.nextOrNull()?.id ?: 0L
+            updateAppWidgetState(context, PreferencesGlanceStateDefinition, id) { p ->
+                p.toMutablePreferences().apply {
+                    this[KEY_SLOT_0] = s0
+                    this[KEY_SLOT_1] = s1
+                    this[KEY_SLOT_2] = s2
                 }
             }
         }
-    }
 
-    private suspend fun fetchCurrentWord(context: Context): RandomWordEntity? = try {
-        val dao = EntryPointAccessors
-            .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-            .randomWordDao()
-        dao.getNextUnseen()
-    } catch (e: Exception) {
-        null
+        val word0 = if (s0 != 0L) dao?.getById(s0) else null
+        val word1 = if (s1 != 0L) dao?.getById(s1) else null
+        val word2 = if (s2 != 0L) dao?.getById(s2) else null
+
+        // Kick off a background fetch if queue is running low
+        if (dao != null && dao.getUnseenCount() < 5) RandomWordWorker.scheduleOneTime(context)
+
+        provideContent {
+            if (LocalSize.current.height < 100.dp) {
+                RandomWordTray(word0)
+            } else {
+                RandomWordMultiCard(word0, word1, word2, s0, s1, s2)
+            }
+        }
     }
 }
 
-// ── Tray (1-row compact) ──────────────────────────────────────────────────────
-
+// ── Tray (compact 1-row) ──────────────────────────────────────────────────────
 @androidx.compose.runtime.Composable
 private fun RandomWordTray(word: RandomWordEntity?) {
     val ctx = LocalContext.current
@@ -113,7 +129,12 @@ private fun RandomWordTray(word: RandomWordEntity?) {
         modifier = GlanceModifier
             .fillMaxSize()
             .background(BgDeep)
-            .clickable(actionStartActivity(mainIntent(ctx, word?.word))),
+            .clickable(
+                if (word != null)
+                    actionStartActivity(popupIntent(ctx, word.word))
+                else
+                    actionRunCallback<RefreshAllCallback>()
+            ),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
@@ -143,198 +164,141 @@ private fun RandomWordTray(word: RandomWordEntity?) {
     }
 }
 
-// ── Card — collapsed face ─────────────────────────────────────────────────────
-
+// ── Multi-card (3 words + refresh) ────────────────────────────────────────────
 @androidx.compose.runtime.Composable
-private fun RandomWordCard(word: RandomWordEntity?) {
-    Box(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .background(BgDeep)
-            .clickable(
-                if (word != null)
-                    actionRunCallback<ToggleExpandCallback>(
-                        actionParametersOf(PARAM_WORD_ID to word.id)
-                    )
-                else
-                    actionRunCallback<RefetchCallback>()
-            )
-    ) {
-        Column(
+private fun RandomWordMultiCard(
+    word0: RandomWordEntity?, word1: RandomWordEntity?, word2: RandomWordEntity?,
+    id0: Long, id1: Long, id2: Long
+) {
+    Column(modifier = GlanceModifier.fillMaxSize().background(BgDeep)) {
+
+        // ── Header row with refresh button ────────────────────────────────────
+        Row(
             modifier = GlanceModifier
-                .fillMaxSize()
-                .padding(14.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "RANDOM",
-                    style = TextStyle(color = White40, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                )
-                Spacer(GlanceModifier.defaultWeight())
-                Text("⚡", style = TextStyle(color = AccentCyan, fontSize = 13.sp))
-            }
-
-            Spacer(GlanceModifier.height(8.dp))
-
-            if (word != null) {
-                Text(
-                    text = word.word.replaceFirstChar { it.uppercaseChar() },
-                    style = TextStyle(color = White100, fontSize = 26.sp, fontWeight = FontWeight.Bold),
-                    maxLines = 1
-                )
-                Spacer(GlanceModifier.height(3.dp))
-                if (word.pronunciation.isNotBlank()) {
-                    Text(
-                        text = word.pronunciation,
-                        style = TextStyle(color = AccentCyan, fontSize = 10.sp),
-                        maxLines = 1
-                    )
-                    Spacer(GlanceModifier.height(2.dp))
-                }
-                Text(
-                    text = word.partOfSpeech.ifBlank { "—" },
-                    style = TextStyle(color = White40, fontSize = 9.sp),
-                    maxLines = 1
-                )
-                Spacer(GlanceModifier.height(8.dp))
-                Text(
-                    text = if (word.teaser.isNotBlank()) word.teaser else word.definition.take(60),
-                    style = TextStyle(color = White70, fontSize = 11.sp),
-                    maxLines = 2
-                )
-            } else {
-                Text(
-                    text = "Generating…",
-                    style = TextStyle(color = White70, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                )
-                Spacer(GlanceModifier.height(6.dp))
-                Text(
-                    text = "Add your Groq API key in LexiPopup → Settings → AI to start receiving advanced words.",
-                    style = TextStyle(color = White40, fontSize = 10.sp),
-                    maxLines = 3
-                )
-            }
-
-            Spacer(GlanceModifier.defaultWeight())
-
+            Text("⚡", style = TextStyle(color = AccentCyan, fontSize = 11.sp))
+            Spacer(GlanceModifier.width(4.dp))
             Text(
-                text = if (word != null) "Tap to reveal definition ▾" else "Open app to configure →",
-                style = TextStyle(color = AccentCyan, fontSize = 9.sp)
+                text = "RANDOM WORDS",
+                style = TextStyle(color = White40, fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                modifier = GlanceModifier.defaultWeight()
             )
+            // Refresh-all button
+            Box(
+                modifier = GlanceModifier
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .clickable(
+                        actionRunCallback<RefreshAllCallback>(
+                            actionParametersOf(
+                                PARAM_WORD_ID to id0,
+                                PARAM_OTHER_A to id1,
+                                PARAM_OTHER_B to id2
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("↺", style = TextStyle(color = AccentCyan, fontSize = 16.sp))
+            }
+        }
+
+        // ── Three word slot rows ───────────────────────────────────────────────
+        val slots = listOf(
+            Triple(word0, id0, 0),
+            Triple(word1, id1, 1),
+            Triple(word2, id2, 2)
+        )
+        slots.forEach { (word, wordId, slot) ->
+            val otherA = when (slot) { 0 -> id1; 1 -> id0; else -> id0 }
+            val otherB = when (slot) { 0 -> id2; 1 -> id2; else -> id1 }
+            WordSlotRow(word, wordId, slot, otherA, otherB)
         }
     }
 }
 
-// ── Card — expanded / revealed ────────────────────────────────────────────────
-
 @androidx.compose.runtime.Composable
-private fun RandomWordExpanded(word: RandomWordEntity) {
+private fun WordSlotRow(
+    word: RandomWordEntity?,
+    wordId: Long,
+    slot: Int,
+    otherA: Long,
+    otherB: Long
+) {
+    val ctx = LocalContext.current
+    val bg = if (slot % 2 == 0) BgDeep else BgAlt
+
+    // Outer box: tap word area → replace this word (no app open)
     Box(
         modifier = GlanceModifier
-            .fillMaxSize()
-            .background(BgCard)
-    ) {
-        Column(
-            modifier = GlanceModifier
-                .fillMaxSize()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = word.word.replaceFirstChar { it.uppercaseChar() },
-                    style = TextStyle(color = White100, fontSize = 18.sp, fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    modifier = GlanceModifier.defaultWeight()
-                )
-                Spacer(GlanceModifier.width(4.dp))
-                if (word.partOfSpeech.isNotBlank()) {
-                    Text(
-                        text = word.partOfSpeech,
-                        style = TextStyle(color = GoldColor, fontSize = 9.sp)
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(
+                if (wordId != 0L)
+                    actionRunCallback<ReplaceWordCallback>(
+                        actionParametersOf(
+                            PARAM_SLOT    to slot,
+                            PARAM_WORD_ID to wordId,
+                            PARAM_OTHER_A to otherA,
+                            PARAM_OTHER_B to otherB
+                        )
                     )
-                }
-            }
-
-            if (word.pronunciation.isNotBlank()) {
-                Text(
-                    text = word.pronunciation,
-                    style = TextStyle(color = AccentCyan, fontSize = 10.sp),
-                    maxLines = 1
-                )
-            }
-
-            Spacer(GlanceModifier.height(6.dp))
-
-            Text(
-                text = word.definition,
-                style = TextStyle(color = White70, fontSize = 11.sp),
-                maxLines = 3
+                else
+                    actionRunCallback<RefreshAllCallback>()
             )
-
-            if (word.example.isNotBlank()) {
-                Spacer(GlanceModifier.height(4.dp))
-                Text(
-                    text = "\"${word.example}\"",
-                    style = TextStyle(color = White40, fontSize = 10.sp, fontStyle = FontStyle.Italic),
-                    maxLines = 2
-                )
-            }
-
-            if (word.etymology.isNotBlank()) {
-                Spacer(GlanceModifier.height(3.dp))
-                Text(
-                    text = "📜 ${word.etymology}",
-                    style = TextStyle(color = White40, fontSize = 9.sp),
-                    maxLines = 2
-                )
-            }
-
-            Spacer(GlanceModifier.defaultWeight())
-
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = GlanceModifier
-                        .defaultWeight()
-                        .background(Color(0xFF1B5E20))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .clickable(
-                            actionRunCallback<SaveAndNextCallback>(
-                                actionParametersOf(PARAM_WORD_ID to word.id)
+    ) {
+        Row(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                if (word != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = word.word.replaceFirstChar { it.uppercaseChar() },
+                            style = TextStyle(
+                                color = White100,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1
+                        )
+                        if (word.partOfSpeech.isNotBlank()) {
+                            Spacer(GlanceModifier.width(6.dp))
+                            Text(
+                                text = word.partOfSpeech,
+                                style = TextStyle(color = GoldColor, fontSize = 9.sp),
+                                maxLines = 1
                             )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "✓ Save & Next",
-                        style = TextStyle(color = GreenTint, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    )
+                        }
+                    }
+                    val hint = word.teaser.ifBlank { word.definition.take(55) }
+                    if (hint.isNotBlank()) {
+                        Text(
+                            text = hint,
+                            style = TextStyle(color = White70, fontSize = 10.sp),
+                            maxLines = 1
+                        )
+                    }
+                } else {
+                    Text("—", style = TextStyle(color = White40, fontSize = 14.sp))
                 }
-                Spacer(GlanceModifier.width(6.dp))
+            }
+
+            // → button: opens PopupActivity with this word
+            if (word != null) {
+                Spacer(GlanceModifier.width(8.dp))
                 Box(
                     modifier = GlanceModifier
-                        .defaultWeight()
-                        .background(Color(0xFF4A0F0F))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .clickable(
-                            actionRunCallback<SkipWordCallback>(
-                                actionParametersOf(PARAM_WORD_ID to word.id)
-                            )
-                        ),
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .clickable(actionStartActivity(popupIntent(ctx, word.word))),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "✗ Skip",
-                        style = TextStyle(color = RedTint, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    )
+                    Text("→", style = TextStyle(color = AccentCyan, fontSize = 16.sp))
                 }
             }
         }
@@ -343,61 +307,75 @@ private fun RandomWordExpanded(word: RandomWordEntity) {
 
 // ── Action Callbacks ──────────────────────────────────────────────────────────
 
-/** Toggle collapsed ↔ expanded */
-class ToggleExpandCallback : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
-            val current = prefs[KEY_EXPANDED] ?: false
-            prefs.toMutablePreferences().apply { this[KEY_EXPANDED] = !current }
-        }
-        RandomWordWidget().update(context, glanceId)
-    }
-}
-
-/** Save word to vocab history + advance to next */
-class SaveAndNextCallback : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+/** Tap a word card → mark it seen and replace with next unseen word (no app opened) */
+class ReplaceWordCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context, glanceId: GlanceId, parameters: ActionParameters
+    ) {
+        val slot   = parameters[PARAM_SLOT]    ?: return
         val wordId = parameters[PARAM_WORD_ID] ?: return
-        try {
-            val dao = EntryPointAccessors
+        val otherA = parameters[PARAM_OTHER_A] ?: 0L
+        val otherB = parameters[PARAM_OTHER_B] ?: 0L
+
+        val dao = try {
+            EntryPointAccessors
                 .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
                 .randomWordDao()
-            dao.markSeen(wordId)
-            if (dao.getUnseenCount() < 3) {
-                RandomWordWorker.scheduleOneTime(context)
-            }
-        } catch (_: Exception) { }
+        } catch (_: Exception) { return }
+
+        dao.markSeen(wordId)
+
+        val excluded = setOf(wordId, otherA, otherB)
+        val nextWord = dao.getTopUnseen(10).firstOrNull { it.id !in excluded }
+
+        if (dao.getUnseenCount() < 5) RandomWordWorker.scheduleOneTime(context)
+
         updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
-            prefs.toMutablePreferences().apply { this[KEY_EXPANDED] = false }
+            prefs.toMutablePreferences().apply {
+                when (slot) {
+                    0 -> this[KEY_SLOT_0] = nextWord?.id ?: 0L
+                    1 -> this[KEY_SLOT_1] = nextWord?.id ?: 0L
+                    2 -> this[KEY_SLOT_2] = nextWord?.id ?: 0L
+                }
+            }
         }
         RandomWordWidget().update(context, glanceId)
     }
 }
 
-/** Dismiss without saving */
-class SkipWordCallback : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val wordId = parameters[PARAM_WORD_ID] ?: return
-        try {
-            val dao = EntryPointAccessors
+/** ↺ button → mark all 3 current words seen and load 3 fresh ones */
+class RefreshAllCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context, glanceId: GlanceId, parameters: ActionParameters
+    ) {
+        val id0 = parameters[PARAM_WORD_ID] ?: 0L
+        val id1 = parameters[PARAM_OTHER_A] ?: 0L
+        val id2 = parameters[PARAM_OTHER_B] ?: 0L
+
+        val dao = try {
+            EntryPointAccessors
                 .fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
                 .randomWordDao()
-            dao.markSeen(wordId)
-            if (dao.getUnseenCount() < 3) {
-                RandomWordWorker.scheduleOneTime(context)
-            }
-        } catch (_: Exception) { }
-        updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
-            prefs.toMutablePreferences().apply { this[KEY_EXPANDED] = false }
-        }
-        RandomWordWidget().update(context, glanceId)
-    }
-}
+        } catch (_: Exception) { return }
 
-/** Triggered when the queue is empty — kicks off a fetch */
-class RefetchCallback : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        RandomWordWorker.scheduleOneTime(context)
+        if (id0 != 0L) dao.markSeen(id0)
+        if (id1 != 0L) dao.markSeen(id1)
+        if (id2 != 0L) dao.markSeen(id2)
+
+        val pool = dao.getTopUnseen(10).iterator()
+        val n0 = pool.nextOrNull()?.id ?: 0L
+        val n1 = pool.nextOrNull()?.id ?: 0L
+        val n2 = pool.nextOrNull()?.id ?: 0L
+
+        if (dao.getUnseenCount() < 5) RandomWordWorker.scheduleOneTime(context)
+
+        updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
+            prefs.toMutablePreferences().apply {
+                this[KEY_SLOT_0] = n0
+                this[KEY_SLOT_1] = n1
+                this[KEY_SLOT_2] = n2
+            }
+        }
         RandomWordWidget().update(context, glanceId)
     }
 }
@@ -410,8 +388,10 @@ class RandomWordWidgetReceiver : GlanceAppWidgetReceiver() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-private fun mainIntent(context: Context, word: String?): Intent =
-    Intent(context, MainActivity::class.java).apply {
-        if (word != null) putExtra("lookup_word", word)
+private fun popupIntent(context: Context, word: String): Intent =
+    Intent(context, PopupActivity::class.java).apply {
+        putExtra("lookup_word", word)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
+
+private fun <T> Iterator<T>.nextOrNull(): T? = if (hasNext()) next() else null

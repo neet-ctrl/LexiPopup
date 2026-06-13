@@ -117,9 +117,10 @@ dependencies {
     implementation(libs.hilt.work)
     ksp(libs.hilt.work.compiler)
 
-    // On-Device AI — MediaPipe LLM Inference Task (GGUF models via CPU backend)
-    // 0.10.14 did NOT have setPreferredBackend / Backend enum; 0.10.22 does.
-    implementation("com.google.mediapipe:tasks-genai:0.10.22")
+    // On-Device AI — llama.cpp Android (supports any GGUF model from HuggingFace)
+    // MediaPipe tasks-genai only supports Google's proprietary .task format from Kaggle;
+    // it cannot load standard GGUF files. llama.cpp is the industry-standard GGUF runtime.
+    implementation("com.github.shubham0204:llama.android:0.0.6")
 
     // Testing
     testImplementation(libs.junit)

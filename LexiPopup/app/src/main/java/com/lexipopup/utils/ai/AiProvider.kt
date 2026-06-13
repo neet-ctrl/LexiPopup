@@ -46,12 +46,12 @@ data class OnDeviceModel(
     val sizeGb: Float,
     val ramRequiredGb: Float,
     val qualityPercent: Int,
-    val fileName: String,     // actual filename saved to disk (extension matters for MediaPipe)
+    val fileName: String,     // actual filename saved to disk (.gguf format for llama.cpp)
     val downloadUrl: String
 ) {
     companion object {
         // Public HuggingFace GGUF mirrors — no login required.
-        // MediaPipe 0.10.14+ natively loads GGUF files via setModelPath().
+        // Loaded by llama.cpp (via llama.android) which supports all standard GGUF files.
         // Verified working 2026-06-12: both return HTTP 200 and serve bytes.
         val TINY = OnDeviceModel(
             id              = "gemma1.1-2b-it",

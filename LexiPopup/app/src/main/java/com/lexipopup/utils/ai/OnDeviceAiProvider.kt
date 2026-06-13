@@ -4,10 +4,12 @@ import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
 import com.lexipopup.domain.models.WordEntry
+import io.shubham0204.llama_android.LLamaAndroid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.reduce
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -20,16 +22,16 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * On-device AI provider using MediaPipe LLM Inference Task (GGUF format).
+ * On-device AI provider using llama.cpp (via llama.android JNI wrapper).
  *
- * Model download URLs (public HuggingFace mirrors — no login required):
- *   Gemma 2-2B IT Q4_K_M (1.6 GB):
- *     https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf
+ * Supports any standard GGUF model from HuggingFace. MediaPipe was removed because it only
+ * supports Google's proprietary .task format from Kaggle and fails on all HuggingFace GGUF files.
+ *
+ * Model download URLs (public HuggingFace — no login required):
+ *   Gemma 1.1 2B IT Q4_K_M (1.5 GB):
+ *     https://huggingface.co/bartowski/gemma-1.1-2b-it-GGUF/resolve/main/gemma-1.1-2b-it-Q4_K_M.gguf
  *   Phi-2 Q4_K_M (1.7 GB):
  *     https://huggingface.co/TheBloke/phi-2-GGUF/resolve/main/phi-2.Q4_K_M.gguf
- *
- * If in-app download keeps failing (battery optimisation, poor signal), download the file
- * manually in a browser and use "Pick from Storage" in the AI Settings screen.
  */
 class OnDeviceAiProvider(
     private val context: Context,
@@ -290,47 +292,31 @@ class OnDeviceAiProvider(
     // ── Inference ─────────────────────────────────────────────────────────────
 
     /**
-     * Low-level text generation.  Creates and destroys the LlmInference session per
-     * call so we don't hold a large model resident between lookups.
+     * Low-level text generation via llama.cpp (replaces MediaPipe which only supports
+     * Google's proprietary .task format and fails on all HuggingFace GGUF files).
      *
-     * Errors are logged into [downloadLogs] (visible in AI Settings) **and** surfaced
-     * via [modelStatus] so users can see what went wrong rather than a silent "not found".
+     * Errors are logged into [downloadLogs] (visible in AI Settings) and surfaced
+     * via [modelStatus] so users can see what went wrong rather than a silent failure.
      */
     suspend fun generateText(prompt: String, maxTokens: Int = 600): String? =
-        withContext(Dispatchers.Default) {
+        withContext(Dispatchers.IO) {
             if (!isModelReady()) return@withContext null
-            var llm: com.google.mediapipe.tasks.genai.llminference.LlmInference? = null
+            val llama = LLamaAndroid.instance()
             try {
                 _modelStatus.value = OnDeviceModelStatus.Loading
-                // GGUF models (Phi-2, Gemma GGUF) require the CPU backend.
-                // In tasks-genai 0.10.22: setTopK/setTemperature/setRandomSeed were removed
-                // from LlmInferenceOptions; Backend moved from LlmInferenceOptions to LlmInference.
-                val options = com.google.mediapipe.tasks.genai.llminference.LlmInference
-                    .LlmInferenceOptions.builder()
-                    .setModelPath(modelFile().absolutePath)
-                    .setMaxTokens(maxTokens)
-                    .setPreferredBackend(
-                        com.google.mediapipe.tasks.genai.llminference.LlmInference.Backend.CPU
-                    )
-                    .build()
-                llm = com.google.mediapipe.tasks.genai.llminference.LlmInference
-                    .createFromOptions(context, options)
-                val response = llm.generateResponse(prompt)
-                llm.close()
-                llm = null
+                llama.load(modelFile().absolutePath)
+                val response = llama.send(prompt)
+                    .reduce { acc, token -> acc + token }
                 _modelStatus.value = OnDeviceModelStatus.Ready
                 response.trim()
             } catch (e: Exception) {
                 val detail = "${e.javaClass.simpleName}: ${e.message}"
                 log("INFERENCE ERROR: $detail")
                 lastInferenceError = detail
-                // Reset status to Downloaded — file is intact, inference just failed.
-                // Real error detail is in downloadLogs (AI Settings log panel) and lastInferenceError.
                 _modelStatus.value = OnDeviceModelStatus.Downloaded
                 null
             } finally {
-                // Ensure the LLM session is always closed even if generateResponse throws.
-                try { llm?.close() } catch (_: Exception) {}
+                try { llama.unload() } catch (_: Exception) {}
             }
         }
 

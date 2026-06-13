@@ -117,8 +117,9 @@ dependencies {
     implementation(libs.hilt.work)
     ksp(libs.hilt.work.compiler)
 
-    // On-Device AI — MediaPipe LLM Inference Task (Gemma 2B / Phi-2 .task models)
-    implementation("com.google.mediapipe:tasks-genai:0.10.14")
+    // On-Device AI — MediaPipe LLM Inference Task (GGUF models via CPU backend)
+    // 0.10.14 did NOT have setPreferredBackend / Backend enum; 0.10.22 does.
+    implementation("com.google.mediapipe:tasks-genai:0.10.22")
 
     // Testing
     testImplementation(libs.junit)

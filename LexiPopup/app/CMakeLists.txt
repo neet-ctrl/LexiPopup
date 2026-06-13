@@ -18,14 +18,18 @@ set(GGML_SYCL     OFF CACHE BOOL "" FORCE)
 # Don't auto-detect host CPU features — cross-compiling for ARM Android
 set(GGML_NATIVE   OFF CACHE BOOL "" FORCE)
 
-# ── Download llama.cpp at build time (pinned to a specific release) ─────────
-# Using b9620 (2026-06-13) from the new ggml-org organisation.
-# NOTE: llama.cpp moved from ggerganov/llama.cpp → ggml-org/llama.cpp.
-# Pinning to a specific tag (not master) gives a stable, reproducible API.
+# ── Fetch llama.cpp source at build time ────────────────────────────────────
+# Using GIT_REPOSITORY (not URL) — CMake 3.22 has a bug where FetchContent
+# with a ZIP URL fails in Android NDK cross-compilation mode with
+# "At least one entry of URL is a path (invalid in a list)".
+# GIT_REPOSITORY avoids that code path entirely and works reliably.
+# Pinned to b9620 (2026-06-13, ggml-org org) for a stable, verified API.
 include(FetchContent)
 FetchContent_Declare(
     llama_cpp
-    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b9620.zip
+    GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
+    GIT_TAG        b9620
+    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(llama_cpp)
 

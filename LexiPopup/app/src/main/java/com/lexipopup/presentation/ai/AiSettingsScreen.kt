@@ -42,10 +42,11 @@ fun AiSettingsScreen(
     viewModel: AiSettingsViewModel,
     onBack: () -> Unit
 ) {
-    val settings       by viewModel.settings.collectAsState()
-    val onDeviceStatus by viewModel.onDeviceStatus.collectAsState()
-    val downloadLogs   by viewModel.downloadLogs.collectAsState()
-    val context        = LocalContext.current
+    val settings            by viewModel.settings.collectAsState()
+    val onDeviceStatus      by viewModel.onDeviceStatus.collectAsState()
+    val downloadLogs        by viewModel.downloadLogs.collectAsState()
+    val inferenceTestResult by viewModel.inferenceTestResult.collectAsState()
+    val context             = LocalContext.current
 
     val selectedProvider = AiProviderType.fromId(settings.aiProviderName)
 
@@ -151,15 +152,19 @@ fun AiSettingsScreen(
                 enter = expandVertically(), exit = shrinkVertically()
             ) {
                 OnDeviceSettingsCard(
-                    status           = onDeviceStatus,
-                    selectedModel    = viewModel.aiProviderManager.onDeviceProvider.selectedModel,
-                    downloadLogs     = downloadLogs,
-                    onSelectModel    = viewModel::selectOnDeviceModel,
-                    onDownload       = { viewModel.downloadModel() },
-                    onCancel         = { viewModel.cancelDownload() },
-                    onDelete         = viewModel::deleteModel,
-                    onPickFromStorage = { safLauncher.launch(arrayOf("*/*")) },
-                    onOpenModelPage  = {
+                    status               = onDeviceStatus,
+                    selectedModel        = viewModel.aiProviderManager.onDeviceProvider.selectedModel,
+                    downloadLogs         = downloadLogs,
+                    inferenceTestResult  = inferenceTestResult,
+                    onSelectModel        = viewModel::selectOnDeviceModel,
+                    onDownload           = { viewModel.downloadModel() },
+                    onCancel             = { viewModel.cancelDownload() },
+                    onDelete             = viewModel::deleteModel,
+                    onPickFromStorage    = { safLauncher.launch(arrayOf("*/*")) },
+                    onTestInference      = { viewModel.testInference() },
+                    onClearInferenceTest = viewModel::clearInferenceTest,
+                    onClearLogs          = viewModel::clearDownloadLogs,
+                    onOpenModelPage      = {
                         context.startActivity(Intent(Intent.ACTION_VIEW,
                             Uri.parse("https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android")))
                     }
@@ -260,15 +265,16 @@ private fun SetupStep(number: Int, text: String) {
     }
 }
 
-// ── Download log panel ────────────────────────────────────────────────────────
+// ── AI log panel (download + inference logs) ──────────────────────────────────
 
 @Composable
-private fun DownloadLogPanel(logs: List<String>) {
+private fun AiLogPanel(logs: List<String>, onClear: () -> Unit) {
     if (logs.isEmpty()) return
-    val clipboard = LocalClipboardManager.current
+    val clipboard  = LocalClipboardManager.current
     val scrollState = rememberScrollState()
+    val logText    = logs.joinToString("\n")
 
-    // Auto-scroll to bottom when new logs arrive
+    // Auto-scroll to bottom when new entries arrive
     LaunchedEffect(logs.size) { scrollState.animateScrollTo(scrollState.maxValue) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -278,24 +284,36 @@ private fun DownloadLogPanel(logs: List<String>) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Download log",
+                "Log  (${logs.size} lines)",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            IconButton(
-                onClick = { clipboard.setText(AnnotatedString(logs.joinToString("\n"))) },
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(Icons.Default.ContentCopy, "Copy log",
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.primary)
+            Row {
+                // Copy all
+                IconButton(
+                    onClick = { clipboard.setText(AnnotatedString(logText)) },
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(Icons.Default.ContentCopy, "Copy log",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary)
+                }
+                // Clear
+                IconButton(
+                    onClick = onClear,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(Icons.Default.DeleteSweep, "Clear log",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 60.dp, max = 140.dp)
+                .heightIn(min = 80.dp, max = 240.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
@@ -303,7 +321,7 @@ private fun DownloadLogPanel(logs: List<String>) {
                 .verticalScroll(scrollState)
         ) {
             Text(
-                text = logs.joinToString("\n"),
+                text = logText,
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -530,11 +548,15 @@ private fun OnDeviceSettingsCard(
     status: OnDeviceModelStatus,
     selectedModel: OnDeviceModel,
     downloadLogs: List<String>,
+    inferenceTestResult: InferenceTestResult?,
     onSelectModel: (OnDeviceModel) -> Unit,
     onDownload: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
     onPickFromStorage: () -> Unit,
+    onTestInference: () -> Unit,
+    onClearInferenceTest: () -> Unit,
+    onClearLogs: () -> Unit,
     onOpenModelPage: () -> Unit
 ) {
     var modelMenuExpanded by remember { mutableStateOf(false) }
@@ -734,7 +756,7 @@ private fun OnDeviceSettingsCard(
                         }
 
                         // Live log panel
-                        DownloadLogPanel(downloadLogs)
+                        AiLogPanel(downloadLogs, onClearLogs)
                     }
                 }
 
@@ -756,6 +778,90 @@ private fun OnDeviceSettingsCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+
+                    // ── Test inference button ──────────────────────────────
+                    val isTesting = inferenceTestResult is InferenceTestResult.Testing
+                    Button(
+                        onClick = { onClearInferenceTest(); onTestInference() },
+                        enabled = !isTesting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isTesting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Running test… (may take 10-30 s)")
+                        } else {
+                            Icon(Icons.Default.Science, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Test Inference (verify AI works)")
+                        }
+                    }
+
+                    // ── Test result panel ──────────────────────────────────
+                    when (val r = inferenceTestResult) {
+                        is InferenceTestResult.Success -> {
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.outlinedCardColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.CheckCircle, null,
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(16.dp))
+                                        Text("Inference working! (${r.durationMs / 1000}.${(r.durationMs % 1000) / 100}s)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.tertiary)
+                                    }
+                                    Text("\"${r.word}\" → ${r.meaning}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+                        is InferenceTestResult.Failure -> {
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.outlinedCardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.ErrorOutline, null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp))
+                                        Text("Inference failed",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error)
+                                    }
+                                    Text(r.error,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface)
+                                    Text("Check the log below for the full error.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        else -> {}
+                    }
+
+                    // Show log if anything was recorded (inference errors land here too)
+                    AiLogPanel(downloadLogs, onClearLogs)
+
                     OutlinedButton(
                         onClick = onDelete,
                         modifier = Modifier.fillMaxWidth(),
@@ -787,16 +893,19 @@ private fun OnDeviceSettingsCard(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
-                            // Error header
+                            // Error header — title adapts to whether it's a download or inference error
+                            val isInferenceError = status.message.startsWith("Inference failed")
                             Row(verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Icon(Icons.Default.ErrorOutline, null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.error)
-                                Text("Download didn't complete",
+                                Text(
+                                    if (isInferenceError) "Inference failed" else "Download didn't complete",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error)
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
 
                             // Friendly error message (no raw exception codes)
@@ -839,7 +948,7 @@ private fun OnDeviceSettingsCard(
                             )
 
                             // Log panel (if any logs)
-                            DownloadLogPanel(downloadLogs)
+                            AiLogPanel(downloadLogs, onClearLogs)
 
                             // Action buttons
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

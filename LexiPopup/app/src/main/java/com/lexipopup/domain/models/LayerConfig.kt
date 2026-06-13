@@ -27,7 +27,10 @@ val DEFAULT_LAYER_ENABLED: Map<String, Boolean> = mapOf(
     LAYER_ONLINE_API to true,
     LAYER_GROQ_AI    to true,
     LAYER_OPENAI     to false,
-    LAYER_ON_DEVICE  to false,
+    // On-device is enabled by default — it's a no-op when no model is downloaded
+    // (explainWord() returns null if isModelReady() is false), so it's safe to
+    // keep on by default and acts as an automatic Groq fallback when the model is present.
+    LAYER_ON_DEVICE  to true,
     LAYER_RULE_BASED to true
 )
 
@@ -128,7 +131,7 @@ enum class LookupPreset(
         mapOf(
             LAYER_CACHE to true, LAYER_HISTORY to true, LAYER_OFFLINE_DB to true,
             LAYER_ONLINE_API to true, LAYER_GROQ_AI to true,
-            LAYER_OPENAI to false, LAYER_ON_DEVICE to false, LAYER_RULE_BASED to true
+            LAYER_OPENAI to false, LAYER_ON_DEVICE to true, LAYER_RULE_BASED to true
         )
     ),
     OFFLINE_WARRIOR(

@@ -12,11 +12,21 @@ import com.lexipopup.utils.ai.OnDeviceModel
 import com.lexipopup.utils.ai.OnDeviceModelStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ── Inference test result ─────────────────────────────────────────────────────
+
+sealed class InferenceTestResult {
+    object Testing : InferenceTestResult()
+    data class Success(val word: String, val meaning: String, val durationMs: Long) : InferenceTestResult()
+    data class Failure(val error: String) : InferenceTestResult()
+}
 
 @HiltViewModel
 class AiSettingsViewModel @Inject constructor(
@@ -34,6 +44,9 @@ class AiSettingsViewModel @Inject constructor(
         aiProviderManager.onDeviceProvider.downloadLogs
 
     val hybridResult: StateFlow<HybridAiResult?> = aiProviderManager.lastHybridResult
+
+    private val _inferenceTestResult = MutableStateFlow<InferenceTestResult?>(null)
+    val inferenceTestResult: StateFlow<InferenceTestResult?> = _inferenceTestResult.asStateFlow()
 
     private var currentDownloadJob: Job? = null
 
@@ -112,5 +125,38 @@ class AiSettingsViewModel @Inject constructor(
 
     fun deleteModel() {
         aiProviderManager.onDeviceProvider.deleteModel()
+        _inferenceTestResult.value = null
     }
+
+    // ── Inference test ───────────────────────────────────────────────────────
+
+    /**
+     * Runs a quick single-word inference test against the downloaded model.
+     * Shows the result (or the real error) in the AI Settings card so the user
+     * can confirm on-device AI is actually working before using it in popups.
+     */
+    fun testInference(testWord: String = "ephemeral") {
+        _inferenceTestResult.value = InferenceTestResult.Testing
+        viewModelScope.launch {
+            val start = System.currentTimeMillis()
+            val entry = try {
+                aiProviderManager.onDeviceProvider.explainWord(testWord)
+            } catch (e: Exception) {
+                null
+            }
+            val durationMs = System.currentTimeMillis() - start
+            _inferenceTestResult.value = if (entry != null && entry.shortMeaning.isNotBlank()) {
+                InferenceTestResult.Success(testWord, entry.shortMeaning, durationMs)
+            } else {
+                val errStatus = aiProviderManager.onDeviceProvider.modelStatus.value
+                val errMsg = (errStatus as? OnDeviceModelStatus.Error)?.message
+                    ?: "Model returned empty output — check the log below."
+                InferenceTestResult.Failure(errMsg)
+            }
+        }
+    }
+
+    fun clearInferenceTest() { _inferenceTestResult.value = null }
+
+    fun clearDownloadLogs() { aiProviderManager.onDeviceProvider.clearLogs() }
 }

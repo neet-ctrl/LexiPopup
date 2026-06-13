@@ -188,7 +188,12 @@ fun PopupScreen(
                 win.attributes = attrs
             }
             else -> {
-                win.clearFlags(flagNotTouchModal or flagNotFocusable)
+                // Keep FLAG_NOT_TOUCH_MODAL even in full mode so that touches landing
+                // on the transparent backdrop (which no Compose view consumes) fall
+                // through to the underlying app.  Only clear NOT_FOCUSABLE so the
+                // keyboard still works normally.
+                win.addFlags(flagNotTouchModal)
+                win.clearFlags(flagNotFocusable)
                 win.setLayout(matchParent, matchParent)
                 val attrs = win.attributes
                 attrs.gravity = android.view.Gravity.NO_GRAVITY
@@ -381,15 +386,13 @@ fun PopupScreen(
     // ── Full popup (FULL or residual BUBBLE state before redirect) ────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Scrim — tap outside the card to dismiss
+        // Scrim — visual backdrop only.  No clickable: touches that land here are
+        // not consumed by any Compose view, so FLAG_NOT_TOUCH_MODAL lets them fall
+        // through to the underlying app.  Dismiss via the ✕ button on the card.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.32f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { safeClose() }
+                .background(Color.Black.copy(alpha = 0.28f))
         )
 
         // ── Full floating window ──────────────────────────────────────────────
